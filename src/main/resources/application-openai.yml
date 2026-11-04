@@ -1,0 +1,14 @@
+# Real OpenAI chat model for investigations. Needs OPENAI_API_KEY in the environment (never in a file).
+# Run with: mvn spring-boot:run -Dspring-boot.run.profiles=openai
+# Do not combine with mock-llm or ollama: two ChatModel beans make the investigation client ambiguous.
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: openai            # LOCKED: embeddings are always OpenAI text-embedding-3-small
+    openai:
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: 0.0         # deterministic-ish proposals; creativity is a bug here
+          max-completion-tokens: 700   # output token cap (matches reconcile.investigation.max-output-tokens)

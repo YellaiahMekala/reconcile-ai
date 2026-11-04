@@ -1,0 +1,125 @@
+# ---------------------------------------------------------------------------
+# reconcile-ai base configuration (Phase 1: Tier 0 + Tier 1)
+# Every secret/host is an env var with a local-dev default so `mvn spring-boot:run`
+# works against docker/docker-compose.yml with zero setup.
+# ---------------------------------------------------------------------------
+spring:
+  application:
+    name: reconcile-ai
+  profiles:
+    # Chat model selection: mock-llm (default, zero tokens, deterministic) | ollama (local) | openai (real, needs OPENAI_API_KEY).
+    default: mock-llm
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/reconcile}
+    username: ${DB_USER:reconcile}
+    password: ${DB_PASSWORD:reconcile}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # Flyway owns the schema; Hibernate only validates it
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+  # -------------------------------------------------------------------------
+  # Spring AI (Phase 2)
+  # -------------------------------------------------------------------------
+  ai:
+    model:
+      # Exactly ONE provider per model type. This is how two AI starters coexist on the classpath
+      # without an ambiguous ChatModel/EmbeddingModel bean.
+      embedding: openai          # LOCKED: embeddings are always OpenAI text-embedding-3-small
+      chat: none                 # chat model comes from a profile: mock-llm (default), ollama or openai
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    openai:
+      api-key: ${OPENAI_API_KEY:}   # required at startup outside the test profile (fail fast)
+      embedding:
+        options:
+          model: text-embedding-3-small
+    vectorstore:
+      pgvector:
+        # Decision A2: Spring AI creates and owns the vector_store table (+ vector/hstore/uuid-ossp extensions).
+        # Flyway never touches it. The BM25 tsvector column is added AFTER init by TsvectorSchemaInitializer.
+        initialize-schema: true
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1536            # must equal the embedding model's output size
+        max-document-batch-size: 1000
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Local dev/test validate JWTs against a public key on the classpath.
+          # scripts/generate-local-jwt.ps1 mints tokens with the matching private key.
+          public-key-location: ${JWT_PUBLIC_KEY:classpath:jwt/dev-public.pem}
+
+# ---------------------------------------------------------------------------
+# Application tuning knobs (bound to @ConfigurationProperties classes)
+# ---------------------------------------------------------------------------
+reconcile:
+  ingestion:
+    chunk-size-tokens: 400          # ~300 words: big enough for a statement line + context, small enough to cite precisely
+    min-chunk-size-chars: 200
+    min-chunk-length-to-embed: 10   # skip whitespace/garbage fragments -> no wasted embedding tokens
+    max-chunks-per-evidence: 200    # hard cap: a 10 MB junk upload cannot burn thousands of embedding calls
+  retrieval:
+    vector-top-k: 8
+    keyword-top-k: 8
+    similarity-threshold: 0.25      # score floor; tune with an out-of-corpus query (see README "Retrieval tuning")
+    rrf-k: 60                       # standard Reciprocal Rank Fusion constant
+    max-results: 8
+
+  investigation:
+    core-pool-size: 2
+    max-pool-size: 4
+    queue-capacity: 50              # beyond this, POST /investigations returns 503 instead of queueing unboundedly
+    lease-seconds: 300              # a RUNNING job with no heartbeat for this long is treated as orphaned
+    sweep-interval-ms: 60000
+    max-context-tokens: 3000        # evidence budget per prompt (TOKEN OPTIMIZATION)
+    max-output-tokens: 700          # model output cap (TOKEN OPTIMIZATION)
+    max-analyst-note-chars: 1000
+  ai:
+    log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
+  policy:
+    l1-min-confidence: 0.80         # LOCKED: below this, no approval route -> MANUAL_REVIEW
+    l2-variance-threshold: 25000    # LOCKED: variance >= this (USD) -> L2 approver
+    policy-currency: USD
+    auto-resolve:
+      enabled: false                # LOCKED: OFF. Implemented path, disabled by default (ADR-9)
+      max-variance: 1000            # LOCKED cap; startup fails if configured higher
+      min-confidence: 0.95
+  streaming:
+    emitter-timeout-ms: 120000      # each SSE stream expires; client reconnects (fresh snapshot) or polls
+    max-subscribers: 500            # total open streams per instance (each holds an async servlet context)
+    max-subscribers-per-job: 20
+    heartbeat-interval-ms: 15000    # comment frame keeps proxies from killing idle streams
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health          # only /actuator/health is exposed (and permitted in SecurityConfig)
+  endpoint:
+    health:
+      show-details: never        # no DB/disk details to unauthenticated callers
+
+server:
+  port: 8080
+  error:
+    include-message: never       # never leak exception messages through Boot's default /error body
+
+logging:
+  level:
+    org.springframework.security: INFO
+    com.reconcileai: DEBUG

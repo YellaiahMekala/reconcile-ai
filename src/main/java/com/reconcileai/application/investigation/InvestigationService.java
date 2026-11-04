@@ -1,0 +1,142 @@
+package com.reconcileai.application.investigation;
+
+import com.reconcileai.application.BreakNotFoundException;
+import com.reconcileai.application.CapacityExceededException;
+import com.reconcileai.application.ConflictException;
+import com.reconcileai.application.InputRejectedException;
+import com.reconcileai.application.NotFoundException;
+import com.reconcileai.application.audit.AuditRecorder;
+import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
+import com.reconcileai.domain.BreakItem;
+import com.reconcileai.domain.EvidenceStatus;
+import com.reconcileai.domain.InvestigationJob;
+import com.reconcileai.domain.JobStatus;
+import com.reconcileai.domain.ResolutionProposal;
+import com.reconcileai.infrastructure.ai.guard.InjectionScanner;
+import com.reconcileai.infrastructure.persistence.BreakItemRepository;
+import com.reconcileai.infrastructure.persistence.EvidenceRepository;
+import com.reconcileai.infrastructure.persistence.InvestigationJobRepository;
+import com.reconcileai.infrastructure.persistence.ResolutionProposalRepository;
+import com.reconcileai.infrastructure.security.CurrentUser;
+import com.reconcileai.infrastructure.security.TenantContext;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
+
+/**
+ * Request-side use cases: start an investigation, read job status and proposals.
+ *
+ * <h2>Start flow</h2>
+ * <pre>
+ *  1. identity = JWT (captured HERE, on the request thread)
+ *  2. note checks (length, injection tripwire)                  -> 400, zero tokens
+ *  3. TX: break (tenant) -> canStartInvestigation              -> 404 / 409 ILLEGAL_BREAK_STATE
+ *         evidence READY >= 1 and PROCESSING == 0               -> 409 EVIDENCE_NOT_READY
+ *         no active job (plus DB partial unique index)          -> 409 INVESTIGATION_IN_PROGRESS
+ *         insert QUEUED job, break -> INVESTIGATING, audit
+ *  4. after commit: submit to bounded executor                 -> 503 if full (job + break rolled to failed)
+ *  5. return 202 Accepted + job
+ * </pre>
+ */
+@Service
+public class InvestigationService {
+
+    private final TenantContext tenantContext;
+    private final BreakItemRepository breaks;
+    private final EvidenceRepository evidence;
+    private final InvestigationJobRepository jobs;
+    private final ResolutionProposalRepository proposals;
+    private final InvestigationJobRunner runner;
+    private final InjectionScanner scanner;
+    private final AuditRecorder audit;
+    private final InvestigationProperties props;
+    private final TransactionTemplate tx;
+
+    public InvestigationService(TenantContext tenantContext, BreakItemRepository breaks, EvidenceRepository evidence,
+                                InvestigationJobRepository jobs, ResolutionProposalRepository proposals,
+                                InvestigationJobRunner runner, InjectionScanner scanner, AuditRecorder audit,
+                                InvestigationProperties props, TransactionTemplate tx) {
+        this.tenantContext = tenantContext;
+        this.breaks = breaks;
+        this.evidence = evidence;
+        this.jobs = jobs;
+        this.proposals = proposals;
+        this.runner = runner;
+        this.scanner = scanner;
+        this.audit = audit;
+        this.props = props;
+        this.tx = tx;
+    }
+
+    public InvestigationJob start(UUID breakId, String analystNote) {
+        CurrentUser user = tenantContext.currentUser();
+        String note = analystNote == null || analystNote.isBlank() ? null : analystNote.strip();
+        if (note != null && note.length() > props.maxAnalystNoteChars()) {
+            throw new InputRejectedException("Analyst note exceeds " + props.maxAnalystNoteChars() + " characters");
+        }
+        if (note != null && scanner.isSuspect(note)) {
+            throw new InputRejectedException("Analyst note rejected by input guard");
+        }
+
+        InvestigationJob job;
+        try {
+            job = tx.execute(status -> {
+                BreakItem b = breaks.findByIdAndTenantId(breakId, user.tenantId())
+                    .orElseThrow(() -> new BreakNotFoundException(breakId));
+                if (jobs.existsByTenantIdAndBreakItemIdAndStatusIn(user.tenantId(), breakId,
+                        EnumSet.of(JobStatus.QUEUED, JobStatus.RUNNING))) {
+                    throw new ConflictException("INVESTIGATION_IN_PROGRESS", "An investigation is already running for this break");
+                }
+                long ready = evidence.countByTenantIdAndBreakItemIdAndStatus(user.tenantId(), breakId, EvidenceStatus.READY);
+                long processing = evidence.countByTenantIdAndBreakItemIdAndStatus(user.tenantId(), breakId, EvidenceStatus.PROCESSING);
+                if (ready == 0 || processing > 0) {
+                    throw new ConflictException("EVIDENCE_NOT_READY",
+                        "Investigation needs at least one READY evidence item and none still PROCESSING");
+                }
+                b.markInvestigating(); // throws IllegalBreakStateException (409) if lifecycle forbids it
+                breaks.save(b);
+                InvestigationJob saved = jobs.save(new InvestigationJob(user.tenantId(), breakId, user.subject(), note));
+                audit.record(new AuditEntry(user.tenantId(), "INVESTIGATION_REQUESTED", "BREAK", breakId, user.subject(),
+                    Map.of("jobId", saved.getId().toString())));
+                return saved;
+            });
+        } catch (DataIntegrityViolationException raceLost) {
+            // Two concurrent POSTs both passed the exists-check; the partial unique index rejected the second.
+            throw new ConflictException("INVESTIGATION_IN_PROGRESS", "An investigation is already running for this break");
+        }
+
+        try {
+            runner.submit(job.getId(), job.getTenantId());
+        } catch (RejectedExecutionException full) {
+            runner.failJob(job.getId(), job.getTenantId(), "CAPACITY_EXCEEDED");
+            throw new CapacityExceededException("Investigation capacity exceeded, retry later");
+        }
+        return job;
+    }
+
+    @Transactional(readOnly = true)
+    public InvestigationJob getJob(UUID jobId) {
+        return jobs.findByIdAndTenantId(jobId, tenantContext.requireTenantId())
+            .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public ResolutionProposal getProposal(UUID proposalId) {
+        return proposals.findByIdAndTenantId(proposalId, tenantContext.requireTenantId())
+            .orElseThrow(() -> new NotFoundException("PROPOSAL_NOT_FOUND", "Proposal not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ResolutionProposal> proposalsForBreak(UUID breakId) {
+        String tenantId = tenantContext.requireTenantId();
+        breaks.findByIdAndTenantId(breakId, tenantId).orElseThrow(() -> new BreakNotFoundException(breakId));
+        return proposals.findByTenantIdAndBreakItemIdOrderByCreatedAtDesc(tenantId, breakId);
+    }
+}

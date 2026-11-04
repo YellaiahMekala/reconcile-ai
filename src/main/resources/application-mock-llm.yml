@@ -1,0 +1,6 @@
+# Default chat profile: MockLlmChatModel (a real ChatModel bean) drives the whole advisor chain
+# with deterministic output and zero token cost (decision A4). Embeddings are still OpenAI.
+spring:
+  ai:
+    model:
+      chat: none

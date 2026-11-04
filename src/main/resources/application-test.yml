@@ -1,0 +1,22 @@
+# Test profile: used by every *IT via AbstractPostgresIT.
+spring:
+  ai:
+    model:
+      # No OpenAI calls in the automated suite. FakeEmbeddingModel (src/test/java, profile "test")
+      # provides deterministic 1536-dim vectors so the auto-created vector column matches production.
+      # LOCKED rule honoured: the fake exists ONLY on the test classpath, never in a runnable profile.
+      embedding: none
+      chat: none
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+reconcile:
+  retrieval:
+    similarity-threshold: 0.10      # calibrated for FakeEmbeddingModel bag-of-words vectors (see its Javadoc)
+
+logging:
+  level:
+    com.reconcileai: DEBUG

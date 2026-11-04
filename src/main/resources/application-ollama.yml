@@ -1,0 +1,17 @@
+# Local LLM for chat. Start Ollama and pull the model first:  ollama pull llama3.1:8b
+# Run with: mvn spring-boot:run -Dspring-boot.run.profiles=ollama
+spring:
+  ai:
+    model:
+      chat: ollama
+      embedding: openai            # LOCKED: never Ollama embeddings
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      init:
+        pull-model-strategy: never
+      chat:
+        options:
+          model: ${OLLAMA_CHAT_MODEL:llama3.1:8b}
+          temperature: 0.0         # deterministic-ish proposals; creativity is a bug here
+          format: json             # constrain Ollama to emit JSON (BeanOutputConverter still validates)
+          num-predict: 700         # output token cap

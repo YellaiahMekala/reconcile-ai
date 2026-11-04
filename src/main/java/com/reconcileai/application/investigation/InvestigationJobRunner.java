@@ -1,0 +1,207 @@
+package com.reconcileai.application.investigation;
+
+import com.reconcileai.application.audit.AuditRecorder;
+import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
+import com.reconcileai.application.investigation.CitationVerifier.CitationResult;
+import com.reconcileai.application.investigation.InvestigationExecutorConfig.NodeIdentity;
+import com.reconcileai.application.policy.PolicyGateService;
+import com.reconcileai.application.policy.PolicyGateService.PolicyDecision;
+import com.reconcileai.application.policy.PolicyGateService.PolicyInput;
+import com.reconcileai.domain.BreakItem;
+import com.reconcileai.domain.InvestigationJob;
+import com.reconcileai.domain.JobStage;
+import com.reconcileai.domain.LlmCallRecord;
+import com.reconcileai.domain.ResolutionProposal;
+import com.reconcileai.domain.RootCauseCategory;
+import com.reconcileai.infrastructure.ai.InvestigationAiClient;
+import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
+import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder;
+import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.BuiltPrompt;
+import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.NormalizedDraft;
+import com.reconcileai.infrastructure.ai.retrieval.HybridRetriever;
+import com.reconcileai.infrastructure.ai.retrieval.RetrievedChunk;
+import com.reconcileai.infrastructure.persistence.BreakItemRepository;
+import com.reconcileai.infrastructure.persistence.InvestigationJobRepository;
+import com.reconcileai.infrastructure.persistence.LlmCallRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Executes one investigation on a pool thread. Every step that touches the DB is its own short transaction;
+ * retrieval and the model call happen OUTSIDE transactions (no connection held during network I/O).
+ *
+ * <pre>
+ *  claim QUEUED->RUNNING (atomic UPDATE; losers exit)                       stage RETRIEVING
+ *  hybrid retrieval (tenant+break scoped) -> prompt budget -> snapshot ids   stage CALLING_MODEL
+ *    └─ no usable evidence? -> MANUAL_REVIEW proposal WITHOUT calling the model (0 tokens)
+ *  ChatClient call (guard -> usage -> model) -> parse -> normalize           stage VERIFYING
+ *  citation verification against snapshot                                   stage ROUTING
+ *  policy gate -> TX: persistProposal + job SUCCEEDED + audit                stage COMPLETED
+ *  any exception -> TX: job FAILED + break FAILED_RETRYABLE + audit          stage FAILED
+ * </pre>
+ * Identity: tenantId and maker come from the job row. This thread has no SecurityContext and never needs one.
+ */
+@Component
+public class InvestigationJobRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(InvestigationJobRunner.class);
+    private static final String ACTOR = "system:investigation-runner";
+
+    private final TaskExecutor executor;
+    private final InvestigationJobRepository jobs;
+    private final BreakItemRepository breaks;
+    private final LlmCallRepository llmCalls;
+    private final HybridRetriever retriever;
+    private final InvestigationPromptBuilder promptBuilder;
+    private final InvestigationAiClient aiClient;
+    private final CitationVerifier citationVerifier;
+    private final PolicyGateService policyGate;
+    private final ProposalService proposalService;
+    private final AuditRecorder audit;
+    private final InvestigationProgressPublisher progress;
+    private final InvestigationProperties props;
+    private final NodeIdentity node;
+    private final TransactionTemplate tx;
+
+    @SuppressWarnings("java:S107")
+    public InvestigationJobRunner(@Qualifier("investigationExecutor") TaskExecutor executor,
+                                  InvestigationJobRepository jobs, BreakItemRepository breaks, LlmCallRepository llmCalls,
+                                  HybridRetriever retriever, InvestigationPromptBuilder promptBuilder,
+                                  InvestigationAiClient aiClient, CitationVerifier citationVerifier,
+                                  PolicyGateService policyGate, ProposalService proposalService, AuditRecorder audit,
+                                  InvestigationProgressPublisher progress, InvestigationProperties props,
+                                  NodeIdentity node, TransactionTemplate tx) {
+        this.executor = executor;
+        this.jobs = jobs;
+        this.breaks = breaks;
+        this.llmCalls = llmCalls;
+        this.retriever = retriever;
+        this.promptBuilder = promptBuilder;
+        this.aiClient = aiClient;
+        this.citationVerifier = citationVerifier;
+        this.policyGate = policyGate;
+        this.proposalService = proposalService;
+        this.audit = audit;
+        this.progress = progress;
+        this.props = props;
+        this.node = node;
+        this.tx = tx;
+    }
+
+    /** @throws java.util.concurrent.RejectedExecutionException when the bounded queue is full */
+    public void submit(UUID jobId, String tenantId) {
+        executor.execute(() -> run(jobId, tenantId));
+    }
+
+    void run(UUID jobId, String tenantId) {
+        Integer claimed = tx.execute(s -> jobs.claim(jobId, tenantId, node.id(), Instant.now()));
+        if (claimed == null || claimed == 0) {
+            log.debug("job {} already claimed elsewhere; skipping", jobId);
+            return;
+        }
+        try {
+            InvestigationJob job = stage(jobId, tenantId, JobStage.RETRIEVING, null);
+            BreakItem breakItem = breaks.findByIdAndTenantId(job.getBreakItemId(), tenantId).orElseThrow();
+
+            String query = promptBuilder.retrievalQuery(breakItem, job.getAnalystNote());
+            List<RetrievedChunk> ranked = retriever.retrieve(tenantId, breakItem.getId(), query);
+            BuiltPrompt prompt = promptBuilder.build(breakItem, job.getAnalystNote(), ranked, props.maxContextTokens());
+            job = stage(jobId, tenantId, JobStage.CALLING_MODEL,
+                j -> j.recordRetrieval(prompt.includedChunkIds(), prompt.evidenceTokenEstimate()));
+
+            NormalizedDraft draft;
+            if (prompt.includedChunks().isEmpty()) {
+                // Token optimisation + safety: nothing trustworthy to reason over, so do not call the model at all.
+                draft = new NormalizedDraft(RootCauseCategory.UNKNOWN,
+                    "No usable evidence was retrieved (none uploaded, none relevant, or all quarantined).",
+                    "Upload evidence that explains the variance, then re-run the investigation.",
+                    BigDecimal.ZERO.setScale(3), List.of());
+            } else {
+                try {
+                    draft = InvestigationPromptBuilder.normalize(
+                        aiClient.investigate(prompt, tenantId, jobId, job.getAnalystNote()));
+                } catch (PromptBlockedException blocked) {
+                    tx.executeWithoutResult(s -> llmCalls.save(new LlmCallRecord(tenantId, jobId, "blocked", 0, 0, 0, "BLOCKED")));
+                    throw blocked;
+                }
+            }
+
+            stage(jobId, tenantId, JobStage.VERIFYING, null);
+            CitationResult citations = citationVerifier.verify(draft.citedChunkIds(), prompt.includedChunkIds());
+            // No-evidence path has no citations by construction; the UNKNOWN root cause routes it to manual review.
+            boolean citationsOk = citations.valid() || draft.citedChunkIds().isEmpty() && draft.rootCause() == RootCauseCategory.UNKNOWN;
+            stage(jobId, tenantId, JobStage.ROUTING, null);
+            PolicyDecision decision = policyGate.evaluate(
+                new PolicyInput(breakItem.variance(), draft.confidence(), draft.rootCause(), citationsOk));
+
+            final NormalizedDraft finalDraft = draft;
+            InvestigationJob done = tx.execute(s -> {
+                InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+                BreakItem b = breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).orElseThrow();
+                ResolutionProposal p = proposalService.persistProposal(j, b, finalDraft, citations.valid(),
+                    citations.invalidIds(), decision);
+                j.succeed(p.getId());
+                return jobs.save(j);
+            });
+            progress.publish(done);
+        } catch (Exception e) {
+            log.warn("Investigation {} failed: {}", jobId, e.toString());
+            failJob(jobId, tenantId, reasonOf(e));
+        }
+    }
+
+    /** Marks a job FAILED and its break FAILED_RETRYABLE in one transaction. Idempotent for terminal jobs. */
+    public void failJob(UUID jobId, String tenantId, String reason) {
+        InvestigationJob failed = tx.execute(s -> {
+            InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            if (j.isTerminal()) {
+                return j;
+            }
+            j.fail(reason);
+            breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).ifPresent(b -> {
+                b.markInvestigationFailed();
+                breaks.save(b);
+            });
+            audit.record(new AuditEntry(tenantId, "INVESTIGATION_FAILED", "BREAK", j.getBreakItemId(), ACTOR,
+                Map.of("jobId", jobId.toString(), "reason", reason)));
+            return jobs.save(j);
+        });
+        progress.publish(failed);
+    }
+
+    private InvestigationJob stage(UUID jobId, String tenantId, JobStage next, java.util.function.Consumer<InvestigationJob> extra) {
+        InvestigationJob j = tx.execute(s -> {
+            InvestigationJob job = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            job.advance(next); // also refreshes heartbeat, so a live job is never mistaken for an orphan
+            if (extra != null) {
+                extra.accept(job);
+            }
+            if (next == JobStage.RETRIEVING) {
+                audit.record(new AuditEntry(tenantId, "INVESTIGATION_STARTED", "BREAK", job.getBreakItemId(), ACTOR,
+                    Map.of("jobId", jobId.toString(), "node", node.id())));
+            }
+            return jobs.save(job);
+        });
+        progress.publish(j);
+        return j;
+    }
+
+    /** Short, non-sensitive failure code for the job row (details stay in server logs). */
+    private static String reasonOf(Exception e) {
+        String msg = e.getMessage();
+        if (msg != null && msg.matches("[A-Z_]{3,64}")) {
+            return msg;
+        }
+        return "INTERNAL_ERROR: " + e.getClass().getSimpleName();
+    }
+}

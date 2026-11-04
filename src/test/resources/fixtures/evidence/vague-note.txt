@@ -1,0 +1,2 @@
+Counterparty acknowledgement for the reconciliation difference on this account.
+The counterparty has received the query and the amount is currently under review by their operations desk.

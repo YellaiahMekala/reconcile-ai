@@ -1,0 +1,6 @@
+# Used ONLY by @Tag("openai") integration tests that call the real OpenAI embedding API.
+spring:
+  ai:
+    model:
+      embedding: openai
+      chat: none

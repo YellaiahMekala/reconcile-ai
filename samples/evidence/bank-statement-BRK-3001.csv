@@ -1,0 +1,3 @@
+statement_date,value_date,account,counterparty,reference,description,debit,credit,currency,balance
+2026-09-24,2026-09-24,NOSTRO-USD-001,ACME GLOBAL TRADING LTD,INV-88231,Incoming wire - invoice settlement,,50000.00,USD,1250000.00
+2026-09-24,2026-09-24,NOSTRO-USD-001,CORRESPONDENT BANK FEES,FEE-88231,Wire charges deducted at source (OUR/SHA),500.00,,USD,1249500.00

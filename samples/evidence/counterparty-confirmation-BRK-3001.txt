@@ -1,0 +1,15 @@
+SWIFT MT103 CONFIRMATION (SAMPLE - FICTITIOUS DATA)
+===================================================
+Transaction Reference (:20:) : INV-88231
+Value Date / Currency / Amt   : 2026-09-24 / USD / 50,500.00   (:32A:)
+Ordering Customer (:50K:)     : ACME GLOBAL TRADING LTD
+Beneficiary Account (:59:)    : NOSTRO-USD-001
+Details of Charges (:71A:)    : SHA
+Sender's Charges (:71F:)      : USD 500.00
+
+Reconciliation note:
+  Ledger booked      : USD 50,500.00 (gross invoice amount)
+  Bank statement     : USD 50,000.00 (net received)
+  Variance           : USD 500.00
+  Probable cause     : Correspondent bank charges deducted in transit (SHA).
+  Suggested action   : Book fee to charges GL 6120 and close break BRK-3001.

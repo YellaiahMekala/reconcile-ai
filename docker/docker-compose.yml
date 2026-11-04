@@ -1,0 +1,26 @@
+# Tier 1/2 infrastructure — Postgres alone.
+# Redis and Kafka are not part of this stack; their containers are deliberately absent.
+#
+# The pgvector image is used from day one even though Tier 1 has no vector column —
+# so the same container serves Tier 2 with no swap, and the extension is available
+# when V2 (Tier 2) adds it.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: reconcile-postgres
+    environment:
+      POSTGRES_DB: reconcile
+      POSTGRES_USER: reconcile
+      POSTGRES_PASSWORD: reconcile
+    ports:
+      - "5432:5432"
+    volumes:
+      - reconcile-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reconcile -d reconcile"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  reconcile-pgdata:

@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  reconcile-ai — Phase 1 (Tier 0 + Tier 1)
+
+  VERSION BASELINE (locked decision, "Option B"):
+    Spring Boot 3.5.16  +  Spring AI 1.1.8  +  Java 21
+  Rules: no Spring Boot 4.x, no Spring AI 2.x, no Jackson 3, no WebFlux.
+  If the Day-0 spike (mvn -q dependency:resolve) fails on this pairing, STOP and
+  report the exact error. Do not silently change versions.
+
+  Dependency policy: every version below is managed by the Boot parent or the
+  Spring AI BOM. Do NOT pin versions of Boot-managed artifacts (Flyway, Postgres
+  driver, Testcontainers, Nimbus, RestAssured); pinning is how drift starts.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.16</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.reconcileai</groupId>
+    <artifactId>reconcile-ai</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <name>reconcile-ai</name>
+    <description>Reconciliation Break Resolution Copilot - Phase 2 (Tier 2)</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- Spring AI BOM manages every spring-ai-* artifact version below. -->
+        <spring-ai.version>1.1.8</spring-ai.version>
+        <failsafe.excludedGroups>openai,ollama</failsafe.excludedGroups>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- ===== Web: Spring MVC (servlet). SSE in Tier 2 uses SseEmitter, so WebFlux is never needed. ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- Bean Validation for request DTOs (@NotBlank, @Pattern). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- ===== Security: stateless JWT resource server (NFR-01) ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+
+        <!-- ===== Persistence: JPA + Postgres + Flyway (Flyway owns the schema) ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <!-- Flyway 10+ ships database support as separate modules; without this, Postgres is "unsupported". -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- ===== Phase 2A: Spring AI (versions from spring-ai-bom 1.1.8) ===== -->
+        <!-- OpenAI: used for EMBEDDINGS ONLY (text-embedding-3-small, 1536-dim). Chat/image/audio/moderation
+             auto-configs are switched off with spring.ai.model.*=none so no second ChatModel bean appears. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+        <!-- PgVectorStore. Correct artifact name for Spring AI 1.x (older tutorials show spring-ai-pgvector-store-spring-boot-starter). -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
+        </dependency>
+        <!-- Ollama: local CHAT model for the "ollama" profile only (never used for embeddings). -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-ollama</artifactId>
+        </dependency>
+        <!-- Apache Tika text extraction for .txt / .pdf / .docx evidence. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-tika-document-reader</artifactId>
+        </dependency>
+
+        <!-- ===== Ops: health endpoint only (liveness for docker/k8s). ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ===== Test ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Polling async investigation jobs in ITs without Thread.sleep. Version managed by Boot. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Unit tests (*Test.java) run in the `test` phase via surefire (inherited). -->
+            <!-- Integration tests (*IT.java) run in `integration-test`/`verify` via failsafe.
+                 WITHOUT this declaration, `mvn verify` silently skips every *IT class,
+                 including the release-blocking cross-tenant test. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <!-- Tests tagged "openai" call the real OpenAI API (costs money, needs a key); "ollama" needs a local Ollama.
+                         Run the Ollama smoke test with: mvn verify -Dfailsafe.excludedGroups=openai -Dit.test=OllamaSmokeIT
+                         Run the OpenAI chat smoke test (needs OPENAI_API_KEY): mvn verify -Dfailsafe.excludedGroups=ollama -Dit.test=OpenAiChatSmokeIT
+                         Excluded by default; run with: mvn verify -Dfailsafe.excludedGroups= -Dit.test=EmbeddingSpikeOpenAiIT -->
+                    <excludedGroups>${failsafe.excludedGroups}</excludedGroups>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Coverage report for CI (target/site/jacoco). Attached before tests and written at verify. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

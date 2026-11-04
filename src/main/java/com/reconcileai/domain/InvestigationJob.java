@@ -1,0 +1,149 @@
+package com.reconcileai.domain;
+
+import jakarta.persistence.*;
+
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * An asynchronous AI investigation of one break.
+ *
+ * <h2>Why a persisted job (not just @Async)</h2>
+ * The LLM call can take seconds to minutes. Persisting the job gives: a pollable status for clients, restart
+ * recovery (orphaned RUNNING jobs are detected by heartbeat), a DB-enforced "one active job per break" rule, and
+ * the retrieval SNAPSHOT that citation verification checks against.
+ *
+ * <h2>Identity</h2>
+ * {@code initiatedBy} is the JWT subject captured on the request thread. Pool threads have no SecurityContext, so the
+ * job carries tenant + maker explicitly; it never re-reads identity from the thread.
+ */
+@Entity
+@Table(name = "investigation_job")
+public class InvestigationJob {
+
+    @Id
+    @GeneratedValue
+    @Column(columnDefinition = "uuid")
+    private UUID id;
+
+    @Column(name = "tenant_id", nullable = false, updatable = false, length = 64)
+    private String tenantId;
+
+    @Column(name = "break_item_id", nullable = false, updatable = false, columnDefinition = "uuid")
+    private UUID breakItemId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private JobStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private JobStage stage;
+
+    @Column(name = "initiated_by", nullable = false, updatable = false, length = 128)
+    private String initiatedBy;
+
+    @Column(name = "analyst_note", length = 1000)
+    private String analystNote;
+
+    /** Comma-separated vector_store ids that were placed in the prompt. The ONLY ids a proposal may cite. */
+    @Column(name = "retrieved_chunk_ids", columnDefinition = "text")
+    private String retrievedChunkIds;
+
+    @Column(name = "context_token_estimate")
+    private Integer contextTokenEstimate;
+
+    @Column(name = "failure_reason", length = 256)
+    private String failureReason;
+
+    @Column(name = "proposal_id", columnDefinition = "uuid")
+    private UUID proposalId;
+
+    @Column(name = "owner_node", length = 64)
+    private String ownerNode;
+
+    @Column(name = "heartbeat_at")
+    private Instant heartbeatAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "started_at")
+    private Instant startedAt;
+
+    @Column(name = "finished_at")
+    private Instant finishedAt;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
+
+    protected InvestigationJob() { // JPA
+    }
+
+    public InvestigationJob(String tenantId, UUID breakItemId, String initiatedBy, String analystNote) {
+        this.tenantId = tenantId;
+        this.breakItemId = breakItemId;
+        this.initiatedBy = initiatedBy;
+        this.analystNote = analystNote;
+        this.status = JobStatus.QUEUED;
+        this.stage = JobStage.QUEUED;
+    }
+
+    @PrePersist
+    void onCreate() {
+        this.createdAt = Instant.now();
+    }
+
+    public void advance(JobStage next) {
+        this.stage = next;
+        this.heartbeatAt = Instant.now();
+    }
+
+    public void recordRetrieval(List<String> chunkIds, int tokenEstimate) {
+        this.retrievedChunkIds = String.join(",", chunkIds);
+        this.contextTokenEstimate = tokenEstimate;
+    }
+
+    public void succeed(UUID proposalId) {
+        this.status = JobStatus.SUCCEEDED;
+        this.stage = JobStage.COMPLETED;
+        this.proposalId = proposalId;
+        this.finishedAt = Instant.now();
+    }
+
+    public void fail(String reason) {
+        this.status = JobStatus.FAILED;
+        this.stage = JobStage.FAILED;
+        this.failureReason = reason == null ? "UNKNOWN" : reason.substring(0, Math.min(256, reason.length()));
+        this.finishedAt = Instant.now();
+    }
+
+    public boolean isTerminal() {
+        return status == JobStatus.SUCCEEDED || status == JobStatus.FAILED;
+    }
+
+    public List<String> retrievedChunkIdList() {
+        return retrievedChunkIds == null || retrievedChunkIds.isBlank()
+            ? List.of() : Arrays.asList(retrievedChunkIds.split(","));
+    }
+
+    public UUID getId() { return id; }
+    public String getTenantId() { return tenantId; }
+    public UUID getBreakItemId() { return breakItemId; }
+    public JobStatus getStatus() { return status; }
+    public JobStage getStage() { return stage; }
+    public String getInitiatedBy() { return initiatedBy; }
+    public String getAnalystNote() { return analystNote; }
+    public Integer getContextTokenEstimate() { return contextTokenEstimate; }
+    public String getFailureReason() { return failureReason; }
+    public UUID getProposalId() { return proposalId; }
+    public String getOwnerNode() { return ownerNode; }
+    public Instant getHeartbeatAt() { return heartbeatAt; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getFinishedAt() { return finishedAt; }
+    public long getVersion() { return version; }
+}
