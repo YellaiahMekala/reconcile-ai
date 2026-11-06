@@ -3,7 +3,16 @@
 ![Java](https://img.shields.io/badge/Java-21-orange.svg)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.16-brightgreen.svg)
 ![Spring AI](https://img.shields.io/badge/Spring_AI-1.1.8-blue.svg)
-[![CI](https://github.com/YellaiahMekala/RAG-Integration-Reconciliation-Application/actions/workflows/ci.yml/badge.svg)](https://github.com/YellaiahMekala/RAG-Integration-Reconciliation-Application/actions/workflows/ci.yml)
+![Spring MVC](https://img.shields.io/badge/Spring%20MVC-Spring%20Boot-6DB33F?logo=spring&logoColor=white)
+![Spring Security OAuth2](https://img.shields.io/badge/Spring%20Security-OAuth2-6DB33F?logo=springsecurity&logoColor=white)
+![Spring Data JPA](https://img.shields.io/badge/Spring%20Data-JPA-6DB33F?logo=spring&logoColor=white)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Apache Tika](https://img.shields.io/badge/Apache-Tika-D22128?logo=apache&logoColor=white)
+![Flyway](https://img.shields.io/badge/Flyway-Migrations-CC0200?logo=flyway&logoColor=white)
+![Maven](https://img.shields.io/badge/Maven-Build-C71A36?logo=apachemaven&logoColor=white)
+![JUnit 5](https://img.shields.io/badge/JUnit-5-25A162?logo=junit5&logoColor=white)
+![Testcontainers](https://img.shields.io/badge/Testcontainers-Integration%20Tests-2496ED?logo=testcontainers&logoColor=white)
+[![CI](https://github.com/YellaiahMekala/reconcile-ai-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/YellaiahMekala/reconcile-ai-copilot/actions/workflows/ci.yml)
 
 > **Notice: independent demonstration project.**
 > This is a generic, fictitious application built to demonstrate software engineering and banking-domain
