@@ -5,6 +5,15 @@
 ![Spring AI](https://img.shields.io/badge/Spring_AI-1.1.8-blue.svg)
 [![CI](https://github.com/YellaiahMekala/RAG-Integration-Reconciliation-Application/actions/workflows/ci.yml/badge.svg)](https://github.com/YellaiahMekala/RAG-Integration-Reconciliation-Application/actions/workflows/ci.yml)
 
+> **Notice: independent demonstration project.**
+> This is a generic, fictitious application built to demonstrate software engineering and banking-domain
+> functional knowledge. It does not contain, reflect or derive from any client's data, code, functionality,
+> architecture, designs or confidential information, and it is not affiliated with or endorsed by any current
+> or former employer or client. All data (accounts, amounts, references, documents) is synthetic. Any
+> resemblance to real people, organisations or transactions is coincidental. The development keys in this
+> repository are throwaway, for local use only. The software is provided "as is" under the Apache License 2.0
+> and is not intended for production use without independent security review and hardening.
+
 A copilot for banking reconciliation operations. When a ledger amount and an external
 (counterparty or bank) amount disagree, a **break** is raised. Analysts attach **evidence** such as
 statements or SWIFT confirmations. An investigation retrieves that evidence, produces a resolution
