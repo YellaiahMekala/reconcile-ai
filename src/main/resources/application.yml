@@ -32,6 +32,13 @@ spring:
   # Spring AI (Phase 2)
   # -------------------------------------------------------------------------
   ai:
+    retry:
+      # Spring AI's own RetryTemplate defaults to 10 attempts. Chat retries are owned by LlmResilience
+      # (reconcile.ai.resilience.*), so the built-in layer is reduced to avoid 3 x 10 nested paid attempts.
+      max-attempts: 2
+      backoff:
+        initial-interval: 500ms
+        max-interval: 2s
     model:
       # Exactly ONE provider per model type. This is how two AI starters coexist on the classpath
       # without an ambiguous ChatModel/EmbeddingModel bean.
@@ -91,6 +98,14 @@ reconcile:
     max-analyst-note-chars: 1000
   ai:
     log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
+    resilience:
+      max-attempts: 3               # 1 call + 2 retries, transient failures only (5xx, 429, timeouts, network)
+      initial-backoff-ms: 500       # 500 ms, then 1 s (exponential x2)
+      failure-rate-threshold: 50    # % of failures in the window that opens the breaker
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+      open-state-wait-ms: 30000     # OPEN for 30 s, then HALF_OPEN probes
+      permitted-calls-in-half-open: 2
   policy:
     l1-min-confidence: 0.80         # LOCKED: below this, no approval route -> MANUAL_REVIEW
     l2-variance-threshold: 25000    # LOCKED: variance >= this (USD) -> L2 approver

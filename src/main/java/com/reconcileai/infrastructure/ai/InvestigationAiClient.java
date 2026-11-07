@@ -4,6 +4,7 @@ import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor;
 import com.reconcileai.infrastructure.ai.advisor.TokenUsageAdvisor;
 import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.BuiltPrompt;
 import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
+import com.reconcileai.infrastructure.ai.resilience.LlmResilience;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -23,22 +24,30 @@ import java.util.UUID;
  * <h2>Why not ChatClient.entity(Class)?</h2>
  * {@code .entity()} returns only the object; we also need the ChatResponse metadata (usage) that TokenUsageAdvisor
  * records, so we take {@code chatClientResponse()} and run BeanOutputConverter ourselves.
+ *
+ * <h2>Resilience</h2>
+ * The call runs under {@link LlmResilience}: transient failures are retried with backoff, and a circuit breaker
+ * fails fast (LLM_CIRCUIT_OPEN, zero spend) while the provider is down.
  */
 @Component
 public class InvestigationAiClient {
 
     private final ChatClient chatClient;
     private final int maxOutputTokens;
+    private final LlmResilience resilience;
     private final BeanOutputConverter<ProposalDraft> converter = new BeanOutputConverter<>(ProposalDraft.class);
 
     public InvestigationAiClient(ChatClient investigationChatClient,
-                                 @Value("${reconcile.investigation.max-output-tokens}") int maxOutputTokens) {
+                                 @Value("${reconcile.investigation.max-output-tokens}") int maxOutputTokens,
+                                 LlmResilience resilience) {
         this.chatClient = investigationChatClient;
+        this.resilience = resilience;
         this.maxOutputTokens = maxOutputTokens;
     }
 
     public ProposalDraft investigate(BuiltPrompt prompt, String tenantId, UUID jobId, String analystNote) {
-        ChatClientResponse response = chatClient.prompt()
+        // Retry (transient only) inside a circuit breaker; see LlmResilience for what is and is not retried.
+        ChatClientResponse response = resilience.call(() -> chatClient.prompt()
             .system(prompt.system() + "\n" + converter.getFormat())
             .user(prompt.user())
             .options(ChatOptions.builder().temperature(0.0).maxTokens(maxOutputTokens).build())
@@ -47,7 +56,7 @@ public class InvestigationAiClient {
                 .param(TokenUsageAdvisor.JOB_ID, jobId)
                 .param(InputGuardAdvisor.ANALYST_NOTE, analystNote == null ? "" : analystNote))
             .call()
-            .chatClientResponse();
+            .chatClientResponse());
 
         if (response.chatResponse() == null || response.chatResponse().getResult() == null) {
             throw new IllegalStateException("MODEL_RETURNED_NO_RESULT");

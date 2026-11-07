@@ -1,0 +1,4 @@
+SETTLEMENT CONFIRMATION - NORTHWIND TRADERS
+Reference PO-99121. Payment released by payer on 2026-06-30.
+Funds settled at the receiving bank on value date 2026-07-01.
+Test marker: simulate provider outage.
