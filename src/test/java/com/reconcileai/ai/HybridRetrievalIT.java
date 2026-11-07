@@ -2,6 +2,7 @@ package com.reconcileai.ai;
 
 import com.reconcileai.infrastructure.ai.retrieval.HybridRetriever;
 import com.reconcileai.infrastructure.ai.retrieval.RetrievedChunk;
+import com.reconcileai.infrastructure.security.TenantScope;
 import com.reconcileai.support.AbstractPostgresIT;
 import com.reconcileai.support.ApiTestSupport;
 import com.reconcileai.support.JwtTestSupport;
@@ -46,7 +47,7 @@ class HybridRetrievalIT extends AbstractPostgresIT {
         ApiTestSupport.upload(analystA, breakId, "/fixtures/evidence/bank-statement-timing.txt", "text/plain");
         ApiTestSupport.upload(analystA, breakId, "/fixtures/evidence/unrelated-memo.txt", "text/plain");
 
-        List<RetrievedChunk> hits = retriever.retrieve("TENANT_RA", UUID.fromString(breakId), "INV-20931 settled next business day");
+        List<RetrievedChunk> hits = TenantScope.call("TENANT_RA", () -> retriever.retrieve("TENANT_RA", UUID.fromString(breakId), "INV-20931 settled next business day"));
 
         assertThat(hits).isNotEmpty();
         assertThat(hits.get(0).text()).contains("INV-20931");
@@ -67,10 +68,10 @@ class HybridRetrievalIT extends AbstractPostgresIT {
         .then().statusCode(404);
 
         // Direct retriever call with a MISMATCHED tenant/break pair returns nothing: the filter binds both keys.
-        assertThat(retriever.retrieve("TENANT_RB", UUID.fromString(breakA), "INV-20931 settled")).isEmpty();
+        assertThat(TenantScope.call("TENANT_RB", () -> retriever.retrieve("TENANT_RB", UUID.fromString(breakA), "INV-20931 settled"))).isEmpty();
 
         // B's own search only returns B's chunks, never A's (ids differ because evidence ids differ).
-        List<String> aChunkIds = retriever.retrieve("TENANT_RA", UUID.fromString(breakA), "INV-20931 settled")
+        List<String> aChunkIds = TenantScope.call("TENANT_RA", () -> retriever.retrieve("TENANT_RA", UUID.fromString(breakA), "INV-20931 settled"))
             .stream().map(RetrievedChunk::chunkId).toList();
         List<String> bChunkIds = given().header("Authorization", analystB).queryParam("q", "INV-20931 settled")
             .when().get("/api/v1/breaks/" + breakB + "/evidence/search")

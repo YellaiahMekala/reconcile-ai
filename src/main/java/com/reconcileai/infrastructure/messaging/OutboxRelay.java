@@ -1,5 +1,6 @@
 package com.reconcileai.infrastructure.messaging;
 
+import com.reconcileai.infrastructure.security.TenantScope;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
@@ -55,6 +56,10 @@ public class OutboxRelay {
 
     /** Publishes one batch; returns how many events were sent. Visible for tests. */
     public int relayOnce() {
+        return TenantScope.callAsSystem(this::relayBatch); // relays every tenant's events
+    }
+
+    private int relayBatch() {
         Integer sent = tx.execute(s -> {
             List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT id, tenant_id, aggregate_id, event_type, payload FROM outbox_event"

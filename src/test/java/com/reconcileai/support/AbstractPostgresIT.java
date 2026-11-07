@@ -1,5 +1,8 @@
 package com.reconcileai.support;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -42,11 +45,29 @@ public abstract class AbstractPostgresIT {
         POSTGRES.start();
     }
 
+    private static JdbcTemplate admin;
+
+    /**
+     * Owner/superuser connection for test SETUP and ASSERTIONS ("what is really in the table"). It bypasses RLS on
+     * purpose, like a DBA would. Production code never gets this connection.
+     */
+    protected static synchronized JdbcTemplate adminJdbc() {
+        if (admin == null) {
+            admin = new JdbcTemplate(new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
+                POSTGRES.getPassword()));
+        }
+        return admin;
+    }
+
     @DynamicPropertySource
     static void datasourceProps(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        // App runs as the restricted role created by V6 (RLS applies); Flyway runs as the container's owner.
+        registry.add("spring.datasource.username", () -> "reconcile_app");
+        registry.add("spring.datasource.password", () -> "reconcile_app");
+        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.flyway.user", POSTGRES::getUsername);
+        registry.add("spring.flyway.password", POSTGRES::getPassword);
         // Public key the resource server validates against (matches JwtTestSupport's private key).
         registry.add("spring.security.oauth2.resourceserver.jwt.public-key-location",
             () -> "classpath:jwt/dev-public.pem");

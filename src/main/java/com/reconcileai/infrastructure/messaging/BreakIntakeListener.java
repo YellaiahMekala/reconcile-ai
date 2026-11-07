@@ -1,5 +1,6 @@
 package com.reconcileai.infrastructure.messaging;
 
+import com.reconcileai.infrastructure.security.TenantScope;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.reconcileai.application.BreakIngestionService;
@@ -39,8 +40,12 @@ public class BreakIntakeListener {
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("unparseable intake message", e);
         }
-        BreakIngestionService.Outcome outcome = ingestion.ingest(m.tenantId(), m.breakReference(), m.ledgerAmount(),
-            m.externalAmount(), m.currency());
+        if (m.tenantId() == null || m.tenantId().isBlank() || TenantScope.SYSTEM.equals(m.tenantId())) {
+            throw new IllegalArgumentException("intake message has no usable tenantId");
+        }
+        // The message names its tenant; RLS then confines every row this listener writes to that tenant.
+        BreakIngestionService.Outcome outcome = TenantScope.call(m.tenantId(), () -> ingestion.ingest(m.tenantId(),
+            m.breakReference(), m.ledgerAmount(), m.externalAmount(), m.currency()));
         meters.counter("reconcile.intake", "outcome", outcome.name()).increment();
         log.debug("intake {} -> {}", m.breakReference(), outcome);
     }

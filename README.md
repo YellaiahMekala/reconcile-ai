@@ -64,6 +64,7 @@ until that test is green.
 | Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN | `HashChainAuditRecorder`, `AuditController` |
 | Safety | Injection scanner before any model call; advisor chain (input guard, token usage) | `InputGuardAdvisor`, `TokenUsageAdvisor`, `InjectionScanner` |
 | Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set | `SecurityConfig`, `TenantContext`, `Role` |
+| Tenant isolation (DB) | Postgres Row-Level Security on every tenant table and `vector_store`; app runs as a non-owner role; connections bound to the caller's tenant on checkout; fail closed | `V6__row_level_security.sql`, `TenantAwareDataSource`, `TenantScope` |
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
 | Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
 | Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
@@ -177,6 +178,13 @@ mvn verify "-Dfailsafe.excludedGroups=ollama" "-Dit.test=OpenAiChatSmokeIT"
 
 ### Production hardening: try it
 
+**Row-Level Security (second tenant guard).** Flyway runs as the schema owner (`DB_USER`/`DB_PASSWORD`, default
+`reconcile`); the app connects as `reconcile_app` (`DB_APP_USER`/`DB_APP_PASSWORD`), which V6 creates with DML grants
+only. Each connection checkout runs `set_config('app.tenant_id', <tenant from the JWT or an explicit job scope>)`;
+policies then hide other tenants' rows even from a query with no tenant filter, and reject writes for another tenant.
+No tenant bound means no rows. Cross-tenant platform work (outbox relay, recovery sweeper) uses an explicit, named
+system scope that no JWT can claim. Test: `RowLevelSecurityIT`.
+
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
 `simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
 every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
@@ -262,6 +270,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `KafkaOutboxIT` | IT | Outbox rows published with headers; intake creates one break despite redelivery; malformed to DLT |
 | `SemanticCacheIT` | IT | Exact and semantic hits; tenant isolation; evidence-snapshot rule; suspect note bypass |
 | `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
+| `RowLevelSecurityIT` | IT | Unscoped connection sees nothing; queries without a tenant filter still isolated; cross-tenant insert rejected by Postgres; app role cannot disable RLS; a JWT cannot claim system scope |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---

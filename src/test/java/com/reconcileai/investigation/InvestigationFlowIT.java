@@ -29,8 +29,7 @@ class InvestigationFlowIT extends AbstractPostgresIT {
     @LocalServerPort
     int port;
 
-    @Autowired
-    JdbcTemplate jdbc;
+        final JdbcTemplate jdbc = adminJdbc();
 
     final String analyst = JwtTestSupport.bearer("maker-1", "TENANT_INV", List.of("RECON_ANALYST"));
     final String otherTenant = JwtTestSupport.bearer("x-1", "TENANT_OTHER", List.of("RECON_ANALYST", "APPROVER_L2"));

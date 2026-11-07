@@ -47,8 +47,7 @@ class KafkaOutboxIT extends AbstractPostgresIT {
     @LocalServerPort
     int port;
 
-    @Autowired
-    JdbcTemplate jdbc;
+        final JdbcTemplate jdbc = adminJdbc();
 
     @Autowired
     KafkaTemplate<String, String> template;

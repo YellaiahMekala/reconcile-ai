@@ -11,8 +11,9 @@ spring:
     default: mock-llm
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/reconcile}
-    username: ${DB_USER:reconcile}
-    password: ${DB_PASSWORD:reconcile}
+    # Application login: NOT the table owner and NOT a superuser, so Postgres Row-Level Security applies (V6).
+    username: ${DB_APP_USER:reconcile_app}
+    password: ${DB_APP_PASSWORD:reconcile_app}
   jpa:
     open-in-view: false
     hibernate:
@@ -24,6 +25,13 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Migrations run as the schema OWNER (separate credentials); the app role only gets DML grants.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/reconcile}
+    user: ${DB_USER:reconcile}
+    password: ${DB_PASSWORD:reconcile}
+    placeholders:
+      app_user: ${DB_APP_USER:reconcile_app}
+      app_password: ${DB_APP_PASSWORD:reconcile_app}
   servlet:
     multipart:
       max-file-size: 10MB
@@ -56,9 +64,9 @@ spring:
           model: text-embedding-3-small
     vectorstore:
       pgvector:
-        # Decision A2: Spring AI creates and owns the vector_store table (+ vector/hstore/uuid-ossp extensions).
-        # Flyway never touches it. The BM25 tsvector column is added AFTER init by TsvectorSchemaInitializer.
-        initialize-schema: true
+        # Flyway owns vector_store since V6 (Row-Level Security needs the table owned by a role other than the app).
+        # The DDL in V6 matches Spring AI 1.1.8's own (UUID id, json metadata, HNSW cosine, 1536 dims).
+        initialize-schema: false
         index-type: HNSW
         distance-type: COSINE_DISTANCE
         dimensions: 1536            # must equal the embedding model's output size

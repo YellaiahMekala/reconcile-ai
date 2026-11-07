@@ -27,8 +27,7 @@ class EvidenceIngestionIT extends AbstractPostgresIT {
     @LocalServerPort
     int port;
 
-    @Autowired
-    JdbcTemplate jdbc;
+        final JdbcTemplate jdbc = adminJdbc();
 
     final String analyst = JwtTestSupport.bearer("a1", "TENANT_ING", List.of("RECON_ANALYST"));
 

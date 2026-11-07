@@ -1,5 +1,6 @@
 package com.reconcileai.application.investigation;
 
+import com.reconcileai.infrastructure.security.TenantScope;
 import com.reconcileai.application.audit.AuditRecorder;
 import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
 import com.reconcileai.application.investigation.CitationVerifier.CitationResult;
@@ -122,7 +123,7 @@ public class InvestigationJobRunner {
             .contextualName("investigation-job")
             .lowCardinalityKeyValue("component", "investigation-runner")
             .highCardinalityKeyValue("job.id", jobId.toString())
-            .observe(() -> run(jobId, tenantId)));
+            .observe(() -> TenantScope.run(tenantId, () -> run(jobId, tenantId))));
     }
 
     void run(UUID jobId, String tenantId) {

@@ -23,8 +23,7 @@ class InvestigationRecoveryIT extends AbstractPostgresIT {
     @LocalServerPort
     int port;
 
-    @Autowired
-    JdbcTemplate jdbc;
+        final JdbcTemplate jdbc = adminJdbc();
 
     @Autowired
     InvestigationRecovery recovery;

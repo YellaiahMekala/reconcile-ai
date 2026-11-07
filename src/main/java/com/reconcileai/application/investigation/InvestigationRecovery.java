@@ -1,5 +1,6 @@
 package com.reconcileai.application.investigation;
 
+import com.reconcileai.infrastructure.security.TenantScope;
 import com.reconcileai.domain.InvestigationJob;
 import com.reconcileai.domain.JobStatus;
 import com.reconcileai.infrastructure.persistence.InvestigationJobRepository;
@@ -55,6 +56,11 @@ public class InvestigationRecovery {
 
     /** @return number of jobs acted on (visible for tests) */
     public int sweep() {
+        // Cross-tenant by nature: finds every tenant's orphans. Each job is then run in its own tenant scope.
+        return TenantScope.callAsSystem(this::sweepAll);
+    }
+
+    private int sweepAll() {
         List<InvestigationJob> stale = jobs.findStale(Instant.now().minusSeconds(props.leaseSeconds()));
         for (InvestigationJob j : stale) {
             if (j.getStatus() == JobStatus.RUNNING) {
