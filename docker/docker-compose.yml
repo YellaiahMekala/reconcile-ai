@@ -22,6 +22,15 @@ services:
       timeout: 3s
       retries: 10
 
+  # ---- cache profile: Redis for the semantic cache (run the app with CACHE_ENABLED=true) ----
+  redis:
+    image: redis:7-alpine
+    container_name: reconcile-redis
+    profiles: ["cache"]
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+
   # ---- observability profile: traces (OTLP -> Jaeger), metrics (Prometheus), dashboards (Grafana) ----
   # Run the app with TRACING_ENABLED=true to export spans to Jaeger on :4318.
   jaeger:

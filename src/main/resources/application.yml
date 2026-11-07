@@ -63,6 +63,11 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 1536            # must equal the embedding model's output size
         max-document-batch-size: 1000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms                # a slow cache must not slow investigations; lookups fail open
   security:
     oauth2:
       resourceserver:
@@ -101,6 +106,12 @@ reconcile:
     pricing:                        # list price per 1M tokens for the cost metric (ESTIMATED). Defaults: gpt-4o-mini
       prompt-usd-per-million: ${LLM_PROMPT_USD_PER_MILLION:0.15}
       completion-usd-per-million: ${LLM_COMPLETION_USD_PER_MILLION:0.60}
+    cache:                          # semantic cache of verified drafts (Redis). See RedisSemanticCache.
+      enabled: ${CACHE_ENABLED:false}
+      similarity-threshold: 0.95    # cosine; config below 0.80 is refused at startup
+      ttl-hours: 24
+      max-entries-per-tenant: 500
+      namespace: v1                 # bump to invalidate everything after a prompt or model change
     pii-masking:
       enabled: true                 # mask account numbers, IBANs, cards, emails, phones before the model call
     resilience:
@@ -130,6 +141,9 @@ management:
     web:
       exposure:
         include: health,prometheus   # both permitted in SecurityConfig; nothing else is exposed
+  health:
+    redis:
+      enabled: ${CACHE_ENABLED:false}   # Redis is optional: only part of health when the cache is on
   endpoint:
     health:
       show-details: never        # no DB/disk details to unauthenticated callers

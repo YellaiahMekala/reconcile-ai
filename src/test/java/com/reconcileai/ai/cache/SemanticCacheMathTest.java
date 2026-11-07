@@ -1,0 +1,19 @@
+package com.reconcileai.ai.cache;
+
+import com.reconcileai.infrastructure.ai.cache.SemanticCacheProperties;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class SemanticCacheMathTest {
+
+    @Test
+    void unsafeThresholdIsRefused() {
+        assertThatThrownBy(() -> new SemanticCacheProperties(true, 0.5, 24, 100, "v1"))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new SemanticCacheProperties(true, 0.95, 24, 0, "v1"))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThat(new SemanticCacheProperties(false, 0.95, 24, 100, " ").namespace()).isEqualTo("v1");
+    }
+}

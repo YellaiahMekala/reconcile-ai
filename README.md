@@ -67,6 +67,7 @@ until that test is green.
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
 | Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
 | Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
+| Cost | Redis semantic cache of verified model drafts (exact + semantic, per tenant, evidence-snapshot bound, fail-open); off by default | `infrastructure/ai/cache/` |
 | UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
 | Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
 
@@ -186,6 +187,13 @@ Fixtures: `src/test/resources/fixtures/evidence/timing-*.txt`. Tests: `LlmResili
 `reconcile_pii_masked_total{type=...}` counts what was masked; the values are never logged. Disable with
 `reconcile.ai.pii-masking.enabled=false`. Tests: `PiiMaskerTest`.
 
+**Semantic cache (Redis).** `docker compose -f docker/docker-compose.yml --profile cache up -d`, then run with
+`CACHE_ENABLED=true`. Only citation-verified drafts are stored. A hit replaces the model call only; normalisation,
+citation check and the policy gate still run. Hits need the same tenant AND the identical retrieved-chunk set, so new
+evidence always forces a fresh call; a suspect analyst note bypasses the cache. Redis errors are misses, never
+failures. Metrics: `reconcile_llm_cache_total{result=hit_exact|hit_semantic|miss|store|error}`; hits are recorded in
+`llm_call` as `CACHE_HIT` with 0 tokens. Tests: `SemanticCacheIT` (real Redis), `SemanticCacheMathTest`.
+
 **Web UI.** See [`ui/README.md`](ui/README.md). In short: run the API with
 `-Dspring-boot.run.profiles=mock-llm,demo-login`, then `cd ui; npm ci; npm start` and open http://localhost:4200.
 
@@ -218,7 +226,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **57 unit tests** (surefire) and **64 integration tests** (failsafe, real Postgres via Testcontainers).
+Current counts: **57 unit tests** (surefire) and **70 integration tests** (failsafe, real Postgres via Testcontainers).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -236,6 +244,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
 | `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
 | `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
+| `SemanticCacheIT` | IT | Exact and semantic hits; tenant isolation; evidence-snapshot rule; suspect note bypass |
 | `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
@@ -258,7 +267,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 ## 8. Known limitations
 
-- Not implemented: Kafka, Redis, multi-instance scale-out, and a daily digest.
+- Not implemented: Kafka, multi-instance scale-out, and a daily digest.
 - The UI signs in with demo personas (`demo-login` profile, throwaway key); there is no real identity provider.
 - PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
