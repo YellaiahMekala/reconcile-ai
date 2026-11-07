@@ -10,7 +10,7 @@
 > functional knowledge. It does not contain, reflect or derive from any client's data, code, functionality,
 > architecture, designs or confidential information, and it is not affiliated with or endorsed by any current
 > or former employer or client. All data (accounts, amounts, references, documents) is synthetic. Any
-> resemblance to real people, organisations or transactions is coincidental. The development keys in this
+> resemblance to real people,organizations or transactions is coincidental. The development keys in this
 > repository are throwaway, for local use only. The software is provided "as is" under the Apache License 2.0
 > and is not intended for production use without independent security review and hardening.
 

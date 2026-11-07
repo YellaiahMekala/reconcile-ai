@@ -1,5 +1,5 @@
 ACME BANK - CUSTOMER STATEMENT
-Account: 00918273  Currency: USD
+Account: ACCT-TEST-0001  Currency: USD
 
 Value date  Description                               Amount
 2026-03-31  Opening balance                           1,204,330.00
