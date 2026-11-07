@@ -57,7 +57,7 @@ until that test is green.
 | Evidence | Multipart upload with SHA-256 dedup (201 new / 200 duplicate), list, hybrid search | `EvidenceController`, `EvidenceSearchController` |
 | Ingestion | Tika text extraction, chunking, embeddings into pgvector | `infrastructure/ai/ingestion/EvidenceIngestor` |
 | Retrieval | Dense (pgvector) + sparse (Postgres `tsvector`) fused with Reciprocal Rank Fusion | `infrastructure/ai/retrieval/HybridRetriever`, `RrfFusion` |
-| Investigation | Async job with heartbeat lease, recovery of orphaned jobs, SSE progress | `InvestigationController`, `InvestigationJobRunner`, `InvestigationRecovery` |
+| Investigation | Async job with heartbeat lease, recovery of orphaned jobs, SSE progress (cross-instance via Redis pub/sub when `SSE_FANOUT=redis`) | `InvestigationController`, `InvestigationJobRunner`, `InvestigationRecovery` |
 | Proposals | Structured output with citations; citations verified against retrieved chunk ids | `ProposalService`, `CitationVerifier` |
 | Policy gate | Routes to MANUAL_REVIEW, L1 or L2 (auto-resolve implemented but off by default) | `PolicyGateService` |
 | Approvals | L1/L2 queues, maker-checker, stricter-of-stored-and-recomputed tier | `ApprovalController`, `ApprovalService` |
@@ -185,6 +185,12 @@ policies then hide other tenants' rows even from a query with no tenant filter, 
 No tenant bound means no rows. Cross-tenant platform work (outbox relay, recovery sweeper) uses an explicit, named
 system scope that no JWT can claim. Test: `RowLevelSecurityIT`.
 
+**Live progress across instances.** Run every instance with `SSE_FANOUT=redis` (and Redis from the `cache`
+profile). Each progress event is published on the Redis channel `reconcile:progress`; every node delivers it to its
+own open streams, so a browser may be connected to any node behind the load balancer. If Redis is unavailable the
+node falls back to local delivery; the snapshot-on-subscribe and polling API still make the client correct.
+Metric: `reconcile_sse_fanout_total{result}`. Test: `SseFanoutIT` (two real app instances, job on one, stream on the other).
+
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
 `simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
 every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
@@ -271,6 +277,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `SemanticCacheIT` | IT | Exact and semantic hits; tenant isolation; evidence-snapshot rule; suspect note bypass |
 | `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
 | `RowLevelSecurityIT` | IT | Unscoped connection sees nothing; queries without a tenant filter still isolated; cross-tenant insert rejected by Postgres; app role cannot disable RLS; a JWT cannot claim system scope |
+| `SseFanoutIT` | IT | Two app instances share Postgres and Redis; a stream on node 2 receives every stage of a job running on node 1 |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---
@@ -292,7 +299,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 ## 8. Known limitations
 
-- Not implemented: multi-instance scale-out (the outbox relay is SKIP LOCKED-safe, but the SSE broadcaster is per node), Kubernetes/HPA, and a daily digest.
+- SSE fan-out over Redis pub/sub is fire-and-forget: an event missed during a Redis blip is recovered by the next event or the snapshot on reconnect, not replayed.
 - Kafka delivery is at-least-once; consumers must dedupe on the `event-id` header. Intake trusts the tenant named in the message, so topic ACLs are the trust boundary.
 - The UI signs in with demo personas (`demo-login` profile, throwaway key); there is no real identity provider.
 - PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.

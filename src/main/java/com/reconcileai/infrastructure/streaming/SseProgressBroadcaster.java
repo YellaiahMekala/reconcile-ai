@@ -5,6 +5,7 @@ import com.reconcileai.application.investigation.InvestigationProgressPublisher;
 import com.reconcileai.domain.InvestigationJob;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -31,10 +32,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The app is servlet-based (locked: no WebFlux). SseEmitter holds an async servlet context, not a request thread.
  *
  * <h2>Scope and honest limits</h2>
- * The registry is in-memory, per instance. With several instances behind a load balancer, a client only receives
- * events published by the node that runs the job, unless it is routed to that node. That is why every subscribe
- * starts with a DB snapshot, streams expire, and polling remains a first-class API. Cross-node fan-out
- * (Redis/Postgres LISTEN) is not implemented.
+ * The subscriber registry is in-memory, per instance. With {@code reconcile.streaming.fanout=redis} every event is
+ * published on a Redis channel and each node delivers it to its own subscribers, so a client may be connected to any
+ * node ({@link RedisProgressFanout}). With the default {@code local} fan-out only the node running the job delivers.
+ * Either way, every subscribe starts with a DB snapshot, streams expire, and polling remains a first-class API.
  */
 @Component
 public class SseProgressBroadcaster implements InvestigationProgressPublisher {
@@ -46,9 +47,11 @@ public class SseProgressBroadcaster implements InvestigationProgressPublisher {
     private final Map<UUID, List<Subscriber>> byJob = new ConcurrentHashMap<>();
     private final AtomicInteger total = new AtomicInteger();
     private final StreamingProperties props;
+    private final ObjectProvider<RedisProgressFanout> fanout;
 
-    public SseProgressBroadcaster(StreamingProperties props) {
+    public SseProgressBroadcaster(StreamingProperties props, ObjectProvider<RedisProgressFanout> fanout) {
         this.props = props;
+        this.fanout = fanout;
     }
 
     /** Registers a stream for a job the caller has ALREADY been authorised to read (tenant-scoped load, else 404). */
@@ -79,16 +82,25 @@ public class SseProgressBroadcaster implements InvestigationProgressPublisher {
 
     @Override
     public void publish(InvestigationJob job) {
-        List<Subscriber> subs = byJob.get(job.getId());
+        ProgressEvent event = ProgressEvent.of(job);
+        RedisProgressFanout redis = fanout.getIfAvailable();
+        if (redis != null && redis.publish(job.getTenantId(), event)) {
+            return; // every node (this one included) delivers from the Redis listener
+        }
+        deliver(job.getTenantId(), event);
+    }
+
+    /** Sends one event to THIS node's subscribers of the job, if any. Called locally or from the Redis listener. */
+    public void deliver(String tenantId, ProgressEvent event) {
+        List<Subscriber> subs = byJob.get(event.jobId());
         if (subs == null || subs.isEmpty()) {
             return;
         }
-        ProgressEvent event = ProgressEvent.of(job);
         for (Subscriber sub : subs) {
-            if (!sub.tenantId().equals(job.getTenantId())) {
+            if (!sub.tenantId().equals(tenantId)) {
                 continue; // defence in depth: subscribe already enforced tenant; never cross the boundary here
             }
-            if (send(sub.emitter(), event) && job.isTerminal()) {
+            if (send(sub.emitter(), event) && event.terminal()) {
                 sub.emitter().complete();
             }
         }

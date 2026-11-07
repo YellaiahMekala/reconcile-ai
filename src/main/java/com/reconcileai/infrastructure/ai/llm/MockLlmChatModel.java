@@ -32,6 +32,7 @@ import java.util.regex.Pattern;
  *  evidence contains "simulate provider outage"  -> every call throws TransientAiException (retries exhaust,
  *                                                   job FAILED with LLM_UNAVAILABLE; repeated runs open the breaker)
  *  evidence contains "simulate transient glitch" -> the FIRST call for that prompt throws, the retry succeeds
+ *  evidence contains "simulate slow provider"    -> the call takes 3 s (lets a test subscribe mid-job, e.g. SSE fan-out)
  * </pre>
  * Usage metadata is filled with chars/4 estimates so token accounting is exercised end to end.
  * This bean is registered only under the "mock-llm" profile (see AiConfig).
@@ -52,6 +53,13 @@ public class MockLlmChatModel implements ChatModel {
         }
         if (lower.contains("simulate transient glitch") && glitchedOnce.add(all.hashCode())) {
             throw new org.springframework.ai.retry.TransientAiException("mock-llm: simulated transient glitch (HTTP 503)");
+        }
+        if (lower.contains("simulate slow provider")) {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         List<String[]> blocks = new ArrayList<>();
         Matcher m = BLOCK.matcher(all);

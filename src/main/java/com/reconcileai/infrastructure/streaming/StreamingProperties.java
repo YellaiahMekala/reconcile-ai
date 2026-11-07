@@ -15,5 +15,11 @@ public record StreamingProperties(
     @Min(1000) long emitterTimeoutMs,
     @Min(1) int maxSubscribers,
     @Min(1) int maxSubscribersPerJob,
-    @Min(1000) long heartbeatIntervalMs
-) {}
+    @Min(1000) long heartbeatIntervalMs,
+    /** local (single node) | redis (publish every event on a Redis channel; every node delivers to its own streams) */
+    String fanout
+) {
+    public boolean redisFanout() {
+        return "redis".equalsIgnoreCase(fanout);
+    }
+}

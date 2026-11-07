@@ -160,6 +160,7 @@ reconcile:
     max-subscribers: 500            # total open streams per instance (each holds an async servlet context)
     max-subscribers-per-job: 20
     heartbeat-interval-ms: 15000    # comment frame keeps proxies from killing idle streams
+    fanout: ${SSE_FANOUT:local}     # redis: cross-instance delivery via Redis pub/sub (any node can serve a stream)
 
 management:
   endpoints:
