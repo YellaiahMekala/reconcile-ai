@@ -71,6 +71,7 @@ until that test is green.
 | Messaging | Transactional outbox (`outbox_event`, same tx as the state change) relayed to Kafka; event-driven break intake with idempotency and a dead-letter topic; off by default | `infrastructure/messaging/`, `BreakIngestionService` |
 | Cost | Redis semantic cache of verified model drafts (exact + semantic, per tenant, evidence-snapshot bound, fail-open); off by default | `infrastructure/ai/cache/` |
 | UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
+| Reporting | Daily digest per tenant (activity from the audit chain, backlog, AI calls, tokens, estimated cost, root causes); SQL-built, advisory-locked so one instance runs it; `DAILY_DIGEST_READY` outbox event | `application/digest/`, `DigestController` |
 | Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
 
 Endpoints are under `/api/v1`. Swagger UI is not part of this build.
@@ -191,6 +192,14 @@ own open streams, so a browser may be connected to any node behind the load bala
 node falls back to local delivery; the snapshot-on-subscribe and polling API still make the client correct.
 Metric: `reconcile_sse_fanout_total{result}`. Test: `SseFanoutIT` (two real app instances, job on one, stream on the other).
 
+**Daily digest.** At 00:15 UTC (`reconcile.digest.cron`) one instance (Postgres advisory lock) builds yesterday's
+digest for every tenant: activity counted from the audit chain, open backlog and oldest age, investigations and failure
+reasons, model calls, cache hits, tokens and estimated cost, root causes and routes. Numbers are SQL aggregates and the
+text is a fixed template, so the digest never mis-states a number. Re-runs overwrite (idempotent). A
+`DAILY_DIGEST_READY` event goes to the outbox for downstream e-mail or chat delivery. API: `GET /api/v1/digests?days=7`,
+`GET /api/v1/digests/{date}` (approvers, SRE), `POST /api/v1/digests/{date}/generate` (SRE backfill). Disable with
+`DIGEST_ENABLED=false`. Test: `DailyDigestIT`.
+
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
 `simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
 every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
@@ -278,6 +287,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
 | `RowLevelSecurityIT` | IT | Unscoped connection sees nothing; queries without a tenant filter still isolated; cross-tenant insert rejected by Postgres; app role cannot disable RLS; a JWT cannot claim system scope |
 | `SseFanoutIT` | IT | Two app instances share Postgres and Redis; a stream on node 2 receives every stage of a job running on node 1 |
+| `DailyDigestIT` | IT | Digest numbers match a scripted day; idempotent re-run; outbox event; tenant isolation and roles; second instance skips while the lock is held |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---

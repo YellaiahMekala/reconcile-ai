@@ -155,6 +155,9 @@ reconcile:
     intake-topic: reconcile.break.intake
     relay-batch-size: 50
     relay-interval-ms: 1000
+  digest:
+    enabled: ${DIGEST_ENABLED:true}   # one SQL-built digest per tenant per UTC day (advisory-locked: one instance runs it)
+    cron: "0 15 0 * * *"              # 00:15 UTC, summarising the previous UTC day
   streaming:
     emitter-timeout-ms: 120000      # each SSE stream expires; client reconnects (fresh snapshot) or polls
     max-subscribers: 500            # total open streams per instance (each holds an async servlet context)
