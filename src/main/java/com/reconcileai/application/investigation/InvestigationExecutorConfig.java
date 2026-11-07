@@ -28,6 +28,10 @@ public class InvestigationExecutorConfig {
     ThreadPoolTaskExecutor investigationExecutor(InvestigationProperties props) {
         ThreadPoolTaskExecutor ex = new ThreadPoolTaskExecutor();
         ex.setThreadNamePrefix("investigation-");
+        // Carries the caller's trace context (Micrometer context-propagation) onto the pool thread, so the job span
+        // is a child of the POST /investigations request span. Only registered ThreadLocal accessors are copied:
+        // the SecurityContext is NOT propagated (jobs take identity from the job row, by design).
+        ex.setTaskDecorator(new org.springframework.core.task.support.ContextPropagatingTaskDecorator());
         ex.setCorePoolSize(props.corePoolSize());
         ex.setMaxPoolSize(props.maxPoolSize());
         ex.setQueueCapacity(props.queueCapacity());

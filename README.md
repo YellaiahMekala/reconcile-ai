@@ -64,7 +64,10 @@ until that test is green.
 | Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN | `HashChainAuditRecorder`, `AuditController` |
 | Safety | Injection scanner before any model call; advisor chain (input guard, token usage) | `InputGuardAdvisor`, `TokenUsageAdvisor`, `InjectionScanner` |
 | Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set | `SecurityConfig`, `TenantContext`, `Role` |
-| Ops | Actuator health only; no error-message leakage | `/actuator/health` |
+| Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
+| Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
+| Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
+| Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
 
 Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 
@@ -81,7 +84,8 @@ Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 | Migrations | Flyway |
 | AI | Spring AI 1.1.8 (OpenAI embeddings; mock-llm default chat model; Ollama profile) |
 | Parsing | Apache Tika |
-| Ops | Spring Boot Actuator (health only) |
+| Resilience | Resilience4j 2.4 (retry, circuit breaker), programmatic, no AOP |
+| Ops | Spring Boot Actuator, Micrometer + Prometheus, Micrometer Tracing + OpenTelemetry (OTLP), Jaeger, Grafana |
 | Testing | JUnit 5, Testcontainers, AssertJ, Awaitility, spring-security-test |
 | Build | Maven (surefire for `*Test`, failsafe for `*IT`) |
 
@@ -167,6 +171,33 @@ Optional: `$env:OPENAI_CHAT_MODEL = "gpt-4o-mini"` (the default). The real-model
 mvn verify "-Dfailsafe.excludedGroups=ollama" "-Dit.test=OpenAiChatSmokeIT"
 ```
 
+### Production hardening: try it
+
+**LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
+`simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
+every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
+Five such failures in the window open the breaker: further investigations fail at once with `LLM_CIRCUIT_OPEN`,
+without calling the model, until it half-opens after 30 s. Settings: `reconcile.ai.resilience.*`.
+Fixtures: `src/test/resources/fixtures/evidence/timing-*.txt`. Tests: `LlmResilienceTest`, `LlmResilienceIT`.
+
+**PII masking.** Every prompt passes `PiiMaskingAdvisor` (after the injection guard, before token accounting).
+`reconcile_pii_masked_total{type=...}` counts what was masked; the values are never logged. Disable with
+`reconcile.ai.pii-masking.enabled=false`. Tests: `PiiMaskerTest`.
+
+**Observability.**
+
+```powershell
+docker compose -f docker/docker-compose.yml --profile observability up -d   # Postgres, Jaeger, Prometheus, Grafana
+$env:TRACING_ENABLED = "true"; mvn spring-boot:run
+curl.exe -s http://localhost:8080/actuator/prometheus | Select-String reconcile_llm
+```
+
+- Grafana: http://localhost:3000, dashboard *reconcile-ai: LLM cost, latency and resilience* (estimated spend,
+  tokens/min, LLM p95, breaker state, retries, PII masked, HTTP p95, LLM errors).
+- Jaeger: http://localhost:16686, service `reconcile-ai`. Each investigation job is one span (`investigation-job`)
+  with the Spring AI chat-client and model spans nested under it, linked to the `POST /investigations` request.
+- Cost prices: `LLM_PROMPT_USD_PER_MILLION`, `LLM_COMPLETION_USD_PER_MILLION` (defaults: gpt-4o-mini list price).
+
 ---
 
 ## Demo
@@ -182,7 +213,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **47 unit tests** (surefire) and **60 integration tests** (failsafe, real Postgres via Testcontainers).
+Current counts: **57 unit tests** (surefire) and **64 integration tests** (failsafe, real Postgres via Testcontainers).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -198,6 +229,9 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `InvestigationFlowIT`, `GoldenPathIT` | IT | Evidence → cited proposal → route → approval → RESOLVED; injection quarantine |
 | `InvestigationRecoveryIT`, `InvestigationStreamingIT` | IT | Orphaned job recovery; SSE lifecycle and tenant isolation |
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
+| `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
+| `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
+| `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---
 
@@ -218,7 +252,9 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 ## 8. Known limitations
 
-- Not implemented: Kafka, Redis, multi-instance scale-out, PII masking, a UI, and a daily digest.
+- Not implemented: Kafka, Redis, multi-instance scale-out, a UI, and a daily digest.
+- PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.
+- The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.
 

@@ -51,6 +51,20 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- ===== Observability: Prometheus metrics + OpenTelemetry traces (OTLP). Versions managed by Boot. ===== -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
         <!-- ===== LLM resilience: retry + circuit breaker, used programmatically (no AOP proxies). ===== -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>

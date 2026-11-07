@@ -23,6 +23,8 @@ import com.reconcileai.infrastructure.ai.retrieval.RetrievedChunk;
 import com.reconcileai.infrastructure.persistence.BreakItemRepository;
 import com.reconcileai.infrastructure.persistence.InvestigationJobRepository;
 import com.reconcileai.infrastructure.persistence.LlmCallRepository;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -72,6 +74,13 @@ public class InvestigationJobRunner {
     private final InvestigationProperties props;
     private final NodeIdentity node;
     private final TransactionTemplate tx;
+    private ObservationRegistry observations = ObservationRegistry.NOOP;
+
+    /** Optional: one span per job (retrieval, model call and DB work nest under it). NOOP when tracing is off. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setObservationRegistry(ObservationRegistry registry) {
+        this.observations = registry;
+    }
 
     @SuppressWarnings("java:S107")
     public InvestigationJobRunner(@Qualifier("investigationExecutor") TaskExecutor executor,
@@ -100,7 +109,11 @@ public class InvestigationJobRunner {
 
     /** @throws java.util.concurrent.RejectedExecutionException when the bounded queue is full */
     public void submit(UUID jobId, String tenantId) {
-        executor.execute(() -> run(jobId, tenantId));
+        executor.execute(() -> Observation.createNotStarted("reconcile.investigation", observations)
+            .contextualName("investigation-job")
+            .lowCardinalityKeyValue("component", "investigation-runner")
+            .highCardinalityKeyValue("job.id", jobId.toString())
+            .observe(() -> run(jobId, tenantId)));
     }
 
     void run(UUID jobId, String tenantId) {

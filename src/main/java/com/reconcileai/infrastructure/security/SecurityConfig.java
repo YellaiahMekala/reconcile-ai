@@ -64,6 +64,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Liveness only. Every other actuator endpoint stays unexposed (see application.yml).
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                // Prometheus scrape: aggregate counters only (no tenant ids, prompts or amounts in any tag).
+                // In a real deployment restrict it by network policy or move it to management.server.port.
+                .requestMatchers("/actuator/prometheus").permitAll()
                 // SSE: SseEmitter completes via an ASYNC re-dispatch of a request that was ALREADY
                 // authenticated and authorised on its REQUEST dispatch. The bearer filter does not re-run on async
                 // dispatch, so without this the stream ends with AccessDenied on an already-committed response.

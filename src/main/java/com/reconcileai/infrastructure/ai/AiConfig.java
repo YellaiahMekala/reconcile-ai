@@ -1,11 +1,14 @@
 package com.reconcileai.infrastructure.ai;
 
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor;
+import com.reconcileai.infrastructure.ai.advisor.PiiMaskingAdvisor;
 import com.reconcileai.infrastructure.ai.advisor.TokenUsageAdvisor;
 import com.reconcileai.infrastructure.ai.guard.InjectionScanner;
 import com.reconcileai.infrastructure.ai.llm.MockLlmChatModel;
 import com.reconcileai.infrastructure.persistence.LlmCallRepository;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
@@ -19,6 +22,7 @@ import org.springframework.context.annotation.Profile;
  *
  * <pre>
  *  ChatClient ─► InputGuardAdvisor (block before spend)
+ *             ─► PiiMaskingAdvisor (mask accounts/IBANs/cards/emails/phones; reconcile.ai.pii-masking.enabled)
  *             ─► TokenUsageAdvisor (measure what was spent)
  *             ─► [SimpleLoggerAdvisor only if reconcile.ai.log-prompts=true — localhost debugging]
  *             ─► ChatModel  (MockLlmChatModel | Ollama, chosen by profile; exactly one bean exists)
@@ -43,11 +47,19 @@ public class AiConfig {
     ChatClient investigationChatClient(ChatModel chatModel, InjectionScanner scanner, LlmCallRepository llmCalls,
                                        MeterRegistry meters,
                                        @Value("${reconcile.investigation.max-context-tokens}") int maxContextTokens,
-                                       @Value("${reconcile.ai.log-prompts:false}") boolean logPrompts) {
+                                       @Value("${reconcile.ai.log-prompts:false}") boolean logPrompts,
+                                       @Value("${reconcile.ai.pii-masking.enabled:true}") boolean piiMasking,
+                                       @Value("${reconcile.ai.pricing.prompt-usd-per-million:0}") double promptPrice,
+                                       @Value("${reconcile.ai.pricing.completion-usd-per-million:0}") double completionPrice,
+                                       ObjectProvider<ObservationRegistry> observations) {
         // Hard ceiling = evidence budget + generous allowance for system prompt, schema and break facts (chars ≈ tokens*4).
         int maxPromptChars = (maxContextTokens + 1500) * 4;
-        ChatClient.Builder builder = ChatClient.builder(chatModel)
-            .defaultAdvisors(new InputGuardAdvisor(scanner, maxPromptChars), new TokenUsageAdvisor(llmCalls, meters));
+        ChatClient.Builder builder = ChatClient.builder(chatModel, observations.getIfAvailable(() -> ObservationRegistry.NOOP), null, null)
+            .defaultAdvisors(new InputGuardAdvisor(scanner, maxPromptChars),
+                new TokenUsageAdvisor(llmCalls, meters, promptPrice, completionPrice));
+        if (piiMasking) {
+            builder.defaultAdvisors(new PiiMaskingAdvisor(meters));
+        }
         if (logPrompts) {
             builder.defaultAdvisors(new SimpleLoggerAdvisor());
         }
