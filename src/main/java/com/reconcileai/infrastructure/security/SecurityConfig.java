@@ -67,6 +67,9 @@ public class SecurityConfig {
                 // Prometheus scrape: aggregate counters only (no tenant ids, prompts or amounts in any tag).
                 // In a real deployment restrict it by network policy or move it to management.server.port.
                 .requestMatchers("/actuator/prometheus").permitAll()
+                // Demo persona login for the local UI. The controller exists ONLY under the demo-login profile;
+                // without it these paths simply do not exist.
+                .requestMatchers("/dev/personas", "/dev/token").permitAll()
                 // SSE: SseEmitter completes via an ASYNC re-dispatch of a request that was ALREADY
                 // authenticated and authorised on its REQUEST dispatch. The bearer filter does not re-run on async
                 // dispatch, so without this the stream ends with AccessDenied on an already-committed response.

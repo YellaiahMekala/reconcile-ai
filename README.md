@@ -67,6 +67,7 @@ until that test is green.
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
 | Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
 | Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
+| UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
 | Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
 
 Endpoints are under `/api/v1`. Swagger UI is not part of this build.
@@ -86,6 +87,7 @@ Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 | Parsing | Apache Tika |
 | Resilience | Resilience4j 2.4 (retry, circuit breaker), programmatic, no AOP |
 | Ops | Spring Boot Actuator, Micrometer + Prometheus, Micrometer Tracing + OpenTelemetry (OTLP), Jaeger, Grafana |
+| Frontend | Angular 20 (standalone components, signals, RxJS), Karma/Jasmine |
 | Testing | JUnit 5, Testcontainers, AssertJ, Awaitility, spring-security-test |
 | Build | Maven (surefire for `*Test`, failsafe for `*IT`) |
 
@@ -184,6 +186,9 @@ Fixtures: `src/test/resources/fixtures/evidence/timing-*.txt`. Tests: `LlmResili
 `reconcile_pii_masked_total{type=...}` counts what was masked; the values are never logged. Disable with
 `reconcile.ai.pii-masking.enabled=false`. Tests: `PiiMaskerTest`.
 
+**Web UI.** See [`ui/README.md`](ui/README.md). In short: run the API with
+`-Dspring-boot.run.profiles=mock-llm,demo-login`, then `cd ui; npm ci; npm start` and open http://localhost:4200.
+
 **Observability.**
 
 ```powershell
@@ -231,6 +236,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
 | `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
 | `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
+| `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---
@@ -252,7 +258,8 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 ## 8. Known limitations
 
-- Not implemented: Kafka, Redis, multi-instance scale-out, a UI, and a daily digest.
+- Not implemented: Kafka, Redis, multi-instance scale-out, and a daily digest.
+- The UI signs in with demo personas (`demo-login` profile, throwaway key); there is no real identity provider.
 - PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).

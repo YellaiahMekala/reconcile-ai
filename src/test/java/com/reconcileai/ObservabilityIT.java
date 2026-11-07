@@ -42,6 +42,12 @@ class ObservabilityIT extends AbstractPostgresIT {
     }
 
     @Test
+    void demoLoginDoesNotExistWithoutItsProfile() {
+        given().contentType("application/json").body("{\"persona\":\"analyst\"}").when().post("/dev/token")
+            .then().statusCode(org.hamcrest.Matchers.not(200));
+    }
+
+    @Test
     void otherActuatorEndpointsStayClosed() {
         given().when().get("/actuator/env").then().statusCode(401);
     }
