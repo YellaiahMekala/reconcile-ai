@@ -1,6 +1,7 @@
 package com.reconcileai.application.investigation;
 
 import com.reconcileai.application.audit.AuditRecorder;
+import com.reconcileai.infrastructure.messaging.OutboxRecorder;
 import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
 import com.reconcileai.application.policy.PolicyGateService.PolicyDecision;
 import com.reconcileai.domain.ApprovalTask;
@@ -33,9 +34,12 @@ public class ProposalService {
     private final BreakItemRepository breaks;
     private final ApprovalTaskRepository approvalTasks;
     private final AuditRecorder audit;
+    private final OutboxRecorder outbox;
 
     public ProposalService(ResolutionProposalRepository proposals, BreakItemRepository breaks,
-                           ApprovalTaskRepository approvalTasks, AuditRecorder audit) {
+                           ApprovalTaskRepository approvalTasks, AuditRecorder audit,
+                           OutboxRecorder outbox) {
+        this.outbox = outbox;
         this.proposals = proposals;
         this.breaks = breaks;
         this.approvalTasks = approvalTasks;
@@ -69,6 +73,8 @@ public class ProposalService {
         audit.record(new AuditEntry(job.getTenantId(), "PROPOSAL_ROUTED", "BREAK", breakItem.getId(), "system:policy-gate",
             Map.of("proposalId", proposal.getId().toString(), "route", route.name(), "reason", decision.reason(),
                 "confidence", draft.confidence().toPlainString(), "citationsValid", citationsValid)));
+        outbox.record(job.getTenantId(), "BREAK", breakItem.getId(), "PROPOSAL_ROUTED",
+            Map.of("proposalId", proposal.getId().toString(), "route", route.name(), "reason", decision.reason()));
         return proposal;
     }
 }

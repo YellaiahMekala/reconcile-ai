@@ -1,6 +1,7 @@
 package com.reconcileai.application.approval;
 
 import com.reconcileai.application.audit.AuditRecorder;
+import com.reconcileai.infrastructure.messaging.OutboxRecorder;
 import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
 import com.reconcileai.domain.ApprovalTask;
 import com.reconcileai.domain.BreakItem;
@@ -34,9 +35,12 @@ class ResolutionCommitService {
     private final ResolutionProposalRepository proposals;
     private final ApprovalTaskRepository tasks;
     private final AuditRecorder audit;
+    private final OutboxRecorder outbox;
 
     ResolutionCommitService(BreakItemRepository breaks, ResolutionProposalRepository proposals,
-                            ApprovalTaskRepository tasks, AuditRecorder audit) {
+                            ApprovalTaskRepository tasks, AuditRecorder audit,
+                            OutboxRecorder outbox) {
+        this.outbox = outbox;
         this.breaks = breaks;
         this.proposals = proposals;
         this.tasks = tasks;
@@ -59,5 +63,7 @@ class ResolutionCommitService {
                 "maker", proposal.getMakerSubject(),
                 "rootCause", proposal.getRootCause().name(),
                 "variance", proposal.getVarianceAmount().toPlainString() + " " + proposal.getCurrencyCode())));
+        outbox.record(breakItem.getTenantId(), "BREAK", breakItem.getId(), "BREAK_RESOLVED", Map.of(
+            "proposalId", proposal.getId().toString(), "tier", approvedTask.getRequiredRole()));
     }
 }

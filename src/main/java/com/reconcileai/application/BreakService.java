@@ -6,6 +6,7 @@ import com.reconcileai.domain.BreakItem;
 import com.reconcileai.domain.BreakSource;
 import com.reconcileai.domain.Money;
 import com.reconcileai.infrastructure.persistence.BreakItemRepository;
+import com.reconcileai.infrastructure.messaging.OutboxRecorder;
 import com.reconcileai.infrastructure.security.TenantContext;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -35,8 +36,11 @@ public class BreakService {
     private final BreakItemRepository repository;
     private final TenantContext tenantContext;
     private final AuditRecorder audit;
+    private final OutboxRecorder outbox;
 
-    public BreakService(BreakItemRepository repository, TenantContext tenantContext, AuditRecorder audit) {
+    public BreakService(BreakItemRepository repository, TenantContext tenantContext, AuditRecorder audit,
+                        OutboxRecorder outbox) {
+        this.outbox = outbox;
         this.repository = repository;
         this.tenantContext = tenantContext;
         this.audit = audit;
@@ -57,9 +61,10 @@ public class BreakService {
         }
         BreakItem item = repository.save(new BreakItem(tenantId, breakReference, ledger, external, BreakSource.REST));
         // Same transaction as the insert: the audit entry exists if and only if the break does.
-        audit.record(new AuditEntry(tenantId, "BREAK_CREATED", "BREAK", item.getId(), tenantContext.requireSubject(),
-            Map.of("breakReference", breakReference, "variance", item.variance().amount().toPlainString(),
-                "currency", item.getCurrencyCode())));
+        Map<String, Object> details = Map.of("breakReference", breakReference,
+            "variance", item.variance().amount().toPlainString(), "currency", item.getCurrencyCode());
+        audit.record(new AuditEntry(tenantId, "BREAK_CREATED", "BREAK", item.getId(), tenantContext.requireSubject(), details));
+        outbox.record(tenantId, "BREAK", item.getId(), "BREAK_CREATED", details);
         return item;
     }
 

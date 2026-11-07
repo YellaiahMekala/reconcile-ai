@@ -63,6 +63,17 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 1536            # must equal the embedding model's output size
         max-document-batch-size: 1000
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -130,6 +141,12 @@ reconcile:
       enabled: false                # LOCKED: OFF. Implemented path, disabled by default (ADR-9)
       max-variance: 1000            # LOCKED cap; startup fails if configured higher
       min-confidence: 0.95
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}   # off: no producer, consumer or relay is created; REST path is unaffected
+    events-topic: reconcile.break.events
+    intake-topic: reconcile.break.intake
+    relay-batch-size: 50
+    relay-interval-ms: 1000
   streaming:
     emitter-timeout-ms: 120000      # each SSE stream expires; client reconnects (fresh snapshot) or polls
     max-subscribers: 500            # total open streams per instance (each holds an async servlet context)

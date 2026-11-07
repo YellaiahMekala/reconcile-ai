@@ -67,6 +67,7 @@ until that test is green.
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
 | Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
 | Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
+| Messaging | Transactional outbox (`outbox_event`, same tx as the state change) relayed to Kafka; event-driven break intake with idempotency and a dead-letter topic; off by default | `infrastructure/messaging/`, `BreakIngestionService` |
 | Cost | Redis semantic cache of verified model drafts (exact + semantic, per tenant, evidence-snapshot bound, fail-open); off by default | `infrastructure/ai/cache/` |
 | UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
 | Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
@@ -194,6 +195,20 @@ evidence always forces a fresh call; a suspect analyst note bypasses the cache. 
 failures. Metrics: `reconcile_llm_cache_total{result=hit_exact|hit_semantic|miss|store|error}`; hits are recorded in
 `llm_call` as `CACHE_HIT` with 0 tokens. Tests: `SemanticCacheIT` (real Redis), `SemanticCacheMathTest`.
 
+**Kafka outbox + intake.** `docker compose -f docker/docker-compose.yml --profile kafka up -d`, run with
+`KAFKA_ENABLED=true`. Break creation (REST or Kafka), proposal routing and resolution write an `outbox_event` row in the
+same transaction; `OutboxRelay` publishes them to `reconcile.break.events` (key = break id, headers `event-id`,
+`event-type`, `tenant-id`; at-least-once, `FOR UPDATE SKIP LOCKED`, per-key order preserved). Send a JSON message to
+`reconcile.break.intake` to create a break:
+
+```json
+{"tenantId":"TENANT_DEMO","breakReference":"KAFKA-1","ledgerAmount":"1200.50","externalAmount":"1000.00","currency":"USD"}
+```
+
+Duplicates are ignored (idempotent on tenant + reference); malformed messages go to `reconcile.break.intake.dlt`
+without retry. Metrics: `reconcile_outbox_published_total`, `reconcile_intake_total{outcome}`. Tests: `KafkaOutboxIT`
+(real broker). With Kafka off, events still accumulate in the outbox table and nothing else changes.
+
 **Web UI.** See [`ui/README.md`](ui/README.md). In short: run the API with
 `-Dspring-boot.run.profiles=mock-llm,demo-login`, then `cd ui; npm ci; npm start` and open http://localhost:4200.
 
@@ -226,7 +241,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **57 unit tests** (surefire) and **70 integration tests** (failsafe, real Postgres via Testcontainers).
+Current counts: **58 unit tests** (surefire) and **72 integration tests** (failsafe, real Postgres via Testcontainers).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -244,6 +259,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
 | `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
 | `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
+| `KafkaOutboxIT` | IT | Outbox rows published with headers; intake creates one break despite redelivery; malformed to DLT |
 | `SemanticCacheIT` | IT | Exact and semantic hits; tenant isolation; evidence-snapshot rule; suspect note bypass |
 | `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
@@ -267,7 +283,8 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 ## 8. Known limitations
 
-- Not implemented: Kafka, multi-instance scale-out, and a daily digest.
+- Not implemented: multi-instance scale-out (the outbox relay is SKIP LOCKED-safe, but the SSE broadcaster is per node), Kubernetes/HPA, and a daily digest.
+- Kafka delivery is at-least-once; consumers must dedupe on the `event-id` header. Intake trusts the tenant named in the message, so topic ACLs are the trust boundary.
 - The UI signs in with demo personas (`demo-login` profile, throwaway key); there is no real identity provider.
 - PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
