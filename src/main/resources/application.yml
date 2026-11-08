@@ -171,6 +171,23 @@ reconcile:
   digest:
     enabled: ${DIGEST_ENABLED:true}   # one SQL-built digest per tenant per UTC day (advisory-locked: one instance runs it)
     cron: "0 15 0 * * *"              # 00:15 UTC, summarising the previous UTC day
+  audit:
+    anchor:                           # signed audit-chain heads in WORM storage (S3 Object Lock / MinIO); off by default
+      enabled: ${AUDIT_ANCHOR_ENABLED:false}
+      cron: "0 */15 * * * *"          # exposure window = interval; advisory-locked so one instance anchors
+      key-id: ${AUDIT_ANCHOR_KEY_ID:anchor-key-1}
+      public-key: ${AUDIT_ANCHOR_PUBLIC_KEY:}     # Ed25519, base64 X.509 (verification)
+      private-key: ${AUDIT_ANCHOR_PRIVATE_KEY:}   # Ed25519, base64 PKCS#8 (signing) - from a secret manager
+      lock-mode: ${AUDIT_ANCHOR_LOCK_MODE:COMPLIANCE}   # COMPLIANCE: nobody can delete before retain-until
+      retention-days: ${AUDIT_ANCHOR_RETENTION_DAYS:365}
+      s3:
+        endpoint: ${AUDIT_ANCHOR_S3_ENDPOINT:}    # blank = AWS S3; http://localhost:9000 for MinIO (compose profile "anchor")
+        region: ${AUDIT_ANCHOR_S3_REGION:us-east-1}
+        bucket: ${AUDIT_ANCHOR_S3_BUCKET:reconcile-audit-anchors}
+        access-key: ${AUDIT_ANCHOR_S3_ACCESS_KEY:}   # blank = AWS default credentials chain (IAM role / IRSA)
+        secret-key: ${AUDIT_ANCHOR_S3_SECRET_KEY:}
+        path-style: ${AUDIT_ANCHOR_S3_PATH_STYLE:false}   # true for MinIO
+        create-bucket: ${AUDIT_ANCHOR_S3_CREATE_BUCKET:false}   # dev only; production buckets are provisioned
   streaming:
     emitter-timeout-ms: 120000      # each SSE stream expires; client reconnects (fresh snapshot) or polls
     max-subscribers: 500            # total open streams per instance (each holds an async servlet context)

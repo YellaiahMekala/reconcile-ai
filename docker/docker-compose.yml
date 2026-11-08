@@ -4,6 +4,7 @@
 #   docker compose -f docker/docker-compose.yml --profile observability up -d  # + Jaeger, Prometheus, Grafana
 #   docker compose -f docker/docker-compose.yml --profile keycloak up -d       # + Keycloak (OIDC) on :8180
 #   docker compose -f docker/docker-compose.yml --profile presidio up -d       # + Presidio analyzer on :5002 (PII names)
+#   docker compose -f docker/docker-compose.yml --profile anchor up -d         # + MinIO with Object Lock on :9000 (audit anchors)
 #
 # Profiles keep the default loop small: nothing beyond Postgres starts unless asked for.
 services:
@@ -75,6 +76,18 @@ services:
     profiles: ["presidio"]
     ports:
       - "5002:3000"        # app default PII_NER_URL=http://localhost:5002; the image listens on 3000
+
+  # ---- anchor profile: MinIO (S3 API) for audit-chain anchors with Object Lock (run with AUDIT_ANCHOR_ENABLED=true) ----
+  # Local only: throwaway credentials. Against real AWS S3 use a bucket created with Object Lock and an IAM role.
+  minio:
+    image: bitnamilegacy/minio:2025.4.22
+    container_name: reconcile-minio
+    profiles: ["anchor"]
+    environment:
+      MINIO_ROOT_USER: minio-local
+      MINIO_ROOT_PASSWORD: minio-local-only
+    ports:
+      - "9000:9000"
 
   # ---- observability profile: traces (OTLP -> Jaeger), metrics (Prometheus), dashboards (Grafana) ----
   # Run the app with TRACING_ENABLED=true to export spans to Jaeger on :4318.

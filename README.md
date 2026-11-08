@@ -61,7 +61,7 @@ until that test is green.
 | Proposals | Structured output with citations; citations verified against retrieved chunk ids | `ProposalService`, `CitationVerifier` |
 | Policy gate | Routes to MANUAL_REVIEW, L1 or L2 (auto-resolve implemented but off by default) | `PolicyGateService` |
 | Approvals | L1/L2 queues, maker-checker, stricter-of-stored-and-recomputed tier | `ApprovalController`, `ApprovalService` |
-| Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN | `HashChainAuditRecorder`, `AuditController` |
+| Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN; optional Ed25519-signed chain heads anchored in S3 Object Lock (MinIO locally) with an anchor verify endpoint | `HashChainAuditRecorder`, `AuditController`, `application/audit/anchor/` |
 | Safety | Injection scanner before any model call; advisor chain (input guard, token usage) | `InputGuardAdvisor`, `TokenUsageAdvisor`, `InjectionScanner` |
 | Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set; real IdP mode (Keycloak realm included; JWKS, issuer and audience checks) or demo keys | `SecurityConfig`, `TenantContext`, `Role`, `docker/keycloak/` |
 | Tenant isolation (DB) | Postgres Row-Level Security on every tenant table and `vector_store`; app runs as a non-owner role; connections bound to the caller's tenant on checkout; fail closed | `V6__row_level_security.sql`, `TenantAwareDataSource`, `TenantScope` |
@@ -208,6 +208,33 @@ claim; demo-key tokens are refused. The realm (`docker/keycloak/reconcile-realm.
 Authorization Code + PKCE (see `ui/README.md`). Entra ID works the same way: set its v2.0 issuer and map `tenant_id`
 and `roles` as optional/app-role claims. Test: `KeycloakIT` (real Keycloak container).
 
+**Audit anchoring (S3 Object Lock).** The hash chain catches an edited row, but someone with database-owner rights
+could disable the trigger and rewrite the chain consistently. Every 15 minutes (`reconcile.audit.anchor.cron`, one
+instance via advisory lock) each tenant whose chain moved gets an anchor: `(tenant, sequence, headHash, anchoredAt)`,
+signed with Ed25519, written to a bucket with Object Lock (COMPLIANCE mode by default: nobody can delete or overwrite
+it before `retain-until`), and recorded in the append-only `audit_anchor` table. `GET /api/v1/audit/anchors/verify`
+(SRE_ADMIN) re-reads each stored object, checks the signature with the public key, and checks the live chain still has
+that hash at that sequence. Try it locally:
+
+```powershell
+docker compose -f docker/docker-compose.yml --profile anchor up -d      # MinIO on :9000 (throwaway credentials)
+# one-off key pair (openssl ships with Git for Windows); keep the private key in a secret manager outside a laptop
+openssl genpkey -algorithm ed25519 -out anchor.pem
+openssl pkcs8 -topk8 -nocrypt -in anchor.pem -outform DER -out anchor-priv.der
+openssl pkey -in anchor.pem -pubout -outform DER -out anchor-pub.der
+$env:AUDIT_ANCHOR_PRIVATE_KEY = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWDnchor-priv.der"))
+$env:AUDIT_ANCHOR_PUBLIC_KEY  = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWDnchor-pub.der"))
+$env:AUDIT_ANCHOR_ENABLED = "true"; $env:AUDIT_ANCHOR_S3_ENDPOINT = "http://localhost:9000"
+$env:AUDIT_ANCHOR_S3_ACCESS_KEY = "minio-local"; $env:AUDIT_ANCHOR_S3_SECRET_KEY = "minio-local-only"
+$env:AUDIT_ANCHOR_S3_PATH_STYLE = "true"; $env:AUDIT_ANCHOR_S3_CREATE_BUCKET = "true"
+mvn spring-boot:run
+```
+
+On AWS leave the endpoint and keys blank (default credential chain, for example IRSA on EKS) and point
+`AUDIT_ANCHOR_S3_BUCKET` at a bucket created with Object Lock. Test: `AuditAnchorIT` (real MinIO: anchor written,
+idempotent re-run, locked object cannot be deleted, a consistent chain rewrite passes the chain check but fails the
+anchor check, roles and tenant isolation, forged or re-used signatures rejected).
+
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
 `simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
 every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
@@ -297,6 +324,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `InvestigationFlowIT`, `GoldenPathIT` | IT | Evidence → cited proposal → route → approval → RESOLVED; injection quarantine |
 | `InvestigationRecoveryIT`, `InvestigationStreamingIT` | IT | Orphaned job recovery; SSE lifecycle and tenant isolation |
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
+| `AuditAnchorIT` | IT | Real MinIO with Object Lock: signed anchor written once, locked object cannot be deleted, consistent chain rewrite detected, SRE-only and tenant-scoped, signatures cannot be forged |
 | `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
 | `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
 | `NerMaskingTest`, `PresidioNerIT` | unit, IT | Real Presidio masks names and places, keeps references and chunk ids; overlapping spans; fail-open keeps identifier masking, fail-closed refuses the call |
@@ -332,6 +360,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 - Kafka delivery is at-least-once; consumers must dedupe on the `event-id` header. Intake trusts the tenant named in the message, so topic ACLs are the trust boundary.
 - The Keycloak realm in `docker/keycloak/` is a local demo (synthetic users, shared password, `start-dev`); a production IdP needs HTTPS, its own hostname and managed users.
 - PII masking is not DLP. Without the Presidio sidecar only structured identifiers are masked; with it, names and locations are masked with model accuracy (it can miss unusual names and occasionally mask a non-name). Free-form disclosures (for example a medical detail) are not detected.
+- Audit anchors protect history up to the latest anchor; events written since then are covered only by the in-database chain until the next cycle (15 minutes by default). Anchors prove the chain was not changed afterwards, not that each event was true when written.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.
