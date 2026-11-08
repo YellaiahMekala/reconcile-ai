@@ -96,9 +96,16 @@ class AuditAnchorIT extends AbstractPostgresIT {
     void headsAreAnchoredInWormStorageAndARewrittenChainIsCaught() {
         investigate(analyst, "50500.00", "50000.00", "/fixtures/evidence/bank-statement-timing.txt");
 
-        assertThat(job.runOnce()).isGreaterThanOrEqualTo(1);
-
-        JsonPath anchors = given().header("Authorization", sre).get("/api/v1/audit/anchors").then().statusCode(200).extract().jsonPath();
+        // runOnce() counts anchors for ALL tenants in the shared DB, so it cannot prove THIS tenant was anchored;
+        // a transient storage error is swallowed per tenant (and retried next cycle), so poll for our own anchor.
+        JsonPath anchors = null;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            job.runOnce();
+            anchors = given().header("Authorization", sre).get("/api/v1/audit/anchors").then().statusCode(200).extract().jsonPath();
+            if (!anchors.getList("$").isEmpty()) {
+                break;
+            }
+        }
         assertThat(anchors.getList("$")).hasSize(1);
         long anchoredSeq = anchors.getLong("[0].anchoredSequence");
         assertThat(anchoredSeq).isGreaterThanOrEqualTo(1);

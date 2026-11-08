@@ -38,7 +38,10 @@ public class S3AnchorStore implements AnchorStore {
             .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(pathStyle).build())
             // MinIO and other S3-compatible servers predate the SDK's default trailing checksums.
             .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
-            .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
+            .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
+            // HttpURLConnection can reuse a keep-alive socket the server already closed ("Unexpected end of file from
+            // server"); a few more attempts ride that out. Safe: each anchor key is deterministic and versioned.
+            .overrideConfiguration(o -> o.retryStrategy(r -> r.maxAttempts(6)));
         if (endpoint != null && !endpoint.isBlank()) {
             b.endpointOverride(URI.create(endpoint));
         }
