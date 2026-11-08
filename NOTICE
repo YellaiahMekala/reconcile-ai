@@ -1,2 +1,18 @@
 reconcile-ai
 Copyright (c) 2026 Yellaiah Mekala
+
+
+. README disclaimer (full)
+Notice: Independent Demonstration Project
+
+This project is an independent, generic and entirely fictitious application built to demonstrate software engineering and banking-domain functional knowledge. It does not contain, reflect or derive from any client's data, code, functionality, architecture, designs, processes or confidential information, and it is not affiliated with, endorsed by or based on any current or former employer or client.
+
+All data, including accounts, amounts, references and documents, is synthetic and created solely for demonstration. Any resemblance to real people, organisations or transactions is coincidental. The project is a portfolio piece, and the design choices are my own, based on publicly known industry practices.
+
+The development keys and credentials in this repository are throwaway, for local use only, and must not be used in any real environment. The software is provided "as is" under the licence in this repository, without warranty, and is not intended for production use without independent security review and hardening.
+
+
+
+Independent, fictitious demo project for banking-domain reconciliation. Uses synthetic data only; no client or employer data, code or architecture.
+
+The platform is generic and fictitious, built on synthetic data. It reuses the shape of the reconciliation problem, not any employer's code, data or design.
