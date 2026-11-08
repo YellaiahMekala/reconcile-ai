@@ -319,7 +319,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **58 unit tests** (surefire) and **72 integration tests** (failsafe, real Postgres via Testcontainers).
+Current counts: **62 unit tests** (surefire), **90 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **12 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
