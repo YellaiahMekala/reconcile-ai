@@ -112,7 +112,10 @@ public class SseProgressBroadcaster implements InvestigationProgressPublisher {
         byJob.values().forEach(subs -> subs.forEach(sub -> {
             try {
                 sub.emitter().send(SseEmitter.event().comment("keep-alive"));
-            } catch (IOException | IllegalStateException e) {
+            } catch (IllegalStateException e) {
+                // already completed (terminal event won the race): nothing to do, onCompletion removes it
+                log.debug("heartbeat skipped, emitter already completed: {}", e.toString());
+            } catch (IOException e) {
                 sub.emitter().completeWithError(e);
             }
         }));
@@ -126,7 +129,13 @@ public class SseProgressBroadcaster implements InvestigationProgressPublisher {
         try {
             emitter.send(SseEmitter.event().name("progress").data(event, MediaType.APPLICATION_JSON));
             return true;
-        } catch (IOException | IllegalStateException e) { // client gone, or emitter already completed
+        } catch (IllegalStateException e) {
+            // Already completed: the job's terminal event and the subscribe-time snapshot are sent from different
+            // threads and the loser lands here. Benign. Do NOT completeWithError: Spring would then run an async error
+            // dispatch that writes a JSON error body into a chunked text/event-stream response and corrupt the stream.
+            log.debug("SSE emitter for job {} already completed: {}", event.jobId(), e.toString());
+            return false;
+        } catch (IOException e) { // client gone
             log.debug("dropping SSE subscriber for job {}: {}", event.jobId(), e.toString());
             emitter.completeWithError(e);
             return false;
