@@ -11,8 +11,9 @@ spring:
     default: mock-llm
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/reconcile}
-    username: ${DB_USER:reconcile}
-    password: ${DB_PASSWORD:reconcile}
+    # Application login: NOT the table owner and NOT a superuser, so Postgres Row-Level Security applies (V6).
+    username: ${DB_APP_USER:reconcile_app}
+    password: ${DB_APP_PASSWORD:reconcile_app}
   jpa:
     open-in-view: false
     hibernate:
@@ -24,6 +25,13 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Migrations run as the schema OWNER (separate credentials); the app role only gets DML grants.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/reconcile}
+    user: ${DB_USER:reconcile}
+    password: ${DB_PASSWORD:reconcile}
+    placeholders:
+      app_user: ${DB_APP_USER:reconcile_app}
+      app_password: ${DB_APP_PASSWORD:reconcile_app}
   servlet:
     multipart:
       max-file-size: 10MB
@@ -32,6 +40,13 @@ spring:
   # Spring AI (Phase 2)
   # -------------------------------------------------------------------------
   ai:
+    retry:
+      # Spring AI's own RetryTemplate defaults to 10 attempts. Chat retries are owned by LlmResilience
+      # (reconcile.ai.resilience.*), so the built-in layer is reduced to avoid 3 x 10 nested paid attempts.
+      max-attempts: 2
+      backoff:
+        initial-interval: 500ms
+        max-interval: 2s
     model:
       # Exactly ONE provider per model type. This is how two AI starters coexist on the classpath
       # without an ambiguous ChatModel/EmbeddingModel bean.
@@ -49,13 +64,29 @@ spring:
           model: text-embedding-3-small
     vectorstore:
       pgvector:
-        # Decision A2: Spring AI creates and owns the vector_store table (+ vector/hstore/uuid-ossp extensions).
-        # Flyway never touches it. The BM25 tsvector column is added AFTER init by TsvectorSchemaInitializer.
-        initialize-schema: true
+        # Flyway owns vector_store since V6 (Row-Level Security needs the table owned by a role other than the app).
+        # The DDL in V6 matches Spring AI 1.1.8's own (UUID id, json metadata, HNSW cosine, 1536 dims).
+        initialize-schema: false
         index-type: HNSW
         distance-type: COSINE_DISTANCE
         dimensions: 1536            # must equal the embedding model's output size
         max-document-batch-size: 1000
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms                # a slow cache must not slow investigations; lookups fail open
   security:
     oauth2:
       resourceserver:
@@ -68,6 +99,12 @@ spring:
 # Application tuning knobs (bound to @ConfigurationProperties classes)
 # ---------------------------------------------------------------------------
 reconcile:
+  security:
+    # Empty: tokens are verified with the local dev public key above (demo personas, tests).
+    # Set to a real IdP issuer to switch to JWKS + issuer + audience validation, e.g. Keycloak:
+    #   OIDC_ISSUER_URI=http://localhost:8180/realms/reconcile   (compose profile "keycloak")
+    issuer-uri: ${OIDC_ISSUER_URI:}
+    audience: ${OIDC_AUDIENCE:reconcile-api}
   ingestion:
     chunk-size-tokens: 400          # ~300 words: big enough for a statement line + context, small enough to cite precisely
     min-chunk-size-chars: 200
@@ -91,6 +128,32 @@ reconcile:
     max-analyst-note-chars: 1000
   ai:
     log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
+    pricing:                        # list price per 1M tokens for the cost metric (ESTIMATED). Defaults: gpt-4o-mini
+      prompt-usd-per-million: ${LLM_PROMPT_USD_PER_MILLION:0.15}
+      completion-usd-per-million: ${LLM_COMPLETION_USD_PER_MILLION:0.60}
+    cache:                          # semantic cache of verified drafts (Redis). See RedisSemanticCache.
+      enabled: ${CACHE_ENABLED:false}
+      similarity-threshold: 0.95    # cosine; config below 0.80 is refused at startup
+      ttl-hours: 24
+      max-entries-per-tenant: 500
+      namespace: v1                 # bump to invalidate everything after a prompt or model change
+    pii-masking:
+      enabled: true                 # mask account numbers, IBANs, cards, emails, phones before the model call
+      ner:                          # optional Presidio sidecar: also mask person names and locations
+        enabled: ${PII_NER_ENABLED:false}
+        url: ${PII_NER_URL:http://localhost:5002}
+        entities: PERSON,LOCATION
+        score-threshold: 0.5
+        timeout-ms: 3000
+        fail-closed: ${PII_NER_FAIL_CLOSED:false}   # true: refuse the model call when Presidio is down
+    resilience:
+      max-attempts: 3               # 1 call + 2 retries, transient failures only (5xx, 429, timeouts, network)
+      initial-backoff-ms: 500       # 500 ms, then 1 s (exponential x2)
+      failure-rate-threshold: 50    # % of failures in the window that opens the breaker
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+      open-state-wait-ms: 30000     # OPEN for 30 s, then HALF_OPEN probes
+      permitted-calls-in-half-open: 2
   policy:
     l1-min-confidence: 0.80         # LOCKED: below this, no approval route -> MANUAL_REVIEW
     l2-variance-threshold: 25000    # LOCKED: variance >= this (USD) -> L2 approver
@@ -99,20 +162,70 @@ reconcile:
       enabled: false                # LOCKED: OFF. Implemented path, disabled by default (ADR-9)
       max-variance: 1000            # LOCKED cap; startup fails if configured higher
       min-confidence: 0.95
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}   # off: no producer, consumer or relay is created; REST path is unaffected
+    events-topic: reconcile.break.events
+    intake-topic: reconcile.break.intake
+    relay-batch-size: 50
+    relay-interval-ms: 1000
+  digest:
+    enabled: ${DIGEST_ENABLED:true}   # one SQL-built digest per tenant per UTC day (advisory-locked: one instance runs it)
+    cron: "0 15 0 * * *"              # 00:15 UTC, summarising the previous UTC day
+  audit:
+    anchor:                           # signed audit-chain heads in WORM storage (S3 Object Lock / MinIO); off by default
+      enabled: ${AUDIT_ANCHOR_ENABLED:false}
+      cron: "0 */15 * * * *"          # exposure window = interval; advisory-locked so one instance anchors
+      key-id: ${AUDIT_ANCHOR_KEY_ID:anchor-key-1}
+      public-key: ${AUDIT_ANCHOR_PUBLIC_KEY:}     # Ed25519, base64 X.509 (verification)
+      private-key: ${AUDIT_ANCHOR_PRIVATE_KEY:}   # Ed25519, base64 PKCS#8 (signing) - from a secret manager
+      lock-mode: ${AUDIT_ANCHOR_LOCK_MODE:COMPLIANCE}   # COMPLIANCE: nobody can delete before retain-until
+      retention-days: ${AUDIT_ANCHOR_RETENTION_DAYS:365}
+      s3:
+        endpoint: ${AUDIT_ANCHOR_S3_ENDPOINT:}    # blank = AWS S3; http://localhost:9000 for MinIO (compose profile "anchor")
+        region: ${AUDIT_ANCHOR_S3_REGION:us-east-1}
+        bucket: ${AUDIT_ANCHOR_S3_BUCKET:reconcile-audit-anchors}
+        access-key: ${AUDIT_ANCHOR_S3_ACCESS_KEY:}   # blank = AWS default credentials chain (IAM role / IRSA)
+        secret-key: ${AUDIT_ANCHOR_S3_SECRET_KEY:}
+        path-style: ${AUDIT_ANCHOR_S3_PATH_STYLE:false}   # true for MinIO
+        create-bucket: ${AUDIT_ANCHOR_S3_CREATE_BUCKET:false}   # dev only; production buckets are provisioned
   streaming:
     emitter-timeout-ms: 120000      # each SSE stream expires; client reconnects (fresh snapshot) or polls
     max-subscribers: 500            # total open streams per instance (each holds an async servlet context)
     max-subscribers-per-job: 20
     heartbeat-interval-ms: 15000    # comment frame keeps proxies from killing idle streams
+    fanout: ${SSE_FANOUT:local}     # redis: cross-instance delivery via Redis pub/sub (any node can serve a stream)
 
 management:
   endpoints:
     web:
       exposure:
-        include: health          # only /actuator/health is exposed (and permitted in SecurityConfig)
+        include: health,prometheus   # both permitted in SecurityConfig; nothing else is exposed
+  health:
+    redis:
+      enabled: ${CACHE_ENABLED:false}   # Redis is optional: only part of health when the cache is on
   endpoint:
     health:
       show-details: never        # no DB/disk details to unauthenticated callers
+  metrics:
+    tags:
+      application: reconcile-ai
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        reconcile.llm.latency: true
+  # OpenTelemetry tracing (Micrometer Tracing -> OTel bridge -> OTLP/HTTP). Off by default so a laptop without a
+  # collector does not log export errors. Turn on with TRACING_ENABLED=true and the observability compose profile
+  # (Jaeger UI on http://localhost:16686).
+  tracing:
+    enabled: ${TRACING_ENABLED:false}
+    sampling:
+      probability: ${TRACING_SAMPLING:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+  observations:
+    annotations:
+      enabled: true
 
 server:
   port: 8080

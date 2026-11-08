@@ -19,7 +19,7 @@
 > functional knowledge. It does not contain, reflect or derive from any client's data, code, functionality,
 > architecture, designs or confidential information, and it is not affiliated with or endorsed by any current
 > or former employer or client. All data (accounts, amounts, references, documents) is synthetic. Any
-> resemblance to real people, organisations or transactions is coincidental. The development keys in this
+> resemblance to real people,organizations or transactions is coincidental. The development keys in this
 > repository are throwaway, for local use only. The software is provided "as is" under the Apache License 2.0
 > and is not intended for production use without independent security review and hardening.
 
@@ -40,6 +40,7 @@ until that test is green.
 |---|---|---|
 | Foundation (Tier 0–1) | Break CRUD, evidence upload with hash dedup, JWT auth, RBAC, tenant isolation | `SecurityAndTenantIsolationIT` green (release-blocking) |
 | AI investigation (Tier 2) | Evidence ingestion, hybrid retrieval, cited proposals, policy gate, maker-checker, hash-chained audit, SSE progress | `InvestigationFlowIT`, `GoldenPathIT`, `AuditChainIT` green |
+| Production hardening | Retry + circuit breaker, PII masking (identifiers + Presidio names), metrics and traces, Angular UI, Redis semantic cache, Kafka outbox, Postgres RLS, cross-instance SSE, daily digest, Keycloak OIDC, audit anchoring, Kubernetes + HPA | Each feature has its own IT on real infrastructure (see section 6); manifests validated on kind |
 | Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Planned — see BRD platform requirements |
 
 **Principles applied in the code** (each is commented at the point of use):
@@ -66,14 +67,23 @@ until that test is green.
 | Evidence | Multipart upload with SHA-256 dedup (201 new / 200 duplicate), list, hybrid search | `EvidenceController`, `EvidenceSearchController` |
 | Ingestion | Tika text extraction, chunking, embeddings into pgvector | `infrastructure/ai/ingestion/EvidenceIngestor` |
 | Retrieval | Dense (pgvector) + sparse (Postgres `tsvector`) fused with Reciprocal Rank Fusion | `infrastructure/ai/retrieval/HybridRetriever`, `RrfFusion` |
-| Investigation | Async job with heartbeat lease, recovery of orphaned jobs, SSE progress | `InvestigationController`, `InvestigationJobRunner`, `InvestigationRecovery` |
+| Investigation | Async job with heartbeat lease, recovery of orphaned jobs, SSE progress (cross-instance via Redis pub/sub when `SSE_FANOUT=redis`) | `InvestigationController`, `InvestigationJobRunner`, `InvestigationRecovery` |
 | Proposals | Structured output with citations; citations verified against retrieved chunk ids | `ProposalService`, `CitationVerifier` |
 | Policy gate | Routes to MANUAL_REVIEW, L1 or L2 (auto-resolve implemented but off by default) | `PolicyGateService` |
 | Approvals | L1/L2 queues, maker-checker, stricter-of-stored-and-recomputed tier | `ApprovalController`, `ApprovalService` |
-| Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN | `HashChainAuditRecorder`, `AuditController` |
+| Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN; optional Ed25519-signed chain heads anchored in S3 Object Lock (MinIO locally) with an anchor verify endpoint | `HashChainAuditRecorder`, `AuditController`, `application/audit/anchor/` |
 | Safety | Injection scanner before any model call; advisor chain (input guard, token usage) | `InputGuardAdvisor`, `TokenUsageAdvisor`, `InjectionScanner` |
-| Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set | `SecurityConfig`, `TenantContext`, `Role` |
-| Ops | Actuator health only; no error-message leakage | `/actuator/health` |
+| Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set; real IdP mode (Keycloak realm included; JWKS, issuer and audience checks) or demo keys | `SecurityConfig`, `TenantContext`, `Role`, `docker/keycloak/` |
+| Tenant isolation (DB) | Postgres Row-Level Security on every tenant table and `vector_store`; app runs as a non-owner role; connections bound to the caller's tenant on checkout; fail closed | `V6__row_level_security.sql`, `TenantAwareDataSource`, `TenantScope` |
+| Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
+| Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call; optional Presidio entity recognition masks person names and locations (fail-open or fail-closed) | `PiiMaskingAdvisor`, `PiiMasker`, `PresidioNerDetector` |
+| Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
+| Messaging | Transactional outbox (`outbox_event`, same tx as the state change) relayed to Kafka; event-driven break intake with idempotency and a dead-letter topic; off by default | `infrastructure/messaging/`, `BreakIngestionService` |
+| Cost | Redis semantic cache of verified model drafts (exact + semantic, per tenant, evidence-snapshot bound, fail-open); off by default | `infrastructure/ai/cache/` |
+| UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
+| Reporting | Daily digest per tenant (activity from the audit chain, backlog, AI calls, tokens, estimated cost, root causes); SQL-built, advisory-locked so one instance runs it; `DAILY_DIGEST_READY` outbox event | `application/digest/`, `DigestController` |
+| Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
+| Deployment | Multi-stage Dockerfile (non-root JRE); Kubernetes manifests with Kustomize: probes, CPU-based HPA (2 to 6), PDB, hardened pod security; kind overlay with Postgres and Redis | `Dockerfile`, `k8s/` |
 
 Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 
@@ -90,9 +100,13 @@ Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 | Migrations | Flyway |
 | AI | Spring AI 1.1.8 (OpenAI embeddings; mock-llm default chat model; Ollama profile) |
 | Parsing | Apache Tika |
-| Ops | Spring Boot Actuator (health only) |
+| Resilience | Resilience4j 2.4 (retry, circuit breaker), programmatic, no AOP |
+| Ops | Spring Boot Actuator, Micrometer + Prometheus, Micrometer Tracing + OpenTelemetry (OTLP), Jaeger, Grafana |
+| Frontend | Angular 20 (standalone components, signals, RxJS), Karma/Jasmine |
 | Testing | JUnit 5, Testcontainers, AssertJ, Awaitility, spring-security-test |
 | Build | Maven (surefire for `*Test`, failsafe for `*IT`) |
+| Deploy | Docker (multi-stage, Temurin 21 JRE, non-root), Kubernetes 1.31 + Kustomize, HPA (autoscaling/v2), kind for local validation, kubeconform in CI |
+| Integrations | Keycloak 26 (OIDC), Microsoft Presidio analyzer, AWS SDK v2 S3 (MinIO locally) |
 
 ---
 
@@ -176,6 +190,129 @@ Optional: `$env:OPENAI_CHAT_MODEL = "gpt-4o-mini"` (the default). The real-model
 mvn verify "-Dfailsafe.excludedGroups=ollama" "-Dit.test=OpenAiChatSmokeIT"
 ```
 
+### Production hardening: try it
+
+**Row-Level Security (second tenant guard).** Flyway runs as the schema owner (`DB_USER`/`DB_PASSWORD`, default
+`reconcile`); the app connects as `reconcile_app` (`DB_APP_USER`/`DB_APP_PASSWORD`), which V6 creates with DML grants
+only. Each connection checkout runs `set_config('app.tenant_id', <tenant from the JWT or an explicit job scope>)`;
+policies then hide other tenants' rows even from a query with no tenant filter, and reject writes for another tenant.
+No tenant bound means no rows. Cross-tenant platform work (outbox relay, recovery sweeper) uses an explicit, named
+system scope that no JWT can claim. Test: `RowLevelSecurityIT`.
+
+**Live progress across instances.** Run every instance with `SSE_FANOUT=redis` (and Redis from the `cache`
+profile). Each progress event is published on the Redis channel `reconcile:progress`; every node delivers it to its
+own open streams, so a browser may be connected to any node behind the load balancer. If Redis is unavailable the
+node falls back to local delivery; the snapshot-on-subscribe and polling API still make the client correct.
+Metric: `reconcile_sse_fanout_total{result}`. Test: `SseFanoutIT` (two real app instances, job on one, stream on the other).
+
+**Daily digest.** At 00:15 UTC (`reconcile.digest.cron`) one instance (Postgres advisory lock) builds yesterday's
+digest for every tenant: activity counted from the audit chain, open backlog and oldest age, investigations and failure
+reasons, model calls, cache hits, tokens and estimated cost, root causes and routes. Numbers are SQL aggregates and the
+text is a fixed template, so the digest never mis-states a number. Re-runs overwrite (idempotent). A
+`DAILY_DIGEST_READY` event goes to the outbox for downstream e-mail or chat delivery. API: `GET /api/v1/digests?days=7`,
+`GET /api/v1/digests/{date}` (approvers, SRE), `POST /api/v1/digests/{date}/generate` (SRE backfill). Disable with
+`DIGEST_ENABLED=false`. Test: `DailyDigestIT`.
+
+**Real identity provider (Keycloak).** `docker compose -f docker/docker-compose.yml --profile keycloak up -d`, then
+run the API with `OIDC_ISSUER_URI=http://localhost:8180/realms/reconcile`. The API then validates tokens against the
+realm's JWKS (key rotation without redeploy), requires `iss` = that issuer, `aud` ∋ `reconcile-api` and a `tenant_id`
+claim; demo-key tokens are refused. The realm (`docker/keycloak/reconcile-realm.json`) maps a admin-editable
+`tenant_id` user attribute and realm roles into the access token, so nothing downstream changes. The UI signs in with
+Authorization Code + PKCE (see `ui/README.md`). Entra ID works the same way: set its v2.0 issuer and map `tenant_id`
+and `roles` as optional/app-role claims. Test: `KeycloakIT` (real Keycloak container).
+
+**Audit anchoring (S3 Object Lock).** The hash chain catches an edited row, but someone with database-owner rights
+could disable the trigger and rewrite the chain consistently. Every 15 minutes (`reconcile.audit.anchor.cron`, one
+instance via advisory lock) each tenant whose chain moved gets an anchor: `(tenant, sequence, headHash, anchoredAt)`,
+signed with Ed25519, written to a bucket with Object Lock (COMPLIANCE mode by default: nobody can delete or overwrite
+it before `retain-until`), and recorded in the append-only `audit_anchor` table. `GET /api/v1/audit/anchors/verify`
+(SRE_ADMIN) re-reads each stored object, checks the signature with the public key, and checks the live chain still has
+that hash at that sequence. Try it locally:
+
+```powershell
+docker compose -f docker/docker-compose.yml --profile anchor up -d      # MinIO on :9000 (throwaway credentials)
+# one-off key pair (openssl ships with Git for Windows); keep the private key in a secret manager outside a laptop
+openssl genpkey -algorithm ed25519 -out anchor.pem
+openssl pkcs8 -topk8 -nocrypt -in anchor.pem -outform DER -out anchor-priv.der
+openssl pkey -in anchor.pem -pubout -outform DER -out anchor-pub.der
+$env:AUDIT_ANCHOR_PRIVATE_KEY = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWDnchor-priv.der"))
+$env:AUDIT_ANCHOR_PUBLIC_KEY  = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWDnchor-pub.der"))
+$env:AUDIT_ANCHOR_ENABLED = "true"; $env:AUDIT_ANCHOR_S3_ENDPOINT = "http://localhost:9000"
+$env:AUDIT_ANCHOR_S3_ACCESS_KEY = "minio-local"; $env:AUDIT_ANCHOR_S3_SECRET_KEY = "minio-local-only"
+$env:AUDIT_ANCHOR_S3_PATH_STYLE = "true"; $env:AUDIT_ANCHOR_S3_CREATE_BUCKET = "true"
+mvn spring-boot:run
+```
+
+On AWS leave the endpoint and keys blank (default credential chain, for example IRSA on EKS) and point
+`AUDIT_ANCHOR_S3_BUCKET` at a bucket created with Object Lock. Test: `AuditAnchorIT` (real MinIO: anchor written,
+idempotent re-run, locked object cannot be deleted, a consistent chain rewrite passes the chain check but fails the
+anchor check, roles and tenant isolation, forged or re-used signatures rejected).
+
+**Kubernetes and autoscaling.** `k8s/` holds a production-shaped `base/` (Deployment with startup, liveness and
+readiness probes, HPA on CPU from 2 to 6 replicas, PodDisruptionBudget, non-root read-only pod) and an
+`overlays/kind/` that adds in-cluster Postgres and Redis. Several replicas are safe because SSE fan-out goes through
+Redis and the scheduled jobs take Postgres advisory locks. Validated on a local kind cluster: clean rollout,
+authenticated API call through the Service, and a scale-up from 2 to 4 pods under load. Steps: [`k8s/README.md`](k8s/README.md).
+CI renders both kustomizations, validates them with kubeconform and builds the image.
+
+**LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
+`simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
+every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
+Five such failures in the window open the breaker: further investigations fail at once with `LLM_CIRCUIT_OPEN`,
+without calling the model, until it half-opens after 30 s. Settings: `reconcile.ai.resilience.*`.
+Fixtures: `src/test/resources/fixtures/evidence/timing-*.txt`. Tests: `LlmResilienceTest`, `LlmResilienceIT`.
+
+**PII masking.** Every prompt passes `PiiMaskingAdvisor` (after the injection guard, before token accounting).
+`reconcile_pii_masked_total{type=...}` counts what was masked; the values are never logged. Disable with
+`reconcile.ai.pii-masking.enabled=false`. Tests: `PiiMaskerTest`.
+
+**Names and locations (Presidio).** Regexes cannot recognise a person or a place, so an optional second pass sends the
+already-masked text to a Microsoft Presidio analyzer sidecar (spaCy model) inside the same network, never to the model
+provider. `docker compose -f docker/docker-compose.yml --profile presidio up -d`, then run with `PII_NER_ENABLED=true`
+(`PII_NER_URL` defaults to `http://localhost:5002`). Detected `PERSON` and `LOCATION` spans become `[PERSON]` /
+`[LOCATION]`; business references and chunk ids are left alone. If the sidecar is down: by default the call proceeds
+with identifier masking only and `reconcile_pii_ner_unavailable_total` counts it (fail-open); with
+`PII_NER_FAIL_CLOSED=true` the model call is refused instead, so unmasked names never leave the process.
+Tests: `NerMaskingTest`, `PresidioNerIT` (real Presidio container).
+
+**Semantic cache (Redis).** `docker compose -f docker/docker-compose.yml --profile cache up -d`, then run with
+`CACHE_ENABLED=true`. Only citation-verified drafts are stored. A hit replaces the model call only; normalisation,
+citation check and the policy gate still run. Hits need the same tenant AND the identical retrieved-chunk set, so new
+evidence always forces a fresh call; a suspect analyst note bypasses the cache. Redis errors are misses, never
+failures. Metrics: `reconcile_llm_cache_total{result=hit_exact|hit_semantic|miss|store|error}`; hits are recorded in
+`llm_call` as `CACHE_HIT` with 0 tokens. Tests: `SemanticCacheIT` (real Redis), `SemanticCacheMathTest`.
+
+**Kafka outbox + intake.** `docker compose -f docker/docker-compose.yml --profile kafka up -d`, run with
+`KAFKA_ENABLED=true`. Break creation (REST or Kafka), proposal routing and resolution write an `outbox_event` row in the
+same transaction; `OutboxRelay` publishes them to `reconcile.break.events` (key = break id, headers `event-id`,
+`event-type`, `tenant-id`; at-least-once, `FOR UPDATE SKIP LOCKED`, per-key order preserved). Send a JSON message to
+`reconcile.break.intake` to create a break:
+
+```json
+{"tenantId":"TENANT_DEMO","breakReference":"KAFKA-1","ledgerAmount":"1200.50","externalAmount":"1000.00","currency":"USD"}
+```
+
+Duplicates are ignored (idempotent on tenant + reference); malformed messages go to `reconcile.break.intake.dlt`
+without retry. Metrics: `reconcile_outbox_published_total`, `reconcile_intake_total{outcome}`. Tests: `KafkaOutboxIT`
+(real broker). With Kafka off, events still accumulate in the outbox table and nothing else changes.
+
+**Web UI.** See [`ui/README.md`](ui/README.md). In short: run the API with
+`-Dspring-boot.run.profiles=mock-llm,demo-login`, then `cd ui; npm ci; npm start` and open http://localhost:4200.
+
+**Observability.**
+
+```powershell
+docker compose -f docker/docker-compose.yml --profile observability up -d   # Postgres, Jaeger, Prometheus, Grafana
+$env:TRACING_ENABLED = "true"; mvn spring-boot:run
+curl.exe -s http://localhost:8080/actuator/prometheus | Select-String reconcile_llm
+```
+
+- Grafana: http://localhost:3000, dashboard *reconcile-ai: LLM cost, latency and resilience* (estimated spend,
+  tokens/min, LLM p95, breaker state, retries, PII masked, HTTP p95, LLM errors).
+- Jaeger: http://localhost:16686, service `reconcile-ai`. Each investigation job is one span (`investigation-job`)
+  with the Spring AI chat-client and model spans nested under it, linked to the `POST /investigations` request.
+- Cost prices: `LLM_PROMPT_USD_PER_MILLION`, `LLM_COMPLETION_USD_PER_MILLION` (defaults: gpt-4o-mini list price).
+
 ---
 
 ## Demo
@@ -191,7 +328,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **47 unit tests** (surefire) and **60 integration tests** (failsafe, real Postgres via Testcontainers).
+Current counts: **62 unit tests** (surefire), **90 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **12 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -207,6 +344,18 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `InvestigationFlowIT`, `GoldenPathIT` | IT | Evidence → cited proposal → route → approval → RESOLVED; injection quarantine |
 | `InvestigationRecoveryIT`, `InvestigationStreamingIT` | IT | Orphaned job recovery; SSE lifecycle and tenant isolation |
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
+| `AuditAnchorIT` | IT | Real MinIO with Object Lock: signed anchor written once, locked object cannot be deleted, consistent chain rewrite detected, SRE-only and tenant-scoped, signatures cannot be forged |
+| `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
+| `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
+| `NerMaskingTest`, `PresidioNerIT` | unit, IT | Real Presidio masks names and places, keeps references and chunk ids; overlapping spans; fail-open keeps identifier masking, fail-closed refuses the call |
+| `KafkaOutboxIT` | IT | Outbox rows published with headers; intake creates one break despite redelivery; malformed to DLT |
+| `SemanticCacheIT` | IT | Exact and semantic hits; tenant isolation; evidence-snapshot rule; suspect note bypass |
+| `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
+| `RowLevelSecurityIT` | IT | Unscoped connection sees nothing; queries without a tenant filter still isolated; cross-tenant insert rejected by Postgres; app role cannot disable RLS; a JWT cannot claim system scope |
+| `SseFanoutIT` | IT | Two app instances share Postgres and Redis; a stream on node 2 receives every stage of a job running on node 1 |
+| `DailyDigestIT` | IT | Digest numbers match a scripted day; idempotent re-run; outbox event; tenant isolation and roles; second instance skips while the lock is held |
+| `KeycloakIT` | IT | Real Keycloak: tokens carry tenant/roles/audience; tenant comes from the IdP; roles enforced; no-tenant user, other realm and dev-key tokens rejected |
+| `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---
 
@@ -227,7 +376,13 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 ## 8. Known limitations
 
-- Not implemented: Kafka, Redis, multi-instance scale-out, PII masking, a UI, and a daily digest.
+- SSE fan-out over Redis pub/sub is fire-and-forget: an event missed during a Redis blip is recovered by the next event or the snapshot on reconnect, not replayed.
+- Kafka delivery is at-least-once; consumers must dedupe on the `event-id` header. Intake trusts the tenant named in the message, so topic ACLs are the trust boundary.
+- The Keycloak realm in `docker/keycloak/` is a local demo (synthetic users, shared password, `start-dev`); a production IdP needs HTTPS, its own hostname and managed users.
+- PII masking is not DLP. Without the Presidio sidecar only structured identifiers are masked; with it, names and locations are masked with model accuracy (it can miss unusual names and occasionally mask a non-name). Free-form disclosures (for example a medical detail) are not detected.
+- Audit anchors protect history up to the latest anchor; events written since then are covered only by the in-database chain until the next cycle (15 minutes by default). Anchors prove the chain was not changed afterwards, not that each event was true when written.
+- The HPA scales on CPU only. Investigations wait mostly on the model, so a queue-depth or in-flight-jobs metric (KEDA or a custom metric) would track load better; that is not built.
+- The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.
 

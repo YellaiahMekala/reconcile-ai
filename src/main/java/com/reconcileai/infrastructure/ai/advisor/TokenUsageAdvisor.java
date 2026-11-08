@@ -21,7 +21,8 @@ import java.util.UUID;
  * added, nested calls must be accounted at the ChatModel level instead.)
  *
  * <p>Writes one {@code llm_call} row and increments Micrometer counters
- * {@code reconcile.llm.tokens{type=prompt|completion}} for dashboards and cost alerts.
+ * {@code reconcile.llm.tokens{type=prompt|completion}}, records {@code reconcile.llm.latency} and adds an estimated
+ * spend to {@code reconcile.llm.cost.usd} (configured list prices x provider-reported tokens; ESTIMATED, not invoiced).
  */
 public class TokenUsageAdvisor implements CallAdvisor {
 
@@ -30,10 +31,19 @@ public class TokenUsageAdvisor implements CallAdvisor {
 
     private final LlmCallRepository repository;
     private final MeterRegistry meters;
+    private final double promptUsdPerMillion;
+    private final double completionUsdPerMillion;
 
     public TokenUsageAdvisor(LlmCallRepository repository, MeterRegistry meters) {
+        this(repository, meters, 0.0, 0.0);
+    }
+
+    public TokenUsageAdvisor(LlmCallRepository repository, MeterRegistry meters,
+                             double promptUsdPerMillion, double completionUsdPerMillion) {
         this.repository = repository;
         this.meters = meters;
+        this.promptUsdPerMillion = promptUsdPerMillion;
+        this.completionUsdPerMillion = completionUsdPerMillion;
     }
 
     @Override
@@ -53,10 +63,17 @@ public class TokenUsageAdvisor implements CallAdvisor {
             repository.save(new LlmCallRecord(tenantId, jobId, model, prompt, completion, ms, "OK"));
             meters.counter("reconcile.llm.tokens", "type", "prompt", "model", model).increment(prompt);
             meters.counter("reconcile.llm.tokens", "type", "completion", "model", model).increment(completion);
+            meters.timer("reconcile.llm.latency", "model", model, "outcome", "OK")
+                .record(java.time.Duration.ofMillis(ms));
+            double usd = (prompt * promptUsdPerMillion + completion * completionUsdPerMillion) / 1_000_000d;
+            meters.counter("reconcile.llm.cost.usd", "model", model).increment(usd);
             return response;
         } catch (RuntimeException e) {
             long ms = (System.nanoTime() - start) / 1_000_000;
             repository.save(new LlmCallRecord(tenantId, jobId, "unknown", 0, 0, ms, "ERROR"));
+            meters.timer("reconcile.llm.latency", "model", "unknown", "outcome", "ERROR")
+                .record(java.time.Duration.ofMillis(ms));
+            meters.counter("reconcile.llm.errors", "exception", e.getClass().getSimpleName()).increment();
             throw e;
         }
     }

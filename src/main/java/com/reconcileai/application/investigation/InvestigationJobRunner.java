@@ -1,5 +1,6 @@
 package com.reconcileai.application.investigation;
 
+import com.reconcileai.infrastructure.security.TenantScope;
 import com.reconcileai.application.audit.AuditRecorder;
 import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
 import com.reconcileai.application.investigation.CitationVerifier.CitationResult;
@@ -15,6 +16,8 @@ import com.reconcileai.domain.ResolutionProposal;
 import com.reconcileai.domain.RootCauseCategory;
 import com.reconcileai.infrastructure.ai.InvestigationAiClient;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
+import com.reconcileai.infrastructure.ai.cache.SemanticCache;
+import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
 import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder;
 import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.BuiltPrompt;
 import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.NormalizedDraft;
@@ -23,6 +26,8 @@ import com.reconcileai.infrastructure.ai.retrieval.RetrievedChunk;
 import com.reconcileai.infrastructure.persistence.BreakItemRepository;
 import com.reconcileai.infrastructure.persistence.InvestigationJobRepository;
 import com.reconcileai.infrastructure.persistence.LlmCallRepository;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -34,6 +39,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -72,6 +78,19 @@ public class InvestigationJobRunner {
     private final InvestigationProperties props;
     private final NodeIdentity node;
     private final TransactionTemplate tx;
+    private ObservationRegistry observations = ObservationRegistry.NOOP;
+    private SemanticCache cache = SemanticCache.DISABLED;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSemanticCache(SemanticCache cache) {
+        this.cache = cache;
+    }
+
+    /** Optional: one span per job (retrieval, model call and DB work nest under it). NOOP when tracing is off. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setObservationRegistry(ObservationRegistry registry) {
+        this.observations = registry;
+    }
 
     @SuppressWarnings("java:S107")
     public InvestigationJobRunner(@Qualifier("investigationExecutor") TaskExecutor executor,
@@ -100,7 +119,11 @@ public class InvestigationJobRunner {
 
     /** @throws java.util.concurrent.RejectedExecutionException when the bounded queue is full */
     public void submit(UUID jobId, String tenantId) {
-        executor.execute(() -> run(jobId, tenantId));
+        executor.execute(() -> Observation.createNotStarted("reconcile.investigation", observations)
+            .contextualName("investigation-job")
+            .lowCardinalityKeyValue("component", "investigation-runner")
+            .highCardinalityKeyValue("job.id", jobId.toString())
+            .observe(() -> TenantScope.run(tenantId, () -> run(jobId, tenantId))));
     }
 
     void run(UUID jobId, String tenantId) {
@@ -120,6 +143,8 @@ public class InvestigationJobRunner {
                 j -> j.recordRetrieval(prompt.includedChunkIds(), prompt.evidenceTokenEstimate()));
 
             NormalizedDraft draft;
+            ProposalDraft rawDraft = null;
+            boolean fromModel = false;
             if (prompt.includedChunks().isEmpty()) {
                 // Token optimisation + safety: nothing trustworthy to reason over, so do not call the model at all.
                 draft = new NormalizedDraft(RootCauseCategory.UNKNOWN,
@@ -128,8 +153,17 @@ public class InvestigationJobRunner {
                     BigDecimal.ZERO.setScale(3), List.of());
             } else {
                 try {
-                    draft = InvestigationPromptBuilder.normalize(
-                        aiClient.investigate(prompt, tenantId, jobId, job.getAnalystNote()));
+                    // Semantic cache replaces ONLY the model call; normalisation, citations and the gate still run.
+                    Optional<SemanticCache.Hit> hit = cache.lookup(tenantId, prompt, job.getAnalystNote());
+                    if (hit.isPresent()) {
+                        rawDraft = hit.get().draft();
+                        tx.executeWithoutResult(s -> llmCalls.save(new LlmCallRecord(tenantId, jobId,
+                            "cache-" + hit.get().type().name().toLowerCase(java.util.Locale.ROOT), 0, 0, 0, "CACHE_HIT")));
+                    } else {
+                        rawDraft = aiClient.investigate(prompt, tenantId, jobId, job.getAnalystNote());
+                        fromModel = true;
+                    }
+                    draft = InvestigationPromptBuilder.normalize(rawDraft);
                 } catch (PromptBlockedException blocked) {
                     tx.executeWithoutResult(s -> llmCalls.save(new LlmCallRecord(tenantId, jobId, "blocked", 0, 0, 0, "BLOCKED")));
                     throw blocked;
@@ -138,6 +172,9 @@ public class InvestigationJobRunner {
 
             stage(jobId, tenantId, JobStage.VERIFYING, null);
             CitationResult citations = citationVerifier.verify(draft.citedChunkIds(), prompt.includedChunkIds());
+            if (fromModel && citations.valid()) {
+                cache.store(tenantId, prompt, rawDraft); // only verified, grounded drafts are ever cached
+            }
             // No-evidence path has no citations by construction; the UNKNOWN root cause routes it to manual review.
             boolean citationsOk = citations.valid() || draft.citedChunkIds().isEmpty() && draft.rootCause() == RootCauseCategory.UNKNOWN;
             stage(jobId, tenantId, JobStage.ROUTING, null);

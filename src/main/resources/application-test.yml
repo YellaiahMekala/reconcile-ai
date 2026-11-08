@@ -16,6 +16,9 @@ spring:
 reconcile:
   retrieval:
     similarity-threshold: 0.10      # calibrated for FakeEmbeddingModel bag-of-words vectors (see its Javadoc)
+  ai:
+    resilience:
+      initial-backoff-ms: 20        # keep retry tests fast
 
 logging:
   level:

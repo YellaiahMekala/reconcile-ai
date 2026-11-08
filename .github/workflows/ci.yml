@@ -63,3 +63,38 @@ jobs:
           name: coverage-report
           path: target/site/jacoco/
           retention-days: 14
+
+  k8s:
+    name: k8s manifests + container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render (kustomize) and validate (kubeconform, strict)
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          for overlay in k8s/base k8s/overlays/kind; do
+            kubectl kustomize "$overlay" | ./kubeconform -strict -summary -kubernetes-version 1.31.0 -
+          done
+
+      - name: Build container image
+        run: docker build -t reconcile-ai:ci .
+
+  ui:
+    name: ui build + test (Angular)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npx ng build
+      - run: npx ng test --watch=false --browsers=ChromeHeadless

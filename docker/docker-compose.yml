@@ -1,9 +1,12 @@
-# Tier 1/2 infrastructure — Postgres alone.
-# Redis and Kafka are not part of this stack; their containers are deliberately absent.
+# reconcile-ai local infrastructure.
 #
-# The pgvector image is used from day one even though Tier 1 has no vector column —
-# so the same container serves Tier 2 with no swap, and the extension is available
-# when V2 (Tier 2) adds it.
+#   docker compose -f docker/docker-compose.yml up -d                          # Postgres only (default)
+#   docker compose -f docker/docker-compose.yml --profile observability up -d  # + Jaeger, Prometheus, Grafana
+#   docker compose -f docker/docker-compose.yml --profile keycloak up -d       # + Keycloak (OIDC) on :8180
+#   docker compose -f docker/docker-compose.yml --profile presidio up -d       # + Presidio analyzer on :5002 (PII names)
+#   docker compose -f docker/docker-compose.yml --profile anchor up -d         # + MinIO with Object Lock on :9000 (audit anchors)
+#
+# Profiles keep the default loop small: nothing beyond Postgres starts unless asked for.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -21,6 +24,108 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # ---- cache profile: Redis for the semantic cache (run the app with CACHE_ENABLED=true) ----
+  redis:
+    image: redis:7-alpine
+    container_name: reconcile-redis
+    profiles: ["cache"]
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+
+  # ---- kafka profile: single-node KRaft broker (run the app with KAFKA_ENABLED=true) ----
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: reconcile-kafka
+    profiles: ["kafka"]
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  # ---- keycloak profile: real OIDC identity provider (run the app with OIDC_ISSUER_URI, see README) ----
+  # Imports docker/keycloak/reconcile-realm.json: realm "reconcile", public PKCE client "reconcile-ui",
+  # synthetic users (password "demo-only"), tenant_id user attribute + realm roles mapped into the access token.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.8
+    container_name: reconcile-keycloak
+    profiles: ["keycloak"]
+    command: ["start-dev", "--import-realm", "--http-port=8180"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-local-only     # local demo only
+    volumes:
+      - ./keycloak/reconcile-realm.json:/opt/keycloak/data/import/reconcile-realm.json:ro
+    ports:
+      - "8180:8180"
+
+  # ---- presidio profile: entity recognition for person names / locations (run the app with PII_NER_ENABLED=true) ----
+  presidio:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.355
+    container_name: reconcile-presidio
+    profiles: ["presidio"]
+    ports:
+      - "5002:3000"        # app default PII_NER_URL=http://localhost:5002; the image listens on 3000
+
+  # ---- anchor profile: MinIO (S3 API) for audit-chain anchors with Object Lock (run with AUDIT_ANCHOR_ENABLED=true) ----
+  # Local only: throwaway credentials. Against real AWS S3 use a bucket created with Object Lock and an IAM role.
+  minio:
+    image: bitnamilegacy/minio:2025.4.22
+    container_name: reconcile-minio
+    profiles: ["anchor"]
+    environment:
+      MINIO_ROOT_USER: minio-local
+      MINIO_ROOT_PASSWORD: minio-local-only
+    ports:
+      - "9000:9000"
+
+  # ---- observability profile: traces (OTLP -> Jaeger), metrics (Prometheus), dashboards (Grafana) ----
+  # Run the app with TRACING_ENABLED=true to export spans to Jaeger on :4318.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: reconcile-jaeger
+    profiles: ["observability"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4318:4318"     # OTLP/HTTP receiver
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: reconcile-prometheus
+    profiles: ["observability"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: reconcile-grafana
+    profiles: ["observability"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"        # local demo only
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin-local-only
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus, jaeger]
 
 volumes:
   reconcile-pgdata:

@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reconcile-ai
+  labels: { app: reconcile-ai }
+spec:
+  # replicas is owned by the HorizontalPodAutoscaler; do not set it here.
+  selector:
+    matchLabels: { app: reconcile-ai }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: reconcile-ai }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: reconcile-ai
+      terminationGracePeriodSeconds: 45     # let in-flight investigations/SSE streams finish (see shutdown: graceful)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: app
+          image: reconcile-ai:local          # overridden per environment via kustomize `images:`
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: reconcile-ai-config }
+            - secretRef: { name: reconcile-ai-secrets }
+            - secretRef: { name: reconcile-ai-openai, optional: true }   # OPENAI_API_KEY, created out of band
+          env:
+            - { name: SERVER_SHUTDOWN, value: graceful }
+            - { name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED, value: "true" }
+            - { name: MANAGEMENT_HEALTH_READINESSSTATE_ENABLED, value: "true" }
+            - { name: MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED, value: "true" }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            failureThreshold: 36                # up to 3 minutes for Flyway + context start
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: reconcile-ai }

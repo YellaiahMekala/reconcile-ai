@@ -39,8 +39,7 @@ class OpenAiChatSmokeIT extends AbstractPostgresIT {
     @LocalServerPort
     int port;
 
-    @Autowired
-    JdbcTemplate jdbc;
+        final JdbcTemplate jdbc = adminJdbc();
 
     @Test
     void realModelOutputIsVerifiedRoutedAndRecorded() {

@@ -38,8 +38,7 @@ class Day0SpikeIT extends AbstractPostgresIT {
     @LocalServerPort
     int port;
 
-    @Autowired
-    JdbcTemplate jdbcTemplate;
+        final JdbcTemplate jdbcTemplate = adminJdbc();
 
     @BeforeEach
     void setPort() {

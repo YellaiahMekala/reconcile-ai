@@ -1,0 +1,12 @@
+ACME BANK - CUSTOMER STATEMENT
+Account: ACCT-TEST-0001  Currency: USD
+
+Value date  Description                               Amount
+2026-03-31  Opening balance                           1,204,330.00
+2026-04-01  SWIFT MT103 IN ref INV-20931 GLOBEX LTD      50,000.00
+            Note: payment initiated 2026-03-31, settled next business day.
+
+The ledger booked INV-20931 on 2026-03-31 for 50,500.00 including a 500.00 wire fee.
+The bank credited 50,000.00 on value date 2026-04-01. Settlement timing difference across month end.
+
+Ops note: simulate slow provider (test fixture marker).

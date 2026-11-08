@@ -3,6 +3,11 @@ package com.reconcileai.infrastructure.security;
 import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtDecoders;
+import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.io.Resource;
@@ -64,6 +69,14 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Liveness only. Every other actuator endpoint stays unexposed (see application.yml).
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                // Prometheus scrape: aggregate counters only (no tenant ids, prompts or amounts in any tag).
+                // In a real deployment restrict it by network policy or move it to management.server.port.
+                .requestMatchers("/actuator/prometheus").permitAll()
+                // Demo persona login for the local UI. The controller exists ONLY under the demo-login profile;
+                // without it these paths simply do not exist.
+                .requestMatchers("/dev/personas", "/dev/token").permitAll()
+                // Public sign-in metadata for the UI (IdP issuer + public client id; no secrets).
+                .requestMatchers("/api/v1/auth/config").permitAll()
                 // SSE: SseEmitter completes via an ASYNC re-dispatch of a request that was ALREADY
                 // authenticated and authorised on its REQUEST dispatch. The bearer filter does not re-run on async
                 // dispatch, so without this the stream ends with AccessDenied on an already-committed response.
@@ -86,8 +99,17 @@ public class SecurityConfig {
      */
     @Bean
     public JwtDecoder jwtDecoder(
-            @Value("${spring.security.oauth2.resourceserver.jwt.public-key-location}") Resource publicKeyPem)
+            @Value("${spring.security.oauth2.resourceserver.jwt.public-key-location}") Resource publicKeyPem,
+            @Value("${reconcile.security.issuer-uri:}") String issuerUri,
+            @Value("${reconcile.security.audience:}") String audience)
             throws IOException {
+
+        OAuth2TokenValidator<Jwt> tenantRequired = new JwtClaimValidator<String>(
+            TenantContext.TENANT_CLAIM, tenant -> tenant != null && !tenant.isBlank());
+
+        if (!issuerUri.isBlank()) {
+            return identityProviderDecoder(issuerUri, audience, tenantRequired);
+        }
 
         RSAPublicKey publicKey;
         try (InputStream in = publicKeyPem.getInputStream()) {
@@ -98,13 +120,40 @@ public class SecurityConfig {
             .signatureAlgorithm(SignatureAlgorithm.RS256) // pin alg: rejects "none"/HS256 confusion
             .build();
 
-        OAuth2TokenValidator<Jwt> tenantRequired = new JwtClaimValidator<String>(
-            TenantContext.TENANT_CLAIM, tenant -> tenant != null && !tenant.isBlank());
-
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefault(), // exp / nbf with 60s clock skew
             tenantRequired));
         return decoder;
+    }
+
+    /**
+     * Real identity provider mode ({@code reconcile.security.issuer-uri}, e.g. Keycloak
+     * {@code http://localhost:8180/realms/reconcile} or Entra {@code https://login.microsoftonline.com/<tid>/v2.0}).
+     *
+     * <ul>
+     *   <li>Signing keys come from the IdP's JWKS (discovered from the issuer) and rotate without a redeploy.</li>
+     *   <li>{@code iss} must equal the configured issuer: a token from another realm or tenant is rejected.</li>
+     *   <li>{@code aud} must contain the API's audience, so a token minted for a different client is rejected.</li>
+     *   <li>The same {@code tenant_id} and {@code roles} claims are required (IdP protocol mappers produce them), so
+     *       nothing downstream changes between demo keys and a real IdP.</li>
+     *   <li>{@link SupplierJwtDecoder}: discovery happens on the first token, not at startup, so the API still boots
+     *       (and serves health) while the IdP is briefly unavailable.</li>
+     * </ul>
+     */
+    private static JwtDecoder identityProviderDecoder(String issuerUri, String audience,
+                                                      OAuth2TokenValidator<Jwt> tenantRequired) {
+        return new SupplierJwtDecoder(() -> {
+            NimbusJwtDecoder decoder = JwtDecoders.fromIssuerLocation(issuerUri);
+            List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();
+            validators.add(JwtValidators.createDefaultWithIssuer(issuerUri));
+            validators.add(tenantRequired);
+            if (!audience.isBlank()) {
+                validators.add(new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
+                    aud -> aud != null && aud.contains(audience)));
+            }
+            decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(validators));
+            return decoder;
+        });
     }
 
     /** Maps the JWT {@code roles} claim to Spring authorities using the closed {@link Role} set. */

@@ -13,3 +13,6 @@ app-run.pid
 .idea/
 *.iml
 .env
+
+# local tooling, never part of the project
+npm-global/

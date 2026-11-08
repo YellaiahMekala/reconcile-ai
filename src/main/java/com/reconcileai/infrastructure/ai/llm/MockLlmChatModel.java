@@ -26,6 +26,14 @@ import java.util.regex.Pattern;
  *  evidence mentions settlement / value date    -> TIMING_DIFFERENCE,   0.86, cites those chunks
  *  otherwise                                    -> UNKNOWN,             0.35, no citations
  * </pre>
+ *
+ * <h2>Fault injection (demonstrates LLM retry + circuit breaker without a real provider)</h2>
+ * <pre>
+ *  evidence contains "simulate provider outage"  -> every call throws TransientAiException (retries exhaust,
+ *                                                   job FAILED with LLM_UNAVAILABLE; repeated runs open the breaker)
+ *  evidence contains "simulate transient glitch" -> the FIRST call for that prompt throws, the retry succeeds
+ *  evidence contains "simulate slow provider"    -> the call takes 3 s (lets a test subscribe mid-job, e.g. SSE fan-out)
+ * </pre>
  * Usage metadata is filled with chars/4 estimates so token accounting is exercised end to end.
  * This bean is registered only under the "mock-llm" profile (see AiConfig).
  */
@@ -34,9 +42,25 @@ public class MockLlmChatModel implements ChatModel {
     public static final String FABRICATED_CHUNK_ID = "00000000-0000-0000-0000-00000000dead";
     private static final Pattern BLOCK = Pattern.compile("<<<EVIDENCE chunk_id=([0-9a-f-]{36})[^>]*>>>\\n(.*?)\\n<<<END_EVIDENCE>>>", Pattern.DOTALL);
 
+    private final java.util.Set<Integer> glitchedOnce = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     @Override
     public ChatResponse call(Prompt prompt) {
         String all = prompt.getContents();
+        String lower = all.toLowerCase(Locale.ROOT);
+        if (lower.contains("simulate provider outage")) {
+            throw new org.springframework.ai.retry.TransientAiException("mock-llm: simulated provider outage (HTTP 503)");
+        }
+        if (lower.contains("simulate transient glitch") && glitchedOnce.add(all.hashCode())) {
+            throw new org.springframework.ai.retry.TransientAiException("mock-llm: simulated transient glitch (HTTP 503)");
+        }
+        if (lower.contains("simulate slow provider")) {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         List<String[]> blocks = new ArrayList<>();
         Matcher m = BLOCK.matcher(all);
         while (m.find()) {
