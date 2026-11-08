@@ -11,8 +11,16 @@ export interface Persona {
 
 export interface Session {
   token: string;
+  /** Present for identity-provider sign-in; used only as id_token_hint on logout. */
+  idToken?: string;
   persona: Persona;
   expiresAt: string;
+}
+
+export interface AuthConfig {
+  mode: 'demo' | 'oidc';
+  issuer: string | null;
+  clientId: string | null;
 }
 
 export interface BreakItem {

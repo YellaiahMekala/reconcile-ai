@@ -99,6 +99,12 @@ spring:
 # Application tuning knobs (bound to @ConfigurationProperties classes)
 # ---------------------------------------------------------------------------
 reconcile:
+  security:
+    # Empty: tokens are verified with the local dev public key above (demo personas, tests).
+    # Set to a real IdP issuer to switch to JWKS + issuer + audience validation, e.g. Keycloak:
+    #   OIDC_ISSUER_URI=http://localhost:8180/realms/reconcile   (compose profile "keycloak")
+    issuer-uri: ${OIDC_ISSUER_URI:}
+    audience: ${OIDC_AUDIENCE:reconcile-api}
   ingestion:
     chunk-size-tokens: 400          # ~300 words: big enough for a statement line + context, small enough to cite precisely
     min-chunk-size-chars: 200

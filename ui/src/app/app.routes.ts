@@ -4,6 +4,7 @@ import { LoginPage } from './pages/login.page';
 
 export const routes: Routes = [
   { path: 'login', component: LoginPage },
+  { path: 'auth/callback', loadComponent: () => import('./pages/auth-callback.page').then((m) => m.AuthCallbackPage) },
   {
     path: 'breaks',
     canActivate: [authGuard],

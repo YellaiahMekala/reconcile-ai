@@ -2,7 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, tap } from 'rxjs';
-import { Persona, Session } from './models';
+import { AuthConfig, Persona, Session } from './models';
+import { idpLogoutUrl } from './oidc';
 
 const KEY = 'reconcile-ai.session';
 
@@ -19,6 +20,17 @@ export class AuthService {
   readonly persona = computed(() => this.session()?.persona ?? null);
   readonly loggedIn = computed(() => this.session() !== null);
 
+  /** demo (persona tokens) or oidc (real identity provider), decided by the API's configuration. */
+  config(): Observable<AuthConfig> {
+    return this.http.get<AuthConfig>('/api/v1/auth/config');
+  }
+
+  /** Stores a session obtained from the identity provider (see oidc.ts). */
+  adopt(s: Session): void {
+    sessionStorage.setItem(KEY, JSON.stringify(s));
+    this.session.set(s);
+  }
+
   personas(): Observable<Persona[]> {
     return this.http.get<Persona[]>('/dev/personas');
   }
@@ -33,8 +45,21 @@ export class AuthService {
   }
 
   logout(): void {
+    const ended = this.session();
     sessionStorage.removeItem(KEY);
     this.session.set(null);
+    if (ended?.idToken) {
+      // Also end the IdP session, otherwise the next "Sign in" would silently reuse it.
+      this.config().subscribe({
+        next: async (c) => {
+          const url = c.issuer ? await idpLogoutUrl(c.issuer, ended.idToken) : null;
+          if (url) window.location.assign(url);
+          else this.router.navigate(['/login']);
+        },
+        error: () => this.router.navigate(['/login']),
+      });
+      return;
+    }
     this.router.navigate(['/login']);
   }
 

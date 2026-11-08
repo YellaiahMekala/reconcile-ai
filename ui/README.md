@@ -32,6 +32,22 @@ Demo flow: sign in as **Recon analyst**, create a break (50500.00 vs 50000.00 US
 investigation and watch the stages, then sign in as **L1 approver** and approve. Sign in as **Analyst in another
 tenant** and open the same break URL: 404.
 
+## Sign in with Keycloak (real identity provider)
+
+```powershell
+docker compose -f docker/docker-compose.yml --profile keycloak up -d          # Keycloak on http://localhost:8180
+$env:OIDC_ISSUER_URI = "http://localhost:8180/realms/reconcile"
+mvn spring-boot:run "-Dspring-boot.run.profiles=mock-llm"                   # no demo-login needed
+cd ui; npm start
+```
+
+The login page asks the API (`GET /api/v1/auth/config`) which mode is active and shows **Sign in with identity
+provider**. The browser runs the Authorization Code flow with PKCE (S256) against the public client `reconcile-ui`
+(`src/app/core/oidc.ts`): random `state` checked on return, verifier kept only for the round trip, endpoints from the
+IdP discovery document. Users (password `demo-only`, local only): `analyst`, `approver-l1`, `approver-l2`, `sre`
+(tenant `TENANT_DEMO`) and `other-analyst` (`TENANT_OTHER`). Tenant and roles come from Keycloak (`tenant_id` user
+attribute, realm roles); Sign out also ends the Keycloak session.
+
 ## Test
 
 ```powershell

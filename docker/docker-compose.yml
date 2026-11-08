@@ -2,6 +2,7 @@
 #
 #   docker compose -f docker/docker-compose.yml up -d                          # Postgres only (default)
 #   docker compose -f docker/docker-compose.yml --profile observability up -d  # + Jaeger, Prometheus, Grafana
+#   docker compose -f docker/docker-compose.yml --profile keycloak up -d       # + Keycloak (OIDC) on :8180
 #
 # Profiles keep the default loop small: nothing beyond Postgres starts unless asked for.
 services:
@@ -49,6 +50,22 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  # ---- keycloak profile: real OIDC identity provider (run the app with OIDC_ISSUER_URI, see README) ----
+  # Imports docker/keycloak/reconcile-realm.json: realm "reconcile", public PKCE client "reconcile-ui",
+  # synthetic users (password "demo-only"), tenant_id user attribute + realm roles mapped into the access token.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.8
+    container_name: reconcile-keycloak
+    profiles: ["keycloak"]
+    command: ["start-dev", "--import-realm", "--http-port=8180"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-local-only     # local demo only
+    volumes:
+      - ./keycloak/reconcile-realm.json:/opt/keycloak/data/import/reconcile-realm.json:ro
+    ports:
+      - "8180:8180"
 
   # ---- observability profile: traces (OTLP -> Jaeger), metrics (Prometheus), dashboards (Grafana) ----
   # Run the app with TRACING_ENABLED=true to export spans to Jaeger on :4318.

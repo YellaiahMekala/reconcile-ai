@@ -63,7 +63,7 @@ until that test is green.
 | Approvals | L1/L2 queues, maker-checker, stricter-of-stored-and-recomputed tier | `ApprovalController`, `ApprovalService` |
 | Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN | `HashChainAuditRecorder`, `AuditController` |
 | Safety | Injection scanner before any model call; advisor chain (input guard, token usage) | `InputGuardAdvisor`, `TokenUsageAdvisor`, `InjectionScanner` |
-| Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set | `SecurityConfig`, `TenantContext`, `Role` |
+| Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set; real IdP mode (Keycloak realm included; JWKS, issuer and audience checks) or demo keys | `SecurityConfig`, `TenantContext`, `Role`, `docker/keycloak/` |
 | Tenant isolation (DB) | Postgres Row-Level Security on every tenant table and `vector_store`; app runs as a non-owner role; connections bound to the caller's tenant on checkout; fail closed | `V6__row_level_security.sql`, `TenantAwareDataSource`, `TenantScope` |
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
 | Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
@@ -200,6 +200,14 @@ text is a fixed template, so the digest never mis-states a number. Re-runs overw
 `GET /api/v1/digests/{date}` (approvers, SRE), `POST /api/v1/digests/{date}/generate` (SRE backfill). Disable with
 `DIGEST_ENABLED=false`. Test: `DailyDigestIT`.
 
+**Real identity provider (Keycloak).** `docker compose -f docker/docker-compose.yml --profile keycloak up -d`, then
+run the API with `OIDC_ISSUER_URI=http://localhost:8180/realms/reconcile`. The API then validates tokens against the
+realm's JWKS (key rotation without redeploy), requires `iss` = that issuer, `aud` ∋ `reconcile-api` and a `tenant_id`
+claim; demo-key tokens are refused. The realm (`docker/keycloak/reconcile-realm.json`) maps a admin-editable
+`tenant_id` user attribute and realm roles into the access token, so nothing downstream changes. The UI signs in with
+Authorization Code + PKCE (see `ui/README.md`). Entra ID works the same way: set its v2.0 issuer and map `tenant_id`
+and `roles` as optional/app-role claims. Test: `KeycloakIT` (real Keycloak container).
+
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
 `simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
 every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
@@ -288,6 +296,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `RowLevelSecurityIT` | IT | Unscoped connection sees nothing; queries without a tenant filter still isolated; cross-tenant insert rejected by Postgres; app role cannot disable RLS; a JWT cannot claim system scope |
 | `SseFanoutIT` | IT | Two app instances share Postgres and Redis; a stream on node 2 receives every stage of a job running on node 1 |
 | `DailyDigestIT` | IT | Digest numbers match a scripted day; idempotent re-run; outbox event; tenant isolation and roles; second instance skips while the lock is held |
+| `KeycloakIT` | IT | Real Keycloak: tokens carry tenant/roles/audience; tenant comes from the IdP; roles enforced; no-tenant user, other realm and dev-key tokens rejected |
 | `ObservabilityIT` | IT | Prometheus exposes LLM/breaker/HTTP series and no tenant ids; other actuator endpoints closed |
 
 ---
@@ -311,7 +320,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 
 - SSE fan-out over Redis pub/sub is fire-and-forget: an event missed during a Redis blip is recovered by the next event or the snapshot on reconnect, not replayed.
 - Kafka delivery is at-least-once; consumers must dedupe on the `event-id` header. Intake trusts the tenant named in the message, so topic ACLs are the trust boundary.
-- The UI signs in with demo personas (`demo-login` profile, throwaway key); there is no real identity provider.
+- The Keycloak realm in `docker/keycloak/` is a local demo (synthetic users, shared password, `start-dev`); a production IdP needs HTTPS, its own hostname and managed users.
 - PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
