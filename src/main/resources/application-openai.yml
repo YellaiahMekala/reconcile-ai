@@ -11,4 +11,5 @@ spring:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
           temperature: 0.0         # deterministic-ish proposals; creativity is a bug here
-          max-completion-tokens: 700   # output token cap (matches reconcile.investigation.max-output-tokens)
+          # No max-tokens here: the output cap comes from reconcile.investigation.max-output-tokens (700),
+          # sent as max_tokens by InvestigationAiClient. OpenAI rejects max_tokens and max_completion_tokens together.
