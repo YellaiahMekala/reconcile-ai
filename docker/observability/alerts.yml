@@ -1,0 +1,19 @@
+groups:
+  - name: reconcile-audit-anchor
+    rules:
+      # A failed anchor is swallowed per tenant (one tenant's storage error must not stop the others), so without this
+      # alert it is only a log line. Anchoring retries every cycle; alert when errors persist.
+      - alert: AuditAnchorWriteFailing
+        expr: increase(reconcile_audit_anchor_total{result="error"}[30m]) > 0
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Audit anchor writes are failing"
+          description: "Anchoring errors persisted for 15m; the audit chain exposure window is growing. Check the 'audit anchor failed for tenant' log line and S3/MinIO health."
+      # The security signal: the live chain no longer matches an immutable anchor (history rewritten or deleted).
+      - alert: AuditAnchorMismatch
+        expr: increase(reconcile_audit_anchor_verify_total{result="mismatch"}[15m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Audit chain does not match its immutable anchor"
+          description: "Treat as possible tampering until proven otherwise."
