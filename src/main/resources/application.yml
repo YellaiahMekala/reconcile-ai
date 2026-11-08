@@ -139,6 +139,13 @@ reconcile:
       namespace: v1                 # bump to invalidate everything after a prompt or model change
     pii-masking:
       enabled: true                 # mask account numbers, IBANs, cards, emails, phones before the model call
+      ner:                          # optional Presidio sidecar: also mask person names and locations
+        enabled: ${PII_NER_ENABLED:false}
+        url: ${PII_NER_URL:http://localhost:5002}
+        entities: PERSON,LOCATION
+        score-threshold: 0.5
+        timeout-ms: 3000
+        fail-closed: ${PII_NER_FAIL_CLOSED:false}   # true: refuse the model call when Presidio is down
     resilience:
       max-attempts: 3               # 1 call + 2 retries, transient failures only (5xx, 429, timeouts, network)
       initial-backoff-ms: 500       # 500 ms, then 1 s (exponential x2)

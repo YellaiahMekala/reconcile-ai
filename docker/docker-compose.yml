@@ -3,6 +3,7 @@
 #   docker compose -f docker/docker-compose.yml up -d                          # Postgres only (default)
 #   docker compose -f docker/docker-compose.yml --profile observability up -d  # + Jaeger, Prometheus, Grafana
 #   docker compose -f docker/docker-compose.yml --profile keycloak up -d       # + Keycloak (OIDC) on :8180
+#   docker compose -f docker/docker-compose.yml --profile presidio up -d       # + Presidio analyzer on :5002 (PII names)
 #
 # Profiles keep the default loop small: nothing beyond Postgres starts unless asked for.
 services:
@@ -66,6 +67,14 @@ services:
       - ./keycloak/reconcile-realm.json:/opt/keycloak/data/import/reconcile-realm.json:ro
     ports:
       - "8180:8180"
+
+  # ---- presidio profile: entity recognition for person names / locations (run the app with PII_NER_ENABLED=true) ----
+  presidio:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.355
+    container_name: reconcile-presidio
+    profiles: ["presidio"]
+    ports:
+      - "5002:3000"        # app default PII_NER_URL=http://localhost:5002; the image listens on 3000
 
   # ---- observability profile: traces (OTLP -> Jaeger), metrics (Prometheus), dashboards (Grafana) ----
   # Run the app with TRACING_ENABLED=true to export spans to Jaeger on :4318.

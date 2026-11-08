@@ -66,7 +66,7 @@ until that test is green.
 | Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set; real IdP mode (Keycloak realm included; JWKS, issuer and audience checks) or demo keys | `SecurityConfig`, `TenantContext`, `Role`, `docker/keycloak/` |
 | Tenant isolation (DB) | Postgres Row-Level Security on every tenant table and `vector_store`; app runs as a non-owner role; connections bound to the caller's tenant on checkout; fail closed | `V6__row_level_security.sql`, `TenantAwareDataSource`, `TenantScope` |
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
-| Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call | `PiiMaskingAdvisor`, `PiiMasker` |
+| Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call; optional Presidio entity recognition masks person names and locations (fail-open or fail-closed) | `PiiMaskingAdvisor`, `PiiMasker`, `PresidioNerDetector` |
 | Observability | Prometheus metrics (tokens, estimated cost, LLM latency, breaker, retries, PII counts); OpenTelemetry traces via OTLP; Grafana dashboard | `/actuator/prometheus`, `docker/observability/` |
 | Messaging | Transactional outbox (`outbox_event`, same tx as the state change) relayed to Kafka; event-driven break intake with idempotency and a dead-letter topic; off by default | `infrastructure/messaging/`, `BreakIngestionService` |
 | Cost | Redis semantic cache of verified model drafts (exact + semantic, per tenant, evidence-snapshot bound, fail-open); off by default | `infrastructure/ai/cache/` |
@@ -219,6 +219,15 @@ Fixtures: `src/test/resources/fixtures/evidence/timing-*.txt`. Tests: `LlmResili
 `reconcile_pii_masked_total{type=...}` counts what was masked; the values are never logged. Disable with
 `reconcile.ai.pii-masking.enabled=false`. Tests: `PiiMaskerTest`.
 
+**Names and locations (Presidio).** Regexes cannot recognise a person or a place, so an optional second pass sends the
+already-masked text to a Microsoft Presidio analyzer sidecar (spaCy model) inside the same network, never to the model
+provider. `docker compose -f docker/docker-compose.yml --profile presidio up -d`, then run with `PII_NER_ENABLED=true`
+(`PII_NER_URL` defaults to `http://localhost:5002`). Detected `PERSON` and `LOCATION` spans become `[PERSON]` /
+`[LOCATION]`; business references and chunk ids are left alone. If the sidecar is down: by default the call proceeds
+with identifier masking only and `reconcile_pii_ner_unavailable_total` counts it (fail-open); with
+`PII_NER_FAIL_CLOSED=true` the model call is refused instead, so unmasked names never leave the process.
+Tests: `NerMaskingTest`, `PresidioNerIT` (real Presidio container).
+
 **Semantic cache (Redis).** `docker compose -f docker/docker-compose.yml --profile cache up -d`, then run with
 `CACHE_ENABLED=true`. Only citation-verified drafts are stored. A hit replaces the model call only; normalisation,
 citation check and the policy gate still run. Hits need the same tenant AND the identical retrieved-chunk set, so new
@@ -290,6 +299,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `AuditChainIT` | IT | Hash chain verifies; append-only trigger rejects updates |
 | `LlmResilienceTest`, `LlmResilienceIT` | unit, IT | Transient-only retry, breaker opens and fails fast, outage fails the job retryably |
 | `PiiMaskerTest` | unit | Identifiers masked; amounts, dates, references and chunk ids untouched; advisor masks what the model sees |
+| `NerMaskingTest`, `PresidioNerIT` | unit, IT | Real Presidio masks names and places, keeps references and chunk ids; overlapping spans; fail-open keeps identifier masking, fail-closed refuses the call |
 | `KafkaOutboxIT` | IT | Outbox rows published with headers; intake creates one break despite redelivery; malformed to DLT |
 | `SemanticCacheIT` | IT | Exact and semantic hits; tenant isolation; evidence-snapshot rule; suspect note bypass |
 | `DemoLoginIT` | IT | Persona tokens pass normal JWT validation; roles still enforced; unknown persona rejected |
@@ -321,7 +331,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 - SSE fan-out over Redis pub/sub is fire-and-forget: an event missed during a Redis blip is recovered by the next event or the snapshot on reconnect, not replayed.
 - Kafka delivery is at-least-once; consumers must dedupe on the `event-id` header. Intake trusts the tenant named in the message, so topic ACLs are the trust boundary.
 - The Keycloak realm in `docker/keycloak/` is a local demo (synthetic users, shared password, `start-dev`); a production IdP needs HTTPS, its own hostname and managed users.
-- PII masking covers structured identifiers only (it is not DLP): names and free-form disclosures pass through.
+- PII masking is not DLP. Without the Presidio sidecar only structured identifiers are masked; with it, names and locations are masked with model accuracy (it can miss unusual names and occasionally mask a non-name). Free-form disclosures (for example a medical detail) are not detected.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.

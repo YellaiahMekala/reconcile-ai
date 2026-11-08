@@ -1,5 +1,7 @@
 package com.reconcileai.infrastructure.ai.advisor;
 
+import com.reconcileai.infrastructure.ai.pii.NerDetector;
+import com.reconcileai.infrastructure.ai.pii.NerMasker;
 import com.reconcileai.infrastructure.ai.pii.PiiMasker;
 import com.reconcileai.infrastructure.ai.pii.PiiMasker.MaskResult;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -24,15 +26,27 @@ import java.util.List;
  * <p>Order: after {@link InputGuardAdvisor} (the injection scan runs on the raw analyst note) and before
  * {@link TokenUsageAdvisor}, so what is measured is exactly what was sent. Counts per type are published as
  * {@code reconcile.pii.masked{type=...}}; masked values are never logged.
+ *
+ * <p>Optional second pass: when a {@link NerDetector} (Presidio sidecar) is configured, person names and locations are
+ * masked too. If the sidecar is down the advisor either fails closed (the call is refused, nothing leaves the process)
+ * or fails open (identifier masking only, counted in {@code reconcile.pii.ner.unavailable}), per configuration.
  */
 public class PiiMaskingAdvisor implements CallAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger(PiiMaskingAdvisor.class);
 
     private final MeterRegistry meters;
+    private final NerDetector ner;
+    private final boolean failClosed;
 
     public PiiMaskingAdvisor(MeterRegistry meters) {
+        this(meters, null, false);
+    }
+
+    public PiiMaskingAdvisor(MeterRegistry meters, NerDetector ner, boolean failClosed) {
         this.meters = meters;
+        this.ner = ner;
+        this.failClosed = failClosed;
     }
 
     @Override
@@ -44,11 +58,19 @@ public class PiiMaskingAdvisor implements CallAdvisor {
             if (m instanceof UserMessage u) {
                 MaskResult r = count(PiiMasker.mask(u.getText()));
                 total += r.total();
-                masked.add(u.mutate().text(r.text()).build());
+                String text = maskNames(r.text());
+                if (!text.equals(r.text())) {
+                    total++;
+                }
+                masked.add(u.mutate().text(text).build());
             } else if (m instanceof SystemMessage s) {
                 MaskResult r = count(PiiMasker.mask(s.getText()));
                 total += r.total();
-                masked.add(new SystemMessage(r.text()));
+                String text = maskNames(r.text());
+                if (!text.equals(r.text())) {
+                    total++;
+                }
+                masked.add(new SystemMessage(text));
             } else {
                 masked.add(m);
             }
@@ -58,6 +80,25 @@ public class PiiMaskingAdvisor implements CallAdvisor {
         }
         log.debug("masked {} identifier(s) before the model call", total);
         return chain.nextCall(request.mutate().prompt(new Prompt(masked, prompt.getOptions())).build());
+    }
+
+    /** Second pass on text whose structured identifiers were already replaced. */
+    private String maskNames(String text) {
+        if (ner == null) {
+            return text;
+        }
+        try {
+            NerMasker.Result r = NerMasker.apply(text, ner.detect(text));
+            r.counts().forEach((type, n) -> meters.counter("reconcile.pii.masked", "type", type).increment(n));
+            return r.text();
+        } catch (NerDetector.NerUnavailableException e) {
+            meters.counter("reconcile.pii.ner.unavailable").increment();
+            if (failClosed) {
+                throw new IllegalStateException("PII entity recognition unavailable; refusing to send unmasked text", e);
+            }
+            log.warn("PII entity recognition unavailable, continuing with identifier masking only: {}", e.getMessage());
+            return text;
+        }
     }
 
     private MaskResult count(MaskResult r) {
