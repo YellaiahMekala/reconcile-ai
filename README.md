@@ -31,6 +31,7 @@ until that test is green.
 |---|---|---|
 | Foundation (Tier 0–1) | Break CRUD, evidence upload with hash dedup, JWT auth, RBAC, tenant isolation | `SecurityAndTenantIsolationIT` green (release-blocking) |
 | AI investigation (Tier 2) | Evidence ingestion, hybrid retrieval, cited proposals, policy gate, maker-checker, hash-chained audit, SSE progress | `InvestigationFlowIT`, `GoldenPathIT`, `AuditChainIT` green |
+| Production hardening | Retry + circuit breaker, PII masking (identifiers + Presidio names), metrics and traces, Angular UI, Redis semantic cache, Kafka outbox, Postgres RLS, cross-instance SSE, daily digest, Keycloak OIDC, audit anchoring, Kubernetes + HPA | Each feature has its own IT on real infrastructure (see section 6); manifests validated on kind |
 | Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Planned — see BRD platform requirements |
 
 **Principles applied in the code** (each is commented at the point of use):
@@ -73,6 +74,7 @@ until that test is green.
 | UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
 | Reporting | Daily digest per tenant (activity from the audit chain, backlog, AI calls, tokens, estimated cost, root causes); SQL-built, advisory-locked so one instance runs it; `DAILY_DIGEST_READY` outbox event | `application/digest/`, `DigestController` |
 | Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
+| Deployment | Multi-stage Dockerfile (non-root JRE); Kubernetes manifests with Kustomize: probes, CPU-based HPA (2 to 6), PDB, hardened pod security; kind overlay with Postgres and Redis | `Dockerfile`, `k8s/` |
 
 Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 
@@ -94,6 +96,8 @@ Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 | Frontend | Angular 20 (standalone components, signals, RxJS), Karma/Jasmine |
 | Testing | JUnit 5, Testcontainers, AssertJ, Awaitility, spring-security-test |
 | Build | Maven (surefire for `*Test`, failsafe for `*IT`) |
+| Deploy | Docker (multi-stage, Temurin 21 JRE, non-root), Kubernetes 1.31 + Kustomize, HPA (autoscaling/v2), kind for local validation, kubeconform in CI |
+| Integrations | Keycloak 26 (OIDC), Microsoft Presidio analyzer, AWS SDK v2 S3 (MinIO locally) |
 
 ---
 
@@ -235,6 +239,13 @@ On AWS leave the endpoint and keys blank (default credential chain, for example 
 idempotent re-run, locked object cannot be deleted, a consistent chain rewrite passes the chain check but fails the
 anchor check, roles and tenant isolation, forged or re-used signatures rejected).
 
+**Kubernetes and autoscaling.** `k8s/` holds a production-shaped `base/` (Deployment with startup, liveness and
+readiness probes, HPA on CPU from 2 to 6 replicas, PodDisruptionBudget, non-root read-only pod) and an
+`overlays/kind/` that adds in-cluster Postgres and Redis. Several replicas are safe because SSE fan-out goes through
+Redis and the scheduled jobs take Postgres advisory locks. Validated on a local kind cluster: clean rollout,
+authenticated API call through the Service, and a scale-up from 2 to 4 pods under load. Steps: [`k8s/README.md`](k8s/README.md).
+CI renders both kustomizations, validates them with kubeconform and builds the image.
+
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
 `simulate transient glitch` fails the first model call and succeeds on retry; `simulate provider outage` fails
 every attempt, so the job ends `FAILED` with reason `LLM_UNAVAILABLE` and the break becomes `FAILED_RETRYABLE`.
@@ -361,6 +372,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 - The Keycloak realm in `docker/keycloak/` is a local demo (synthetic users, shared password, `start-dev`); a production IdP needs HTTPS, its own hostname and managed users.
 - PII masking is not DLP. Without the Presidio sidecar only structured identifiers are masked; with it, names and locations are masked with model accuracy (it can miss unusual names and occasionally mask a non-name). Free-form disclosures (for example a medical detail) are not detected.
 - Audit anchors protect history up to the latest anchor; events written since then are covered only by the in-database chain until the next cycle (15 minutes by default). Anchors prove the chain was not changed afterwards, not that each event was true when written.
+- The HPA scales on CPU only. Investigations wait mostly on the model, so a queue-depth or in-flight-jobs metric (KEDA or a custom metric) would track load better; that is not built.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.

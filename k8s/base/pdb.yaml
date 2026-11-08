@@ -1,0 +1,8 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: reconcile-ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: reconcile-ai }

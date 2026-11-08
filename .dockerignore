@@ -1,0 +1,9 @@
+target/
+ui/node_modules/
+ui/dist/
+npm-global/
+private-docs/
+*.log
+.git/
+docker/
+k8s/

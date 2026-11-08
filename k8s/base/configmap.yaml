@@ -1,0 +1,15 @@
+# Non-secret settings. Secrets (DB passwords, API keys) live in the Secret "reconcile-ai-secrets",
+# which is NOT part of this base: create it with your secret manager / sealed-secrets / external-secrets.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reconcile-ai-config
+data:
+  DB_URL: "jdbc:postgresql://postgres:5432/reconcile"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  CACHE_ENABLED: "true"
+  SSE_FANOUT: "redis"        # several replicas: any pod can serve a progress stream
+  DIGEST_ENABLED: "true"     # safe with N replicas: a Postgres advisory lock lets one pod run it
+  KAFKA_ENABLED: "false"
+  TRACING_ENABLED: "false"

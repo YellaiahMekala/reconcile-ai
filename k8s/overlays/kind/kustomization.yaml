@@ -1,0 +1,14 @@
+# Local demo overlay for a kind cluster: in-cluster Postgres+pgvector and Redis, throwaway credentials.
+# NOT for production: there you point DB_URL/REDIS_HOST at managed services and supply the Secret from a secret manager.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - dev-deps.yaml
+  - dev-secret.yaml
+patches:
+  - path: wait-for-postgres.yaml
+images:
+  - name: reconcile-ai
+    newName: reconcile-ai
+    newTag: local
