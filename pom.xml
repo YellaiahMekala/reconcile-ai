@@ -63,13 +63,18 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
             <exclusions>
-                <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>apache-client</artifactId></exclusion>
                 <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>netty-nio-client</artifactId></exclusion>
             </exclusions>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>url-connection-client</artifactId>
+        </dependency>
+        <!-- Fallback HTTP client, selected by reconcile.audit.anchor.s3.http-client=apache (default: url-connection).
+             It validates pooled connections, which cures "Unexpected end of file from server" on stale keep-alive sockets. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
         </dependency>
         <!-- ===== Observability: Prometheus metrics + OpenTelemetry traces (OTLP). Versions managed by Boot. ===== -->
         <dependency>

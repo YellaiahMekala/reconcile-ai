@@ -6,6 +6,8 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.SdkHttpClient;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -32,8 +34,14 @@ public class S3AnchorStore implements AnchorStore {
 
     public S3AnchorStore(String endpoint, String region, String bucket, String accessKey, String secretKey,
                          boolean pathStyle, String lockMode, boolean createBucketIfMissing) {
+        this(endpoint, region, bucket, accessKey, secretKey, pathStyle, lockMode, createBucketIfMissing, "url-connection");
+    }
+
+    /** @param httpClient {@code url-connection} (default, light) or {@code apache} (pooled, validates stale connections) */
+    public S3AnchorStore(String endpoint, String region, String bucket, String accessKey, String secretKey,
+                         boolean pathStyle, String lockMode, boolean createBucketIfMissing, String httpClient) {
         var b = S3Client.builder()
-            .httpClient(UrlConnectionHttpClient.create())
+            .httpClient(httpClient(httpClient))
             .region(Region.of(region))
             .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(pathStyle).build())
             // MinIO and other S3-compatible servers predate the SDK's default trailing checksums.
@@ -58,6 +66,15 @@ public class S3AnchorStore implements AnchorStore {
                 // already there
             }
         }
+    }
+
+    private static SdkHttpClient httpClient(String kind) {
+        return switch (kind == null ? "url-connection" : kind.trim().toLowerCase()) {
+            case "url-connection" -> UrlConnectionHttpClient.create();
+            // Apache validates a pooled connection that has sat idle before reuse, avoiding "Unexpected end of file from server".
+            case "apache" -> ApacheHttpClient.builder().connectionMaxIdleTime(java.time.Duration.ofSeconds(5)).build();
+            default -> throw new IllegalArgumentException("reconcile.audit.anchor.s3.http-client must be url-connection or apache, was: " + kind);
+        };
     }
 
     @Override

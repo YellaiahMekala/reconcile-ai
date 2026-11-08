@@ -227,7 +227,7 @@ instance via advisory lock) each tenant whose chain moved gets an anchor: `(tena
 signed with Ed25519, written to a bucket with Object Lock (COMPLIANCE mode by default: nobody can delete or overwrite
 it before `retain-until`), and recorded in the append-only `audit_anchor` table. `GET /api/v1/audit/anchors/verify`
 (SRE_ADMIN) re-reads each stored object, checks the signature with the public key, and checks the live chain still has
-that hash at that sequence. Try it locally:
+that hash at that sequence. The S3 client defaults to the light URL-connection HTTP client; if you see transient `Unexpected end of file from server` errors against your S3 endpoint, set `reconcile.audit.anchor.s3.http-client=apache` (pooled client that validates idle connections). Try it locally:
 
 ```powershell
 docker compose -f docker/docker-compose.yml --profile anchor up -d      # MinIO on :9000 (throwaway credentials)

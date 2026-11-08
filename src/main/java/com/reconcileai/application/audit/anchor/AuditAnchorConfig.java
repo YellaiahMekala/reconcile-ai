@@ -29,8 +29,9 @@ public class AuditAnchorConfig {
                             @Value("${reconcile.audit.anchor.s3.secret-key:}") String secretKey,
                             @Value("${reconcile.audit.anchor.s3.path-style:false}") boolean pathStyle,
                             @Value("${reconcile.audit.anchor.lock-mode:COMPLIANCE}") String lockMode,
-                            @Value("${reconcile.audit.anchor.s3.create-bucket:false}") boolean createBucket) {
-        return new S3AnchorStore(endpoint, region, bucket, accessKey, secretKey, pathStyle, lockMode, createBucket);
+                            @Value("${reconcile.audit.anchor.s3.create-bucket:false}") boolean createBucket,
+                            @Value("${reconcile.audit.anchor.s3.http-client:url-connection}") String httpClient) {
+        return new S3AnchorStore(endpoint, region, bucket, accessKey, secretKey, pathStyle, lockMode, createBucket, httpClient);
     }
 
     @Bean
