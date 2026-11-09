@@ -60,13 +60,22 @@ import java.util.Collection;
 @EnableMethodSecurity // REQUIRED: without it every @PreAuthorize annotation is silently ignored.
 public class SecurityConfig {
 
+    /** Same switch as springdoc: when off, the paths below do not exist, so there is nothing to open. */
+    @Value("${springdoc.api-docs.enabled:false}")
+    private boolean swaggerEnabled;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             // Stateless bearer-token API: no cookies, no browser session, so CSRF does not apply.
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
+                if (swaggerEnabled) {
+                    // API docs: spec and UI are public so the page can load; calls made from it still need a JWT.
+                    auth.requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll();
+                }
+                auth
                 // Liveness only. Every other actuator endpoint stays unexposed (see application.yml).
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 // Prometheus scrape: aggregate counters only (no tenant ids, prompts or amounts in any tag).
@@ -82,7 +91,8 @@ public class SecurityConfig {
                 // dispatch, so without this the stream ends with AccessDenied on an already-committed response.
                 .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 // Default-deny: anything not explicitly opened requires a valid JWT.
-                .anyRequest().authenticated())
+                .anyRequest().authenticated();
+            })
             .oauth2ResourceServer(oauth -> oauth
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
         return http.build();
