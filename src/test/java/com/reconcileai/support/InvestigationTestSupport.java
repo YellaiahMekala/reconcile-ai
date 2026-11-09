@@ -20,6 +20,20 @@ public final class InvestigationTestSupport {
         .then().statusCode(202).extract().path("id");
     }
 
+    /** Starts an investigation in AGENT mode (the model picks read-only tools). */
+    public static String startAgent(String bearer, String breakId) {
+        return given().header("Authorization", bearer).contentType(ContentType.JSON)
+            .body("{\"mode\":\"AGENT\"}")
+        .when().post("/api/v1/breaks/" + breakId + "/investigations")
+        .then().statusCode(202).body("mode", org.hamcrest.Matchers.equalTo("AGENT")).extract().path("id");
+    }
+
+    /** Break + one fixture + agent investigation, waits for the job; returns the job JSON. */
+    public static JsonPath investigateWithAgent(String bearer, String breakId, String fixture) {
+        ApiTestSupport.upload(bearer, breakId, fixture, "text/plain");
+        return awaitTerminal(bearer, startAgent(bearer, breakId));
+    }
+
     public static JsonPath awaitTerminal(String bearer, String jobId) {
         JsonPath[] last = new JsonPath[1];
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).until(() -> {

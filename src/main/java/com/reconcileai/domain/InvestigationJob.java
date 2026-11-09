@@ -48,6 +48,10 @@ public class InvestigationJob {
     @Column(name = "analyst_note", length = 1000)
     private String analystNote;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, updatable = false, length = 16)
+    private InvestigationMode mode = InvestigationMode.SINGLE_CALL;
+
     /** Comma-separated vector_store ids that were placed in the prompt. The ONLY ids a proposal may cite. */
     @Column(name = "retrieved_chunk_ids", columnDefinition = "text")
     private String retrievedChunkIds;
@@ -84,6 +88,11 @@ public class InvestigationJob {
     }
 
     public InvestigationJob(String tenantId, UUID breakItemId, String initiatedBy, String analystNote) {
+        this(tenantId, breakItemId, initiatedBy, analystNote, InvestigationMode.SINGLE_CALL);
+    }
+
+    public InvestigationJob(String tenantId, UUID breakItemId, String initiatedBy, String analystNote, InvestigationMode mode) {
+        this.mode = mode == null ? InvestigationMode.SINGLE_CALL : mode;
         this.tenantId = tenantId;
         this.breakItemId = breakItemId;
         this.initiatedBy = initiatedBy;
@@ -137,6 +146,7 @@ public class InvestigationJob {
     public JobStage getStage() { return stage; }
     public String getInitiatedBy() { return initiatedBy; }
     public String getAnalystNote() { return analystNote; }
+    public InvestigationMode getMode() { return mode; }
     public Integer getContextTokenEstimate() { return contextTokenEstimate; }
     public String getFailureReason() { return failureReason; }
     public UUID getProposalId() { return proposalId; }

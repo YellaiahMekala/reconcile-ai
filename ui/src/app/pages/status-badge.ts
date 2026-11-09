@@ -9,9 +9,9 @@ export class StatusBadge {
   readonly value = input.required<string>();
   readonly tone = computed(() => {
     const v = this.value();
-    if (/FAIL|REJECT|QUARANTIN|BLOCK|INVALID/.test(v)) return 'bad';
-    if (/RESOLVED|SUCCEEDED|APPROVED|READY|VALID/.test(v)) return 'ok';
-    if (/PENDING|RUNNING|QUEUED|PROCESSING|MANUAL|INVESTIGAT/.test(v)) return 'warn';
+    if (/FAIL|REJECT|QUARANTIN|BLOCK|INVALID|DENIED|ERROR/.test(v)) return 'bad';
+    if (/RESOLVED|SUCCEEDED|APPROVED|READY|VALID|^OK$/.test(v)) return 'ok';
+    if (/PENDING|RUNNING|QUEUED|PROCESSING|MANUAL|INVESTIGAT|LIMIT|FILTERED/.test(v)) return 'warn';
     return 'neutral';
   });
 }

@@ -13,6 +13,9 @@ import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
 import com.reconcileai.domain.BreakItem;
 import com.reconcileai.domain.EvidenceStatus;
 import com.reconcileai.domain.InvestigationJob;
+import com.reconcileai.domain.InvestigationMode;
+import com.reconcileai.infrastructure.ai.agent.AgentToolCallStore;
+import com.reconcileai.infrastructure.ai.agent.InvestigationAgent;
 import com.reconcileai.domain.JobStatus;
 import com.reconcileai.domain.ResolutionProposal;
 import com.reconcileai.infrastructure.ai.guard.InjectionScanner;
@@ -63,12 +66,17 @@ public class InvestigationService {
     private final TransactionTemplate tx;
     private final TokenBucketRateLimiter rateLimiter;
     private final RateLimitProperties rateLimit;
+    private final InvestigationAgent agent;
+    private final AgentToolCallStore toolCallStore;
 
     public InvestigationService(TenantContext tenantContext, BreakItemRepository breaks, EvidenceRepository evidence,
                                 InvestigationJobRepository jobs, ResolutionProposalRepository proposals,
                                 InvestigationJobRunner runner, InjectionScanner scanner, AuditRecorder audit,
                                 InvestigationProperties props, TransactionTemplate tx,
-                                TokenBucketRateLimiter rateLimiter, RateLimitProperties rateLimit) {
+                                TokenBucketRateLimiter rateLimiter, RateLimitProperties rateLimit,
+                                InvestigationAgent agent, AgentToolCallStore toolCallStore) {
+        this.agent = agent;
+        this.toolCallStore = toolCallStore;
         this.rateLimiter = rateLimiter;
         this.rateLimit = rateLimit;
         this.tenantContext = tenantContext;
@@ -84,7 +92,16 @@ public class InvestigationService {
     }
 
     public InvestigationJob start(UUID breakId, String analystNote) {
+        return start(breakId, analystNote, null);
+    }
+
+    /** @param modeName SINGLE_CALL (or null) for the original flow, AGENT for the tool-using agent */
+    public InvestigationJob start(UUID breakId, String analystNote, String modeName) {
         CurrentUser user = tenantContext.currentUser();
+        InvestigationMode mode = parseMode(modeName);
+        if (mode == InvestigationMode.AGENT && !agent.available()) {
+            throw new InputRejectedException("Agent mode is not enabled on this server");
+        }
         if (rateLimit.enabled()) {
             // Before any DB or model work: a throttled request costs nothing.
             TokenBucketRateLimiter.Decision d = rateLimiter.tryAcquire(user.tenantId());
@@ -117,9 +134,9 @@ public class InvestigationService {
                 }
                 b.markInvestigating(); // throws IllegalBreakStateException (409) if lifecycle forbids it
                 breaks.save(b);
-                InvestigationJob saved = jobs.save(new InvestigationJob(user.tenantId(), breakId, user.subject(), note));
+                InvestigationJob saved = jobs.save(new InvestigationJob(user.tenantId(), breakId, user.subject(), note, mode));
                 audit.record(new AuditEntry(user.tenantId(), "INVESTIGATION_REQUESTED", "BREAK", breakId, user.subject(),
-                    Map.of("jobId", saved.getId().toString())));
+                    Map.of("jobId", saved.getId().toString(), "mode", mode.name())));
                 return saved;
             });
         } catch (DataIntegrityViolationException raceLost) {
@@ -134,6 +151,24 @@ public class InvestigationService {
             throw new CapacityExceededException("Investigation capacity exceeded, retry later");
         }
         return job;
+    }
+
+    /** The tool calls an AGENT job made, in order. Empty for single-call jobs. 404 for another tenant's job. */
+    @Transactional(readOnly = true)
+    public List<AgentToolCallStore.StoredToolCall> toolCalls(UUID jobId) {
+        InvestigationJob job = getJob(jobId);
+        return toolCallStore.find(job.getTenantId(), job.getId());
+    }
+
+    private static InvestigationMode parseMode(String name) {
+        if (name == null || name.isBlank()) {
+            return InvestigationMode.SINGLE_CALL;
+        }
+        try {
+            return InvestigationMode.valueOf(name.strip().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new InputRejectedException("mode must be SINGLE_CALL or AGENT");
+        }
     }
 
     @Transactional(readOnly = true)

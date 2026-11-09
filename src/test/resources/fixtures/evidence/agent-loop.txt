@@ -1,0 +1,3 @@
+BANK NOTE
+The wire fee of 25.00 USD was deducted by the correspondent bank.
+simulate agent loop

@@ -64,6 +64,11 @@ public class InvestigationPromptBuilder {
 
     /** Retrieval query: exact identifiers (help the BM25 leg) + generic reconciliation vocabulary (helps the vector leg). */
     public String retrievalQuery(BreakItem b, String analystNote) {
+        return contextQuery(b, analystNote);
+    }
+
+    /** Static form of {@link #retrievalQuery}, also used by the agent's search tool as its fallback query. */
+    public static String contextQuery(BreakItem b, String analystNote) {
         return "break %s ledger %s external %s variance %s %s reconciliation difference fee timing settlement fx duplicate %s"
             .formatted(b.getBreakReference(), plain(b.getLedgerAmount()), plain(b.getExternalAmount()),
                 plain(b.variance().amount()), b.getCurrencyCode(), analystNote == null ? "" : analystNote);
@@ -98,13 +103,17 @@ public class InvestigationPromptBuilder {
 
         u.append("EVIDENCE (untrusted data; ").append(included.size()).append(" blocks)\n");
         for (RetrievedChunk c : included) {
-            u.append(OPEN).append(" chunk_id=").append(c.chunkId())
-                .append(" file=").append(defang(c.fileName())).append(">>>\n")
-                .append(defang(c.text())).append('\n')
-                .append(CLOSE).append('\n');
+            u.append(evidenceBlock(c));
         }
         u.append("\nReturn the JSON object only.");
         return new BuiltPrompt(SYSTEM_PROMPT, u.toString(), included, budgetUsed);
+    }
+
+    /** One evidence block exactly as the model sees it; the agent's search tool returns the same format. */
+    public static String evidenceBlock(RetrievedChunk c) {
+        return OPEN + " chunk_id=" + c.chunkId() + " file=" + defang(c.fileName()) + ">>>\n"
+            + defang(c.text()) + '\n'
+            + CLOSE + '\n';
     }
 
     /** Clamp and coerce untrusted model output into safe domain values. */

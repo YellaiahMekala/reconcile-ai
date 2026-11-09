@@ -14,7 +14,9 @@ import com.reconcileai.domain.JobStage;
 import com.reconcileai.domain.LlmCallRecord;
 import com.reconcileai.domain.ResolutionProposal;
 import com.reconcileai.domain.RootCauseCategory;
+import com.reconcileai.domain.InvestigationMode;
 import com.reconcileai.infrastructure.ai.InvestigationAiClient;
+import com.reconcileai.infrastructure.ai.agent.InvestigationAgent;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
 import com.reconcileai.infrastructure.ai.cache.SemanticCache;
 import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
@@ -70,6 +72,7 @@ public class InvestigationJobRunner {
     private final HybridRetriever retriever;
     private final InvestigationPromptBuilder promptBuilder;
     private final InvestigationAiClient aiClient;
+    private final InvestigationAgent agent;
     private final CitationVerifier citationVerifier;
     private final PolicyGateService policyGate;
     private final ProposalService proposalService;
@@ -99,7 +102,8 @@ public class InvestigationJobRunner {
                                   InvestigationAiClient aiClient, CitationVerifier citationVerifier,
                                   PolicyGateService policyGate, ProposalService proposalService, AuditRecorder audit,
                                   InvestigationProgressPublisher progress, InvestigationProperties props,
-                                  NodeIdentity node, TransactionTemplate tx) {
+                                  NodeIdentity node, TransactionTemplate tx, InvestigationAgent agent) {
+        this.agent = agent;
         this.executor = executor;
         this.jobs = jobs;
         this.breaks = breaks;
@@ -135,6 +139,10 @@ public class InvestigationJobRunner {
         try {
             InvestigationJob job = stage(jobId, tenantId, JobStage.RETRIEVING, null);
             BreakItem breakItem = breaks.findByIdAndTenantId(job.getBreakItemId(), tenantId).orElseThrow();
+            if (job.getMode() == InvestigationMode.AGENT) {
+                runAgent(jobId, tenantId, job, breakItem);
+                return;
+            }
 
             String query = promptBuilder.retrievalQuery(breakItem, job.getAnalystNote());
             List<RetrievedChunk> ranked = retriever.retrieve(tenantId, breakItem.getId(), query);
@@ -171,30 +179,57 @@ public class InvestigationJobRunner {
             }
 
             stage(jobId, tenantId, JobStage.VERIFYING, null);
-            CitationResult citations = citationVerifier.verify(draft.citedChunkIds(), prompt.includedChunkIds());
+            CitationResult citations = verifyRouteAndPersist(jobId, tenantId, breakItem, draft, prompt.includedChunkIds());
             if (fromModel && citations.valid()) {
                 cache.store(tenantId, prompt, rawDraft); // only verified, grounded drafts are ever cached
             }
-            // No-evidence path has no citations by construction; the UNKNOWN root cause routes it to manual review.
-            boolean citationsOk = citations.valid() || draft.citedChunkIds().isEmpty() && draft.rootCause() == RootCauseCategory.UNKNOWN;
-            stage(jobId, tenantId, JobStage.ROUTING, null);
-            PolicyDecision decision = policyGate.evaluate(
-                new PolicyInput(breakItem.variance(), draft.confidence(), draft.rootCause(), citationsOk));
-
-            final NormalizedDraft finalDraft = draft;
-            InvestigationJob done = tx.execute(s -> {
-                InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
-                BreakItem b = breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).orElseThrow();
-                ResolutionProposal p = proposalService.persistProposal(j, b, finalDraft, citations.valid(),
-                    citations.invalidIds(), decision);
-                j.succeed(p.getId());
-                return jobs.save(j);
-            });
-            progress.publish(done);
         } catch (Exception e) {
             log.warn("Investigation {} failed: {}", jobId, e.toString());
             failJob(jobId, tenantId, reasonOf(e));
         }
+    }
+
+    /**
+     * Agent mode: the model gathers evidence through read-only tools, then drafts. Only chunk ids that a search tool
+     * returned during the run may be cited. Everything after the draft is shared with the single-call mode.
+     */
+    private void runAgent(UUID jobId, String tenantId, InvestigationJob job, BreakItem breakItem) {
+        stage(jobId, tenantId, JobStage.CALLING_MODEL, null);
+        InvestigationAgent.Result result = agent.run(tenantId, breakItem.getId(), jobId, job.getAnalystNote());
+        List<String> snapshot = result.retrievedChunkIds();
+
+        NormalizedDraft draft = InvestigationPromptBuilder.normalize(result.draft());
+        if (snapshot.isEmpty()) {
+            // Same rule as the single-call mode: nothing citable was found, so nothing is proposed.
+            draft = new NormalizedDraft(RootCauseCategory.UNKNOWN,
+                "The agent found no usable evidence (none uploaded, none relevant, or all quarantined).",
+                "Upload evidence that explains the variance, then re-run the investigation.",
+                BigDecimal.ZERO.setScale(3), List.of());
+        }
+        stage(jobId, tenantId, JobStage.VERIFYING, j -> j.recordRetrieval(snapshot, 0));
+        verifyRouteAndPersist(jobId, tenantId, breakItem, draft, snapshot);
+    }
+
+    /** Citation check against the retrieval snapshot, policy gate, then proposal + job SUCCEEDED in one transaction. */
+    private CitationResult verifyRouteAndPersist(UUID jobId, String tenantId, BreakItem breakItem, NormalizedDraft draft,
+                                                 List<String> snapshotChunkIds) {
+        CitationResult citations = citationVerifier.verify(draft.citedChunkIds(), snapshotChunkIds);
+        // No-evidence path has no citations by construction; the UNKNOWN root cause routes it to manual review.
+        boolean citationsOk = citations.valid() || draft.citedChunkIds().isEmpty() && draft.rootCause() == RootCauseCategory.UNKNOWN;
+        stage(jobId, tenantId, JobStage.ROUTING, null);
+        PolicyDecision decision = policyGate.evaluate(
+            new PolicyInput(breakItem.variance(), draft.confidence(), draft.rootCause(), citationsOk));
+
+        InvestigationJob done = tx.execute(s -> {
+            InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            BreakItem b = breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).orElseThrow();
+            ResolutionProposal p = proposalService.persistProposal(j, b, draft, citations.valid(),
+                citations.invalidIds(), decision);
+            j.succeed(p.getId());
+            return jobs.save(j);
+        });
+        progress.publish(done);
+        return citations;
     }
 
     /** Marks a job FAILED and its break FAILED_RETRYABLE in one transaction. Idempotent for terminal jobs. */

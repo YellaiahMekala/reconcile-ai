@@ -15,5 +15,9 @@ describe('StatusBadge', () => {
     expect(render('PENDING_L1').className).toContain('warn');
     expect(render('INVALID').className).toContain('bad');
     expect(render('OPEN').className).toContain('neutral');
+    // agent tool-call outcomes
+    expect(render('OK').className).toContain('ok');
+    expect(render('DENIED').className).toContain('bad');
+    expect(render('INJECTION_FILTERED').className).toContain('warn');
   });
 });

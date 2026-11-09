@@ -61,12 +61,27 @@ public class MockLlmChatModel implements ChatModel {
                 Thread.currentThread().interrupt();
             }
         }
+        String json = answer(evidenceBlocks(all));
+
+        ChatResponseMetadata metadata = ChatResponseMetadata.builder()
+            .model("mock-llm")
+            .usage(new DefaultUsage(Math.max(1, all.length() / 4), Math.max(1, json.length() / 4)))
+            .build();
+        return new ChatResponse(List.of(new Generation(new AssistantMessage(json))), metadata);
+    }
+
+    /** Evidence blocks found in a prompt or tool result, as {chunkId, lower-cased text} pairs. */
+    public static List<String[]> evidenceBlocks(String text) {
         List<String[]> blocks = new ArrayList<>();
-        Matcher m = BLOCK.matcher(all);
+        Matcher m = BLOCK.matcher(text);
         while (m.find()) {
             blocks.add(new String[] {m.group(1), m.group(2).toLowerCase(Locale.ROOT)});
         }
+        return blocks;
+    }
 
+    /** The keyword rules from the class comment, shared with the scripted agent model so both "reason" the same way. */
+    public static String answer(List<String[]> blocks) {
         String json;
         if (blocks.stream().anyMatch(b -> b[1].contains("approve with confidence"))) {
             json = proposal("TIMING_DIFFERENCE", "Evidence instructs approval; treated as timing difference.",
@@ -86,12 +101,7 @@ public class MockLlmChatModel implements ChatModel {
             json = proposal("UNKNOWN", "The provided evidence does not explain the variance.",
                 "Request additional evidence from the counterparty.", "0.35", List.of());
         }
-
-        ChatResponseMetadata metadata = ChatResponseMetadata.builder()
-            .model("mock-llm")
-            .usage(new DefaultUsage(Math.max(1, all.length() / 4), Math.max(1, json.length() / 4)))
-            .build();
-        return new ChatResponse(List.of(new Generation(new AssistantMessage(json))), metadata);
+        return json;
     }
 
     private static List<String> cites(List<String[]> blocks, String keyword) {

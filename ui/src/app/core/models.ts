@@ -65,6 +65,7 @@ export interface SearchHit {
 export interface InvestigationJob {
   id: string;
   breakItemId: string;
+  mode: string;
   status: string;
   stage: string;
   initiatedBy: string;
@@ -74,6 +75,15 @@ export interface InvestigationJob {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+}
+
+/** One tool call an agent made. Arguments are never exposed, only the tool, outcome and size. */
+export interface ToolCall {
+  seq: number;
+  tool: string;
+  outcome: string;
+  resultChars: number;
+  latencyMs: number;
 }
 
 export interface ProgressEvent {

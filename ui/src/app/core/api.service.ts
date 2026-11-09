@@ -12,6 +12,7 @@ import {
   ProgressEvent,
   Proposal,
   SearchHit,
+  ToolCall,
 } from './models';
 import { sseStream } from './sse';
 
@@ -51,11 +52,16 @@ export class ApiService {
     return this.http.get<SearchHit[]>(`/api/v1/breaks/${breakId}/evidence/search`, { params: { q } });
   }
 
-  startInvestigation(breakId: string, analystNote?: string): Observable<InvestigationJob> {
-    return this.http.post<InvestigationJob>(
-      `/api/v1/breaks/${breakId}/investigations`,
-      analystNote ? { analystNote } : {},
-    );
+  /** mode 'AGENT' lets the model pick read-only tools; leaving it out keeps the single-call flow. */
+  startInvestigation(breakId: string, analystNote?: string, mode?: 'AGENT'): Observable<InvestigationJob> {
+    return this.http.post<InvestigationJob>(`/api/v1/breaks/${breakId}/investigations`, {
+      ...(analystNote ? { analystNote } : {}),
+      ...(mode ? { mode } : {}),
+    });
+  }
+
+  toolCalls(jobId: string): Observable<ToolCall[]> {
+    return this.http.get<ToolCall[]>(`/api/v1/investigations/${jobId}/tool-calls`);
   }
 
   getJob(jobId: string): Observable<InvestigationJob> {

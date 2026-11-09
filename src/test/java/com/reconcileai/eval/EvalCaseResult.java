@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * What the pipeline did with one case. A failed job has no proposal, so most fields are null and
- * {@code failureReason} says why.
+ * {@code failureReason} says why. {@code toolTrace} is only filled in agent mode: tool, outcome and result size of each call.
  */
 public record EvalCaseResult(
     String caseId,
@@ -23,7 +23,8 @@ public record EvalCaseResult(
     int completionTokens,
     long llmLatencyMs,
     long wallMs,
-    String model
+    String model,
+    String toolTrace
 ) {
     public boolean rootCauseCorrect() {
         return jobSucceeded && expectedRootCause.equals(rootCause);
