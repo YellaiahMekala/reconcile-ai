@@ -39,7 +39,10 @@ public abstract class AbstractPostgresIT {
         DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"))
         .withDatabaseName("reconcile")
         .withUsername("reconcile")
-        .withPassword("reconcile");
+        .withPassword("reconcile")
+        // Every cached Spring context (one per distinct set of test properties) keeps its own Hikari pool open for the whole
+        // run; the stock limit of 100 connections is used up once a dozen contexts are cached.
+        .withCommand("postgres", "-c", "max_connections=400");
 
     static {
         POSTGRES.start();

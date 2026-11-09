@@ -4,6 +4,9 @@ import com.reconcileai.application.BreakNotFoundException;
 import com.reconcileai.application.CapacityExceededException;
 import com.reconcileai.application.ConflictException;
 import com.reconcileai.application.InputRejectedException;
+import com.reconcileai.application.RateLimitExceededException;
+import com.reconcileai.infrastructure.security.RateLimitProperties;
+import com.reconcileai.infrastructure.security.TokenBucketRateLimiter;
 import com.reconcileai.application.NotFoundException;
 import com.reconcileai.application.audit.AuditRecorder;
 import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
@@ -35,7 +38,7 @@ import java.util.concurrent.RejectedExecutionException;
  *
  * <h2>Start flow</h2>
  * <pre>
- *  1. identity = JWT (captured HERE, on the request thread)
+ *  1. identity = JWT (captured HERE, on the request thread); per-tenant rate limit                -> 429
  *  2. note checks (length, injection tripwire)                  -> 400, zero tokens
  *  3. TX: break (tenant) -> canStartInvestigation              -> 404 / 409 ILLEGAL_BREAK_STATE
  *         evidence READY >= 1 and PROCESSING == 0               -> 409 EVIDENCE_NOT_READY
@@ -58,11 +61,16 @@ public class InvestigationService {
     private final AuditRecorder audit;
     private final InvestigationProperties props;
     private final TransactionTemplate tx;
+    private final TokenBucketRateLimiter rateLimiter;
+    private final RateLimitProperties rateLimit;
 
     public InvestigationService(TenantContext tenantContext, BreakItemRepository breaks, EvidenceRepository evidence,
                                 InvestigationJobRepository jobs, ResolutionProposalRepository proposals,
                                 InvestigationJobRunner runner, InjectionScanner scanner, AuditRecorder audit,
-                                InvestigationProperties props, TransactionTemplate tx) {
+                                InvestigationProperties props, TransactionTemplate tx,
+                                TokenBucketRateLimiter rateLimiter, RateLimitProperties rateLimit) {
+        this.rateLimiter = rateLimiter;
+        this.rateLimit = rateLimit;
         this.tenantContext = tenantContext;
         this.breaks = breaks;
         this.evidence = evidence;
@@ -77,6 +85,13 @@ public class InvestigationService {
 
     public InvestigationJob start(UUID breakId, String analystNote) {
         CurrentUser user = tenantContext.currentUser();
+        if (rateLimit.enabled()) {
+            // Before any DB or model work: a throttled request costs nothing.
+            TokenBucketRateLimiter.Decision d = rateLimiter.tryAcquire(user.tenantId());
+            if (!d.allowed()) {
+                throw new RateLimitExceededException(d.retryAfterSeconds());
+            }
+        }
         String note = analystNote == null || analystNote.isBlank() ? null : analystNote.strip();
         if (note != null && note.length() > props.maxAnalystNoteChars()) {
             throw new InputRejectedException("Analyst note exceeds " + props.maxAnalystNoteChars() + " characters");

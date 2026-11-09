@@ -15,6 +15,9 @@ public interface EvidenceRepository extends Repository<Evidence, UUID> {
 
     Evidence save(Evidence evidence);
 
+    /** Writes the row now. Needed before a plain-JDBC insert that has a foreign key to it (evidence_content). */
+    Evidence saveAndFlush(Evidence evidence);
+
     /** All evidence for one break, restricted to the caller's tenant. */
     List<Evidence> findByBreakItemIdAndTenantIdOrderByCreatedAtAsc(UUID breakItemId, String tenantId);
 

@@ -7,6 +7,7 @@ import com.reconcileai.application.ConflictException;
 import com.reconcileai.application.DuplicateBreakReferenceException;
 import com.reconcileai.application.ForbiddenOperationException;
 import com.reconcileai.application.InputRejectedException;
+import com.reconcileai.application.RateLimitExceededException;
 import com.reconcileai.application.NotFoundException;
 import com.reconcileai.domain.IllegalBreakStateException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -82,6 +83,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> capacity(CapacityExceededException e) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "30")
             .body(ApiError.of("CAPACITY_EXCEEDED", e.getMessage()));
+    }
+
+    /** Per-tenant throttle on model-triggering requests. */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiError> rateLimited(RateLimitExceededException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header("Retry-After", String.valueOf(e.getRetryAfterSeconds()))
+            .body(ApiError.of("RATE_LIMITED", e.getMessage()));
     }
 
     /** Lifecycle conflicts (e.g. uploading evidence while PENDING_L1). */
