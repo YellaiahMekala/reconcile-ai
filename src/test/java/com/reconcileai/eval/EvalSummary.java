@@ -60,11 +60,28 @@ public record EvalSummary(
         if (r.model() == null) {
             return BigDecimal.ZERO;
         }
-        BigDecimal in = new BigDecimal(pricing.getProperty(r.model() + ".input", "0"));
-        BigDecimal out = new BigDecimal(pricing.getProperty(r.model() + ".output", "0"));
+        String key = pricingKey(r.model(), pricing);
+        BigDecimal in = new BigDecimal(pricing.getProperty(key + ".input", "0"));
+        BigDecimal out = new BigDecimal(pricing.getProperty(key + ".output", "0"));
         return in.multiply(BigDecimal.valueOf(r.promptTokens()))
             .add(out.multiply(BigDecimal.valueOf(r.completionTokens())))
             .divide(BigDecimal.valueOf(1_000_000), 10, RoundingMode.HALF_UP);
+    }
+
+    /** The API reports dated names such as gpt-4o-mini-2024-07-18; price them as the longest listed family name. */
+    private static String pricingKey(String model, Properties pricing) {
+        String best = model;
+        int bestLen = pricing.containsKey(model + ".input") ? model.length() : -1;
+        for (String name : pricing.stringPropertyNames()) {
+            if (name.endsWith(".input")) {
+                String family = name.substring(0, name.length() - ".input".length());
+                if (model.startsWith(family) && family.length() > bestLen) {
+                    best = family;
+                    bestLen = family.length();
+                }
+            }
+        }
+        return best;
     }
 
     private static double share(List<EvalCaseResult> rows, Predicate<EvalCaseResult> test) {

@@ -7,12 +7,12 @@ import java.util.UUID;
 
 /** Job status for polling. Deliberately excludes analyst note text and retrieved chunk ids. */
 public record InvestigationJobResponse(
-    UUID id, UUID breakItemId, String status, String stage, String initiatedBy,
+    UUID id, UUID breakItemId, String mode, String status, String stage, String initiatedBy,
     Integer contextTokenEstimate, String failureReason, UUID proposalId,
     Instant createdAt, Instant startedAt, Instant finishedAt
 ) {
     public static InvestigationJobResponse from(InvestigationJob j) {
-        return new InvestigationJobResponse(j.getId(), j.getBreakItemId(), j.getStatus().name(), j.getStage().name(),
+        return new InvestigationJobResponse(j.getId(), j.getBreakItemId(), j.getMode().name(), j.getStatus().name(), j.getStage().name(),
             j.getInitiatedBy(), j.getContextTokenEstimate(), j.getFailureReason(), j.getProposalId(),
             j.getCreatedAt(), j.getStartedAt(), j.getFinishedAt());
     }

@@ -99,6 +99,12 @@ spring:
 # Application tuning knobs (bound to @ConfigurationProperties classes)
 # ---------------------------------------------------------------------------
 reconcile:
+  agent:                            # investigation agent (Phase 4B): the model picks read-only tools; off by default
+    enabled: ${AGENT_ENABLED:false}
+    max-tool-calls: 6
+    max-model-turns: 8              # each tool round trip is one turn
+    timeout-seconds: 60
+    max-tool-result-chars: 4000
   ratelimit:                        # per tenant, on POST /investigations (each one can start paid model calls)
     enabled: ${RATE_LIMIT_ENABLED:true}
     capacity: 20                    # burst size

@@ -5,6 +5,7 @@ import com.reconcileai.api.dto.ProposalResponse;
 import com.reconcileai.application.investigation.InvestigationEventsService;
 import com.reconcileai.application.investigation.InvestigationService;
 import com.reconcileai.domain.InvestigationJob;
+import com.reconcileai.infrastructure.ai.agent.AgentToolCallStore;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,6 +28,7 @@ import java.util.UUID;
  *  POST /api/v1/breaks/{breakId}/investigations   RECON_ANALYST   202 | 400 | 404 | 409 | 503
  *  GET  /api/v1/investigations/{jobId}            any app role    200 | 404
  *  GET  /api/v1/investigations/{jobId}/events     any app role    text/event-stream | 404 | 503
+ *  GET  /api/v1/investigations/{jobId}/tool-calls any app role    200 | 404
  *  GET  /api/v1/breaks/{breakId}/proposals        any app role    200 | 404
  *  GET  /api/v1/proposals/{proposalId}            any app role    200 | 404
  * </pre>
@@ -45,15 +47,18 @@ public class InvestigationController {
         this.events = events;
     }
 
-    /** Optional body. No tenant, break, or user fields: those come from the path and the JWT. */
-    public record StartInvestigationRequest(@Size(max = 1000) String analystNote) {}
+    /**
+     * Optional body. No tenant, break, or user fields: those come from the path and the JWT.
+     * {@code mode} is SINGLE_CALL (default) or AGENT; AGENT also needs reconcile.agent.enabled=true.
+     */
+    public record StartInvestigationRequest(@Size(max = 1000) String analystNote, @Size(max = 16) String mode) {}
 
     @PostMapping("/api/v1/breaks/{breakId}/investigations")
     @PreAuthorize("hasRole('RECON_ANALYST')")
     public ResponseEntity<InvestigationJobResponse> start(@PathVariable UUID breakId,
                                                           @RequestBody(required = false) StartInvestigationRequest body,
                                                           UriComponentsBuilder uri) {
-        InvestigationJob job = service.start(breakId, body == null ? null : body.analystNote());
+        InvestigationJob job = service.start(breakId, body == null ? null : body.analystNote(), body == null ? null : body.mode());
         return ResponseEntity.status(HttpStatus.ACCEPTED)
             .location(uri.path("/api/v1/investigations/{id}").buildAndExpand(job.getId()).toUri())
             .body(InvestigationJobResponse.from(job));
@@ -70,6 +75,13 @@ public class InvestigationController {
     @PreAuthorize(ANY_APP_ROLE)
     public SseEmitter jobEvents(@PathVariable UUID jobId) {
         return events.subscribe(jobId);
+    }
+
+    /** What the agent looked at: tool, outcome and size per call, never the arguments. */
+    @GetMapping("/api/v1/investigations/{jobId}/tool-calls")
+    @PreAuthorize(ANY_APP_ROLE)
+    public List<AgentToolCallStore.StoredToolCall> toolCalls(@PathVariable UUID jobId) {
+        return service.toolCalls(jobId);
     }
 
     @GetMapping("/api/v1/breaks/{breakId}/proposals")

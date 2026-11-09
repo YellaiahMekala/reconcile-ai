@@ -57,6 +57,6 @@ class EvalCaseLoaderTest {
     private static EvalCaseResult result(String id, String expRoot, String root, String expRoute, String route,
                                          int prompt, int completion, long wall) {
         return new EvalCaseResult(id, List.of("fee"), expRoot, expRoute, true, null, root, route, "STANDARD", true,
-            List.of("f.txt"), List.of(), prompt, completion, wall, wall, "m");
+            List.of("f.txt"), List.of(), prompt, completion, wall, wall, "m", null);
     }
 }

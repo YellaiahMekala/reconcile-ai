@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Subscription, interval, switchMap, takeWhile } from 'rxjs';
 import { ApiService, errorText } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
-import { AuditEvent, BreakItem, Evidence, ProgressEvent, Proposal, SearchHit } from '../core/models';
+import { AuditEvent, BreakItem, Evidence, ProgressEvent, Proposal, SearchHit, ToolCall } from '../core/models';
 import { StatusBadge } from './status-badge';
 
 const STAGES = ['QUEUED', 'RETRIEVING', 'CALLING_MODEL', 'VERIFYING', 'ROUTING', 'COMPLETED'];
@@ -69,6 +69,10 @@ const STAGES = ['QUEUED', 'RETRIEVING', 'CALLING_MODEL', 'VERIFYING', 'ROUTING',
           <form class="col" (ngSubmit)="investigate()">
             <textarea name="note" [(ngModel)]="note" maxlength="1000" rows="2"
               placeholder="Optional analyst note (scanned for prompt injection)"></textarea>
+            <label class="muted">
+              <input type="checkbox" name="agent" [(ngModel)]="agentMode" />
+              Agent mode: the model chooses read-only tools to look at the evidence
+            </label>
             <button type="submit" [disabled]="running()">Run AI investigation</button>
           </form>
         }
@@ -82,6 +86,16 @@ const STAGES = ['QUEUED', 'RETRIEVING', 'CALLING_MODEL', 'VERIFYING', 'ROUTING',
           <p><app-status [value]="p.status" />
             @if (p.failureReason) { <span class="error">{{ p.failureReason }}</span> }
           </p>
+        }
+
+        @if (toolCalls().length > 0) {
+          <h3>What the agent looked at</h3>
+          <ol class="toolcalls">
+            @for (c of toolCalls(); track c.seq) {
+              <li>{{ c.tool }} <app-status [value]="c.outcome" />
+                <span class="muted">{{ c.resultChars }} chars · {{ c.latencyMs }} ms</span></li>
+            }
+          </ol>
         }
 
         @for (p of proposals(); track p.id) {
@@ -137,10 +151,12 @@ export class BreakDetailPage implements OnInit, OnDestroy {
   readonly proposals = signal<Proposal[]>([]);
   readonly audit = signal<AuditEvent[]>([]);
   readonly progress = signal<ProgressEvent | null>(null);
+  readonly toolCalls = signal<ToolCall[]>([]);
   readonly running = signal(false);
   readonly error = signal<string | null>(null);
   query = '';
   note = '';
+  agentMode = false;
   private subs = new Subscription();
 
   ngOnInit(): void {
@@ -196,10 +212,15 @@ export class BreakDetailPage implements OnInit, OnDestroy {
     });
   }
 
+  private loadToolCalls(jobId: string): void {
+    this.api.toolCalls(jobId).subscribe({ next: (c) => this.toolCalls.set(c), error: () => this.toolCalls.set([]) });
+  }
+
   investigate(): void {
     this.error.set(null);
     this.running.set(true);
-    this.api.startInvestigation(this.id(), this.note || undefined).subscribe({
+    this.toolCalls.set([]);
+    this.api.startInvestigation(this.id(), this.note || undefined, this.agentMode ? 'AGENT' : undefined).subscribe({
       next: (job) => {
         this.progress.set({ jobId: job.id, breakItemId: job.breakItemId, status: job.status, stage: job.stage,
           proposalId: null, failureReason: null, terminal: false, at: job.createdAt });
@@ -210,6 +231,7 @@ export class BreakDetailPage implements OnInit, OnDestroy {
               if (p.terminal) {
                 this.running.set(false);
                 this.refresh();
+                if (this.agentMode) this.loadToolCalls(job.id);
               }
             },
             // Stream dropped (proxy, timeout): fall back to one REST read of the job.

@@ -22,10 +22,17 @@ public final class EvalRunner {
 
     private final String bearer;
     private final JdbcTemplate admin;
+    private final boolean agentMode;
 
     public EvalRunner(String bearer, JdbcTemplate admin) {
+        this(bearer, admin, false);
+    }
+
+    /** @param agentMode true to start every investigation in AGENT mode instead of the single-call mode */
+    public EvalRunner(String bearer, JdbcTemplate admin, boolean agentMode) {
         this.bearer = bearer;
         this.admin = admin;
+        this.agentMode = agentMode;
     }
 
     public List<EvalCaseResult> runAll(List<EvalCase> cases) {
@@ -47,7 +54,9 @@ public final class EvalRunner {
         }
 
         long started = System.nanoTime();
-        JsonPath job = InvestigationTestSupport.awaitTerminal(bearer, InvestigationTestSupport.start(bearer, breakId, null));
+        String jobStarted = agentMode ? InvestigationTestSupport.startAgent(bearer, breakId)
+            : InvestigationTestSupport.start(bearer, breakId, null);
+        JsonPath job = InvestigationTestSupport.awaitTerminal(bearer, jobStarted);
         long wallMs = (System.nanoTime() - started) / 1_000_000;
 
         String jobId = job.getString("id");
@@ -63,7 +72,7 @@ public final class EvalRunner {
         if (!"SUCCEEDED".equals(job.getString("status"))) {
             return new EvalCaseResult(c.id(), c.tags(), c.expected().rootCause(), c.expected().route(), false,
                 job.getString("failureReason"), null, null, null, null, List.of(), c.expected().mustCiteEvidence(),
-                prompt, completion, llmMs, wallMs, model);
+                prompt, completion, llmMs, wallMs, model, toolTrace(jobId));
         }
 
         JsonPath p = InvestigationTestSupport.proposal(bearer, job.getString("proposalId"));
@@ -76,6 +85,16 @@ public final class EvalRunner {
 
         return new EvalCaseResult(c.id(), c.tags(), c.expected().rootCause(), c.expected().route(), true, null,
             p.getString("rootCause"), p.getString("route"), p.getString("routeReason"), p.getBoolean("citationsValid"),
-            citedFiles, missing, prompt, completion, llmMs, wallMs, model);
+            citedFiles, missing, prompt, completion, llmMs, wallMs, model, toolTrace(jobId));
+    }
+
+    /** One short line per run, e.g. getBreakSummary:OK:120 > searchEvidence:OK:43; null outside agent mode. */
+    private String toolTrace(String jobId) {
+        if (!agentMode) {
+            return null;
+        }
+        return String.join(" > ", admin.queryForList(
+            "SELECT tool || ':' || outcome || ':' || result_chars FROM agent_tool_call WHERE job_id = ?::uuid ORDER BY seq",
+            String.class, jobId));
     }
 }

@@ -22,11 +22,15 @@ final class EvalHarness {
     private EvalHarness() {}
 
     static Outcome runAndReport(JdbcTemplate admin, String label, String notes) {
+        return runAndReport(admin, label, notes, false);
+    }
+
+    static Outcome runAndReport(JdbcTemplate admin, String label, String notes, boolean agentMode) {
         List<EvalCase> cases = new EvalCaseLoader().loadAll();
         String bearer = JwtTestSupport.bearer("eval-analyst", "TENANT_EVAL_" + UUID.randomUUID().toString().substring(0, 8),
             List.of("RECON_ANALYST"));
 
-        List<EvalCaseResult> results = new EvalRunner(bearer, admin).runAll(cases);
+        List<EvalCaseResult> results = new EvalRunner(bearer, admin, agentMode).runAll(cases);
         EvalSummary summary = EvalSummary.of(results, pricing());
         Path[] files = new EvalReportWriter().write(REPORT_DIR, label, notes, summary, results, HumanScores.load(HUMAN_SCORES));
         System.out.println("[eval] " + label + ": root-cause " + summary.rootCauseAccuracy() + ", route " + summary.routeAccuracy()

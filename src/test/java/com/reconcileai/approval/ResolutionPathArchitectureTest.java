@@ -40,6 +40,21 @@ class ResolutionPathArchitectureTest {
         }
     }
 
+    @Test
+    void theAgentPackageNeverTouchesTheCommitPathAndItsToolsOnlyRead() throws IOException {
+        try (Stream<Path> files = Files.walk(MAIN.resolve("com/reconcileai/infrastructure/ai/agent"))) {
+            for (Path f : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String src = Files.readString(f);
+                assertThat(src).as(f.toString()).doesNotContain("ResolutionCommitService")
+                    .doesNotContain(".markResolved(").doesNotContain(".markApproved(");
+            }
+        }
+        // The tools hold no way to write: no save, delete or SQL in the class the model can reach.
+        String tools = Files.readString(MAIN.resolve("com/reconcileai/infrastructure/ai/agent/ReconTools.java"));
+        assertThat(tools).doesNotContain(".save(").doesNotContain(".delete").doesNotContain("JdbcTemplate")
+            .doesNotContain("ApprovalService").doesNotContain("ProposalService");
+    }
+
     private static List<String> callersOf(String call) throws IOException {
         try (Stream<Path> files = Files.walk(MAIN)) {
             return files.filter(p -> p.toString().endsWith(".java"))

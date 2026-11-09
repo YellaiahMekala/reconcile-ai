@@ -43,7 +43,7 @@ until that test is green.
 | Production hardening | Retry + circuit breaker, PII masking (identifiers + Presidio names), metrics and traces, Angular UI, Redis semantic cache, Kafka outbox, Postgres RLS, cross-instance SSE, daily digest, Keycloak OIDC, audit anchoring, Kubernetes + HPA | Each feature has its own IT on real infrastructure (see section 6); manifests validated on kind |
 | Gap closure (4F) | Original evidence file kept and downloadable, per-tenant rate limit on investigations, optional Swagger UI, SBOM and image scan in CI | `EvidenceContentIT`, `RateLimitIT`, `SwaggerEnabledIT`, `TokenBucketRateLimiterTest` |
 | Evaluation harness (4A) | 28 labelled synthetic breaks run through the real pipeline; accuracy, citation and retrieval numbers per leg; mock-llm regression gate in the build; real-model run on request | `EvalCaseLoaderTest`, `InvestigationEvalIT`, `RetrievalEvalIT` |
-| Agents and cloud (rest of Phase 4) | LangChain4j investigation agent with read-only audited tools, Alertmanager e-mail alerts, Amazon Bedrock adapter, AWS deployment with Terraform | Planned (4B to 4E) — see section 9 |
+| Agents and cloud (rest of Phase 4) | LangChain4j investigation agent with read-only audited tools, Alertmanager e-mail alerts, Amazon Bedrock adapter, AWS deployment with Terraform | 4B built, 4C to 4E planned — see section 9 |
 | AI quality, agents and cloud (Phase 4) | Evaluation harness with published numbers, LangChain4j investigation agent with read-only audited tools, Alertmanager e-mail alerts, Amazon Bedrock adapter, AWS deployment with Terraform | Planned — see section 9 |
 | Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Planned — see BRD platform requirements |
 
@@ -336,8 +336,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **73 unit tests** (surefire), **101 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **12 UI specs** (Karma).
-Current counts: **69 unit tests** (surefire), **99 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **12 UI specs** (Karma).
+Current counts: **83 unit tests** (surefire), **121 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -403,7 +402,17 @@ mvn verify -Dfailsafe.excludedGroups=ollama -Dit.test=OpenAiInvestigationEvalIT
 ```
 
 Optional human scoring: fill `eval/human-scores.csv` (clarity and faithfulness, 1 to 5); averages are added to the report.
-Real-model numbers are not published yet: the first OpenAI run is pending.
+Real-model run (2026-11-09, gpt-4o-mini, temperature 0, 28 cases, test hashing embeddings so only chat is real):
+
+| | Single call | Agent |
+|---|---|---|
+| Root-cause accuracy | 96.4% | 100% |
+| Route accuracy | 89.3% | 57.1% (right cause, low confidence, so manual review) |
+| Citations verified / required evidence cited | 96% / 100% | 100% / 100% |
+| Latency p50 | 2.5 s | 9.5 s |
+| Cost per case | $0.00015 | $0.0012 |
+
+Single call stays the default: on this data the agent costs 8x for no real gain. The first agent run exposed a bug (model-written search queries found nothing), fixed and covered by `AgentSearchQueryIT`. Details: `docs/proof/phase4-openai-eval.md`. 28 synthetic cases is a sanity check, not a benchmark.
 
 ---
 
@@ -447,9 +456,8 @@ number. Nothing calls a paid API or creates cloud resources unless explicitly en
 
 | Order | Feature | Design in one line | Local testing | Real mode |
 |---|---|---|---|---|
-| 4A | **Evaluation harness** (built; real-model run pending) | 24–30 labelled synthetic breaks run through the real pipeline; root-cause and route accuracy, citation precision/recall, retrieval recall@5 and MRR per leg, p95 latency, tokens and cost per investigation | `mock-llm` baseline as a CI regression gate | OpenAI run, numbers published in `docs/proof/` |
-| 4A | **Evaluation harness** | 24–30 labelled synthetic breaks run through the real pipeline; root-cause and route accuracy, citation precision/recall, retrieval recall@5 and MRR per leg, p95 latency, tokens and cost per investigation | `mock-llm` baseline as a CI regression gate | OpenAI run, numbers published in `docs/proof/` |
-| 4B | **LangChain4j investigation agent** | Optional `AGENT` mode: the model picks read-only tools (`getBreakSummary`, `listEvidence`, `searchEvidence`, `findSimilarResolvedBreaks`); tenant bound from the job, never a tool argument; tool output masked and injection-scanned; every call audited; the agent only drafts, so citation check, policy gate and maker-checker are unchanged | Scripted fake model | OpenAI; single-call vs agent comparison |
+| 4A | **Evaluation harness** (built; live run done) | 24–30 labelled synthetic breaks run through the real pipeline; root-cause and route accuracy, citation precision/recall, retrieval recall@5 and MRR per leg, p95 latency, tokens and cost per investigation | `mock-llm` baseline as a CI regression gate | OpenAI run, numbers published in `docs/proof/` |
+| 4B | **LangChain4j investigation agent** (built; live run done) | Optional `AGENT` mode: the model picks read-only tools (`getBreakSummary`, `listEvidence`, `searchEvidence`, `findSimilarResolvedBreaks`); tenant bound from the job, never a tool argument; tool output masked and injection-scanned; every call audited; the agent only drafts, so citation check, policy gate and maker-checker are unchanged | Scripted fake model (19 agent ITs, 9 unit tests); enable with `AGENT_ENABLED=true`, start with `{"mode":"AGENT"}`; tool calls at `GET /api/v1/investigations/{id}/tool-calls` | OpenAI; `OpenAiAgentEvalIT` single-call vs agent comparison |
 | 4C | **Alert delivery** | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink | Real SMTP via `.env` |
 | 4D | **Amazon Bedrock** | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API | AWS credentials; OpenAI vs Bedrock comparison |
 | 4E | **AWS deployment** | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov | Manual, approval-gated apply |
