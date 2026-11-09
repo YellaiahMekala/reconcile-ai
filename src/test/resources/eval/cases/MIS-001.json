@@ -1,0 +1,4 @@
+{"id":"MIS-001","ledgerAmount":"4200.00","externalAmount":"3000.00","currency":"USD",
+ "evidence":["mis-001-bank-statement.txt"],
+ "expected":{"rootCause":"MISSING_ENTRY","route":"L1_APPROVAL","mustCiteEvidence":["mis-001-bank-statement.txt"]},
+ "tags":["missing","clean"]}

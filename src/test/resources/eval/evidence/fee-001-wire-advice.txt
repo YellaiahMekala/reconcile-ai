@@ -1,0 +1,4 @@
+INTERMEDIARY BANK CHARGE ADVICE
+Reference INV-30245, outgoing wire to ORION SUPPLY GMBH.
+Invoice amount 5,000.00 USD. Our correspondent deducted a wire fee of 25.00 USD before crediting the beneficiary,
+so the amount received at the other end is 4,975.00 USD. The fee was charged by the intermediary bank, not by us.

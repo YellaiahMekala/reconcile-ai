@@ -1,0 +1,4 @@
+{"id":"FEE-001","ledgerAmount":"5000.00","externalAmount":"4975.00","currency":"USD",
+ "evidence":["fee-001-wire-advice.txt"],
+ "expected":{"rootCause":"FEE_OR_CHARGE","route":"L1_APPROVAL","mustCiteEvidence":["fee-001-wire-advice.txt"]},
+ "tags":["fee","clean"]}

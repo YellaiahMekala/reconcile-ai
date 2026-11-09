@@ -1,0 +1,8 @@
+FIRST HARBOUR BANK - ACCOUNT STATEMENT
+Account ACCT-EVAL-0002 Currency USD
+
+Date         Description                                   Amount
+2026-05-20   Incoming wire ref INV-30401 HARBOR TEXTILES    3,000.00
+
+The ledger has two receipts for this customer on 2026-05-20: INV-30401 for 3,000.00 and INV-30402 for 1,200.00.
+No credit for INV-30402 appears anywhere on the bank statement for the period.

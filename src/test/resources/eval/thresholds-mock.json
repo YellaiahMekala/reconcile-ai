@@ -1,0 +1,8 @@
+{
+  "comment": "Regression floor for the mock-llm run. The mock only recognises fee and timing wording, so these are low on purpose: they pin today's behaviour of retrieval, prompt, verifier and gate, not model quality.",
+  "minJobSuccessRate": 1.0,
+  "minRootCauseAccuracy": 0.42,
+  "minRouteAccuracy": 0.42,
+  "minCitationValidRate": 1.0,
+  "minCitationRecall": 0.33
+}

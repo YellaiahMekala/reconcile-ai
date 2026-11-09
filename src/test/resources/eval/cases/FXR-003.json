@@ -1,0 +1,20 @@
+{
+ "id": "FXR-003",
+ "ledgerAmount": "31000.00",
+ "externalAmount": "30400.00",
+ "currency": "USD",
+ "evidence": [
+  "fxr-003-conversion-ticket.txt"
+ ],
+ "expected": {
+  "rootCause": "FX_RATE_DIFFERENCE",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "fxr-003-conversion-ticket.txt"
+  ]
+ },
+ "tags": [
+  "fx",
+  "material"
+ ]
+}

@@ -16,10 +16,14 @@ public final class ApiTestSupport {
 
     /** Creates a USD break with a unique reference and returns its id. */
     public static String createBreak(String bearer, String ledger, String external) {
+        return createBreak(bearer, ledger, external, "USD");
+    }
+
+    public static String createBreak(String bearer, String ledger, String external, String currency) {
         return given().header("Authorization", bearer).contentType(ContentType.JSON)
             .body("""
-                {"breakReference":"BRK-%s","ledgerAmount":"%s","externalAmount":"%s","currency":"USD"}
-                """.formatted(UUID.randomUUID(), ledger, external))
+                {"breakReference":"BRK-%s","ledgerAmount":"%s","externalAmount":"%s","currency":"%s"}
+                """.formatted(UUID.randomUUID(), ledger, external, currency))
         .when().post("/api/v1/breaks")
         .then().statusCode(201).extract().path("id");
     }

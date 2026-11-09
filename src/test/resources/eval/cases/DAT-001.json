@@ -1,0 +1,4 @@
+{"id":"DAT-001","ledgerAmount":"5400.00","externalAmount":"4500.00","currency":"USD",
+ "evidence":["dat-001-keying-note.txt"],
+ "expected":{"rootCause":"DATA_ENTRY_ERROR","route":"L1_APPROVAL","mustCiteEvidence":["dat-001-keying-note.txt"]},
+ "tags":["data-entry","clean"]}

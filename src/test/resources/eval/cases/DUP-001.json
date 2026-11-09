@@ -1,0 +1,4 @@
+{"id":"DUP-001","ledgerAmount":"60000.00","externalAmount":"30000.00","currency":"USD",
+ "evidence":["dup-001-ledger-extract.txt"],
+ "expected":{"rootCause":"DUPLICATE_ENTRY","route":"L2_APPROVAL","mustCiteEvidence":["dup-001-ledger-extract.txt"]},
+ "tags":["duplicate","material"]}

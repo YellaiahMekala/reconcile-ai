@@ -1,0 +1,3 @@
+LEDGER IMPORT LOG
+File PAY_20260714.csv was loaded twice at 09:02 and 09:05.
+Invoice INV-31077 for 2,200.00 USD therefore appears two times in the ledger. The bank paid it once.

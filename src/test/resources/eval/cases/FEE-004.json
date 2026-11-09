@@ -1,0 +1,20 @@
+{
+ "id": "FEE-004",
+ "ledgerAmount": "5000.00",
+ "externalAmount": "4975.00",
+ "currency": "EUR",
+ "evidence": [
+  "fee-004-eur-wire-advice.txt"
+ ],
+ "expected": {
+  "rootCause": "FEE_OR_CHARGE",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "fee-004-eur-wire-advice.txt"
+  ]
+ },
+ "tags": [
+  "fee",
+  "non-usd"
+ ]
+}

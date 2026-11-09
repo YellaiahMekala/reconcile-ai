@@ -1,0 +1,6 @@
+GENERAL LEDGER EXTRACT - ACCOUNTS RECEIVABLE
+Posting 4410021  2026-05-12  INV-30377  CASCADE FOODS INC   30,000.00 USD
+Posting 4410022  2026-05-12  INV-30377  CASCADE FOODS INC   30,000.00 USD
+
+Both postings carry the same invoice number, customer and amount, entered a few seconds apart by the same user.
+The bank statement shows a single receipt of 30,000.00 USD for INV-30377.

@@ -1,0 +1,4 @@
+REMITTANCE ADVICE
+Customer: LAKEVIEW RETAIL. Invoice INV-30633 for 20,000.00 USD.
+Payment received today: 12,000.00 USD as a partial payment against the invoice.
+The remaining balance of 8,000.00 USD is still outstanding and will be paid in a second instalment next month.

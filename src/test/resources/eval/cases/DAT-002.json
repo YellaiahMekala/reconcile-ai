@@ -1,0 +1,20 @@
+{
+ "id": "DAT-002",
+ "ledgerAmount": "1290.00",
+ "externalAmount": "1920.00",
+ "currency": "USD",
+ "evidence": [
+  "dat-002-review-comment.txt"
+ ],
+ "expected": {
+  "rootCause": "DATA_ENTRY_ERROR",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "dat-002-review-comment.txt"
+  ]
+ },
+ "tags": [
+  "data-entry",
+  "clean"
+ ]
+}

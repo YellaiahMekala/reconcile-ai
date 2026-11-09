@@ -1,0 +1,3 @@
+CORRECTION TICKET
+Supplier payment SUP-31201 was entered as 250,000.00 USD. The invoice and the bank debit are both 25,000.00 USD.
+An extra zero was keyed by the operator.

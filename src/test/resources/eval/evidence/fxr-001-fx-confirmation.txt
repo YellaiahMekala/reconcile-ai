@@ -1,0 +1,5 @@
+TREASURY FX DEAL CONFIRMATION
+Deal FX-77310. Sold EUR 9,500.00, bought USD.
+Booked in the ledger at an exchange rate of 1.0789 (USD 10,250.00).
+Executed by the bank at an exchange rate of 1.0526 (USD 10,000.00).
+The difference between the booked rate and the executed rate explains the gap on this item.

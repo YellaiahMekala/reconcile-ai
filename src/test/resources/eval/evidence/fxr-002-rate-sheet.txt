@@ -1,0 +1,3 @@
+FX RATE SHEET
+GBP 5,800.00 was converted to USD. The ledger used the month-end rate 1.2793 (7,420.00 USD).
+The bank applied its own dealing rate of 1.2586 on the day (7,300.00 USD).

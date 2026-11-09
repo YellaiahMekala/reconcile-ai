@@ -1,0 +1,20 @@
+{
+ "id": "DUP-003",
+ "ledgerAmount": "90000.00",
+ "externalAmount": "45000.00",
+ "currency": "USD",
+ "evidence": [
+  "dup-003-ar-listing.txt"
+ ],
+ "expected": {
+  "rootCause": "DUPLICATE_ENTRY",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "dup-003-ar-listing.txt"
+  ]
+ },
+ "tags": [
+  "duplicate",
+  "material"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "DUP-002",
+ "ledgerAmount": "4400.00",
+ "externalAmount": "2200.00",
+ "currency": "USD",
+ "evidence": [
+  "dup-002-import-log.txt"
+ ],
+ "expected": {
+  "rootCause": "DUPLICATE_ENTRY",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "dup-002-import-log.txt"
+  ]
+ },
+ "tags": [
+  "duplicate",
+  "clean"
+ ]
+}

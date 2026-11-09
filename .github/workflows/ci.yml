@@ -56,6 +56,16 @@ jobs:
             target/failsafe-reports/
           retention-days: 14
 
+      # The mock eval runs inside `mvn verify`; keep its reports so a regression can be read, not just seen as red.
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: target/eval/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload coverage report
         if: success()
         uses: actions/upload-artifact@v4

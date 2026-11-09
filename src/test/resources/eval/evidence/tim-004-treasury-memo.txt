@@ -1,0 +1,3 @@
+TREASURY MEMO
+The quarter-end sweep for entity NORTHRIDGE was booked on 2026-09-30 for 180,000.00 USD.
+The receiving bank credited the sweep on value date 2026-10-01, so the funds settled in the new quarter.

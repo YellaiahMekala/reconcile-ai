@@ -1,0 +1,20 @@
+{
+ "id": "FEE-003",
+ "ledgerAmount": "800.00",
+ "externalAmount": "770.00",
+ "currency": "USD",
+ "evidence": [
+  "fee-003-bank-charges.txt"
+ ],
+ "expected": {
+  "rootCause": "FEE_OR_CHARGE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "fee-003-bank-charges.txt"
+  ]
+ },
+ "tags": [
+  "fee",
+  "clean"
+ ]
+}

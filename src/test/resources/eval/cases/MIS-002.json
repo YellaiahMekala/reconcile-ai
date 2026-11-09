@@ -1,0 +1,20 @@
+{
+ "id": "MIS-002",
+ "ledgerAmount": "15000.00",
+ "externalAmount": "9000.00",
+ "currency": "USD",
+ "evidence": [
+  "mis-002-bank-extract.txt"
+ ],
+ "expected": {
+  "rootCause": "MISSING_ENTRY",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "mis-002-bank-extract.txt"
+  ]
+ },
+ "tags": [
+  "missing",
+  "clean"
+ ]
+}
