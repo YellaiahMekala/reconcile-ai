@@ -8,6 +8,7 @@ import com.reconcileai.domain.EvidenceStatus;
 import com.reconcileai.infrastructure.ai.ingestion.EvidenceIngestor;
 import com.reconcileai.infrastructure.ai.ingestion.EvidenceIngestor.IngestionOutcome;
 import com.reconcileai.infrastructure.persistence.BreakItemRepository;
+import com.reconcileai.infrastructure.persistence.EvidenceContentStore;
 import com.reconcileai.infrastructure.persistence.EvidenceRepository;
 import com.reconcileai.infrastructure.security.TenantContext;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,7 @@ import java.util.UUID;
  *  2. TX-1  load break (tenant-filtered, 404 otherwise) -> must be accepting evidence (409 otherwise)
  *           existing READY/PROCESSING row with same hash -> return it, deduplicated=true  (NO re-embedding)
  *           existing FAILED row           -> reuse it, mark PROCESSING (retry)
- *           else                          -> insert PROCESSING row; break -> EVIDENCE_PROCESSING
+ *           else                          -> insert PROCESSING row + store the original bytes; break -> EVIDENCE_PROCESSING
  *  3. (no TX) Tika -> chunks -> embeddings -> vector_store       [slow, calls OpenAI]
  *  4. TX-2  evidence -> READY/FAILED; break status recomputed from evidence counts
  * </pre>
@@ -54,14 +55,17 @@ public class EvidenceService {
     private final EvidenceIngestor ingestor;
     private final TransactionTemplate tx;
     private final AuditRecorder audit;
+    private final EvidenceContentStore contentStore;
 
     public EvidenceService(EvidenceRepository evidenceRepository,
                            BreakItemRepository breakItemRepository,
                            TenantContext tenantContext,
                            EvidenceIngestor ingestor,
                            TransactionTemplate tx,
-                           AuditRecorder audit) {
+                           AuditRecorder audit,
+                           EvidenceContentStore contentStore) {
         this.audit = audit;
+        this.contentStore = contentStore;
         this.evidenceRepository = evidenceRepository;
         this.breakItemRepository = breakItemRepository;
         this.tenantContext = tenantContext;
@@ -87,7 +91,8 @@ public class EvidenceService {
             breakItem.requireAcceptingEvidence();
             Evidence evidence = existing.map(e -> { e.markProcessing(); return e; })
                 .orElseGet(() -> new Evidence(breakId, tenantId, fileName, contentType, hash, content.length));
-            Evidence saved = evidenceRepository.save(evidence);
+            Evidence saved = evidenceRepository.saveAndFlush(evidence); // row must exist before the content row (FK)
+            contentStore.save(tenantId, saved.getId(), content); // original file kept for audit and re-ingestion
             breakItem.markEvidenceProcessing();
             breakItemRepository.save(breakItem);
             return new Registration(saved, false);
@@ -134,6 +139,24 @@ public class EvidenceService {
             .orElseThrow(() -> new BreakNotFoundException(breakId));
         return evidenceRepository.findByBreakItemIdAndTenantIdOrderByCreatedAtAsc(breakId, tenantId);
     }
+
+    /** Original file for the audit trail. 404 for another tenant's id and for rows uploaded before V9. */
+    @Transactional(readOnly = true)
+    public StoredEvidence content(UUID breakId, UUID evidenceId) {
+        String tenantId = tenantContext.requireTenantId();
+        breakItemRepository.findByIdAndTenantId(breakId, tenantId)
+            .orElseThrow(() -> new BreakNotFoundException(breakId));
+        Evidence e = evidenceRepository.findByBreakItemIdAndTenantIdOrderByCreatedAtAsc(breakId, tenantId).stream()
+            .filter(x -> x.getId().equals(evidenceId))
+            .findFirst()
+            .orElseThrow(() -> new NotFoundException("EVIDENCE_NOT_FOUND", "Evidence not found"));
+        byte[] bytes = contentStore.find(tenantId, evidenceId)
+            .orElseThrow(() -> new NotFoundException("CONTENT_NOT_AVAILABLE",
+                "The original file was not kept for this evidence item"));
+        return new StoredEvidence(e.getFileName(), e.getContentType(), bytes);
+    }
+
+    public record StoredEvidence(String fileName, String contentType, byte[] bytes) {}
 
     private record Registration(Evidence evidence, boolean deduplicated) {}
 }
