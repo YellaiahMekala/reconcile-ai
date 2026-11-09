@@ -120,6 +120,63 @@ jobs:
           ignore-unfixed: true
           exit-code: '0'
 
+  alerts:
+    name: alert rules + alertmanager config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check and unit-test the alert rules
+        run: |
+          docker run --rm -v "$PWD/docker/observability:/w" -w /w --entrypoint promtool prom/prometheus:v2.55.1 check rules alerts.yml
+          docker run --rm -v "$PWD/docker/observability:/w" -w /w --entrypoint promtool prom/prometheus:v2.55.1 test rules alerts.test.yml
+      - name: amtool check the routing and template
+        run: docker run --rm -v "$PWD/docker/observability:/etc/alertmanager" --entrypoint amtool prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
+
+  terraform:
+    name: terraform fmt, validate, test, tflint, checkov
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.0
+          terraform_wrapper: false
+
+      # No AWS account, credentials or network access to AWS: tests use a mock provider.
+      - run: terraform fmt -check -recursive
+
+      - name: Validate and test every module and the demo environment
+        run: |
+          for d in modules/* envs/demo; do
+            echo "::group::$d"
+            terraform -chdir="$d" init -backend=false -input=false
+            terraform -chdir="$d" validate
+            terraform -chdir="$d" test
+            echo "::endgroup::"
+          done
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.55.1
+      - name: tflint (AWS ruleset)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          for d in modules/* envs/demo; do
+            echo "::group::$d"
+            tflint --chdir="$d" --config="$PWD/.tflint.hcl"
+            echo "::endgroup::"
+          done
+
+      - name: checkov (security policy checks)
+        run: docker run --rm -v "$PWD:/data" -w /data bridgecrew/checkov:3.2.450 -d . --framework terraform --quiet --compact
+
   ui:
     name: ui build + test (Angular)
     runs-on: ubuntu-latest

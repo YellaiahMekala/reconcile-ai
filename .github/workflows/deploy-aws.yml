@@ -1,0 +1,132 @@
+# Manual only. Never runs on push or pull request, so nothing here can spend money by accident.
+#
+#   action = plan    read-only: shows what Terraform would change (safe, free)
+#   action = deploy  build the image, push it to ECR and roll it out to ECS (needs the "aws-demo" environment approval)
+#
+# Creating or destroying the infrastructure itself is NOT done here: run `terraform apply` / `destroy` yourself
+# (infra/README.md). The deploy role in AWS is deliberately unable to change infrastructure.
+#
+# Repository variables to set first (Settings > Secrets and variables > Actions > Variables):
+#   AWS_REGION, AWS_PLAN_ROLE_ARN, AWS_DEPLOY_ROLE_ARN, TF_STATE_BUCKET, ALLOWED_CIDRS (JSON list), BUDGET_EMAILS (JSON list),
+#   ECR_REPOSITORY (the repository name, e.g. reconcile-demo), ECS_CLUSTER, ECS_SERVICE
+# No AWS keys are stored anywhere: the roles are assumed through GitHub OIDC.
+name: deploy-aws
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "plan (read-only) or deploy (push image and roll out)"
+        type: choice
+        options: [plan, deploy]
+        default: plan
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: terraform plan (read-only)
+    if: inputs.action == 'plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required repository variables
+        env:
+          V_REGION: ${{ vars.AWS_REGION }}
+          V_ROLE: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          V_STATE: ${{ vars.TF_STATE_BUCKET }}
+          V_CIDRS: ${{ vars.ALLOWED_CIDRS }}
+          V_EMAILS: ${{ vars.BUDGET_EMAILS }}
+        run: |
+          for v in V_REGION V_ROLE V_STATE V_CIDRS V_EMAILS; do
+            if [ -z "${!v}" ]; then echo "::error::Repository variable for $v is not set"; exit 1; fi
+          done
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.0
+          terraform_wrapper: false
+
+      - name: Init with the remote state
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=reconcile-ai/demo/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}"
+
+      - name: Plan
+        run: |
+          terraform plan -input=false -lock-timeout=60s -no-color \
+            -var 'region=${{ vars.AWS_REGION }}' \
+            -var 'allowed_cidrs=${{ vars.ALLOWED_CIDRS }}' \
+            -var 'budget_emails=${{ vars.BUDGET_EMAILS }}' | tee plan.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: infra/terraform/envs/demo/plan.txt
+          retention-days: 7
+
+  deploy:
+    name: build, push and roll out the image
+    if: inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: aws-demo # add required reviewers to this environment so a person must approve each deploy
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push (tag = commit sha, immutable)
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          docker build -t "$REGISTRY/$REPOSITORY:${GITHUB_SHA}" .
+          docker push "$REGISTRY/$REPOSITORY:${GITHUB_SHA}"
+
+      - name: Roll out the new image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          SERVICE: ${{ vars.ECS_SERVICE }}
+        run: |
+          IMAGE="$REGISTRY/$REPOSITORY:${GITHUB_SHA}"
+          CURRENT=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$CURRENT" --query 'taskDefinition' > td.json
+          jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' td.json > new-td.json
+          NEW=$(aws ecs register-task-definition --cli-input-json file://new-td.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$NEW" > /dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          echo "Deployed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Smoke test: the load balancer only accepts your own address, so run scripts/demo-golden-path.ps1 from your machine." >> "$GITHUB_STEP_SUMMARY"
