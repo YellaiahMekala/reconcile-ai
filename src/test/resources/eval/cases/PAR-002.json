@@ -1,0 +1,20 @@
+{
+ "id": "PAR-002",
+ "ledgerAmount": "60000.00",
+ "externalAmount": "36000.00",
+ "currency": "USD",
+ "evidence": [
+  "par-002-customer-letter.txt"
+ ],
+ "expected": {
+  "rootCause": "PARTIAL_SETTLEMENT",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "par-002-customer-letter.txt"
+  ]
+ },
+ "tags": [
+  "partial",
+  "material"
+ ]
+}

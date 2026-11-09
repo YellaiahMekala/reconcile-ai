@@ -1,0 +1,20 @@
+{
+ "id": "MIS-003",
+ "ledgerAmount": "52000.00",
+ "externalAmount": "27000.00",
+ "currency": "USD",
+ "evidence": [
+  "mis-003-recon-worksheet.txt"
+ ],
+ "expected": {
+  "rootCause": "MISSING_ENTRY",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "mis-003-recon-worksheet.txt"
+  ]
+ },
+ "tags": [
+  "missing",
+  "material"
+ ]
+}

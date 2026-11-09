@@ -1,0 +1,20 @@
+{
+ "id": "FEE-002",
+ "ledgerAmount": "12000.00",
+ "externalAmount": "11985.00",
+ "currency": "USD",
+ "evidence": [
+  "fee-002-card-statement.txt"
+ ],
+ "expected": {
+  "rootCause": "FEE_OR_CHARGE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "fee-002-card-statement.txt"
+  ]
+ },
+ "tags": [
+  "fee",
+  "clean"
+ ]
+}

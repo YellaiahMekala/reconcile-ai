@@ -94,6 +94,26 @@ public class HybridRetriever {
             .toList();
     }
 
+    /** Which part of the retrieval to run; used by the evaluation harness to compare the legs with the fused result. */
+    public enum Leg { DENSE, SPARSE, HYBRID }
+
+    /**
+     * Chunk ids in rank order for one leg only (or the fused result). Same tenant and break filters as
+     * {@link #retrieve}; it exists so recall and MRR can be measured per leg.
+     */
+    public List<String> rankedChunkIds(String tenantId, UUID breakItemId, String query, Leg leg) {
+        Objects.requireNonNull(tenantId, "tenantId");
+        Objects.requireNonNull(breakItemId, "breakItemId");
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        return switch (leg) {
+            case DENSE -> vectorLeg(tenantId, breakItemId, query, new HashMap<>());
+            case SPARSE -> keywordLeg(tenantId, breakItemId, query, new HashMap<>());
+            case HYBRID -> retrieve(tenantId, breakItemId, query).stream().map(RetrievedChunk::chunkId).toList();
+        };
+    }
+
     // ------------------------------------------------------------------ vector leg
 
     private List<String> vectorLeg(String tenantId, UUID breakItemId, String query, Map<String, Candidate> out) {

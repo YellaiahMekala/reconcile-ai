@@ -1,0 +1,21 @@
+{
+ "id": "HRD-001",
+ "ledgerAmount": "10025.00",
+ "externalAmount": "10000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-001-bank-charge.txt",
+  "hrd-001-timing-memo.txt"
+ ],
+ "expected": {
+  "rootCause": "FEE_OR_CHARGE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-001-bank-charge.txt"
+  ]
+ },
+ "tags": [
+  "conflicting",
+  "hard"
+ ]
+}

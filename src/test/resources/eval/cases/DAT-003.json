@@ -1,0 +1,20 @@
+{
+ "id": "DAT-003",
+ "ledgerAmount": "250000.00",
+ "externalAmount": "25000.00",
+ "currency": "USD",
+ "evidence": [
+  "dat-003-correction-ticket.txt"
+ ],
+ "expected": {
+  "rootCause": "DATA_ENTRY_ERROR",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "dat-003-correction-ticket.txt"
+  ]
+ },
+ "tags": [
+  "data-entry",
+  "material"
+ ]
+}

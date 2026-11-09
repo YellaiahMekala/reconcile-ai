@@ -1,0 +1,4 @@
+{"id":"PAR-001","ledgerAmount":"20000.00","externalAmount":"12000.00","currency":"USD",
+ "evidence":["par-001-remittance.txt"],
+ "expected":{"rootCause":"PARTIAL_SETTLEMENT","route":"L1_APPROVAL","mustCiteEvidence":["par-001-remittance.txt"]},
+ "tags":["partial","clean"]}

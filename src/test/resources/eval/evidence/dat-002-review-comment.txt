@@ -1,0 +1,3 @@
+REVIEW COMMENT
+Invoice INV-31188 is for 1,920.00 USD and the bank received 1,920.00 USD.
+The ledger line says 1,290.00 USD: two digits were swapped when the amount was typed in.

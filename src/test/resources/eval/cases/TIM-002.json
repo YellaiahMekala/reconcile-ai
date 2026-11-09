@@ -1,0 +1,20 @@
+{
+ "id": "TIM-002",
+ "ledgerAmount": "18250.00",
+ "externalAmount": "18000.00",
+ "currency": "USD",
+ "evidence": [
+  "tim-002-clearing-report.txt"
+ ],
+ "expected": {
+  "rootCause": "TIMING_DIFFERENCE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "tim-002-clearing-report.txt"
+  ]
+ },
+ "tags": [
+  "timing",
+  "clean"
+ ]
+}

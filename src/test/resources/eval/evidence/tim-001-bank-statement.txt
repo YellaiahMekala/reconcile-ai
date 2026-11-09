@@ -1,0 +1,9 @@
+FIRST HARBOUR BANK - ACCOUNT STATEMENT
+Account ACCT-EVAL-0001 Currency USD
+
+Value date   Description                                   Amount
+2026-04-01   Incoming wire ref INV-30112 DELTA FREIGHT LTD   50,500.00
+             Remitter note: payment released 2026-03-31 after cut-off.
+
+The ledger booked INV-30112 on 2026-03-31. The bank credited the funds on value date 2026-04-01, so the item
+was settled one business day after booking and falls into the next statement period.

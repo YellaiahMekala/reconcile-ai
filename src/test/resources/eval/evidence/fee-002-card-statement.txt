@@ -1,0 +1,3 @@
+MERCHANT ACQUIRER STATEMENT
+Gross card sales 12,000.00 USD. Processing fee 15.00 USD withheld at source.
+Net payout 11,985.00 USD credited to the account.

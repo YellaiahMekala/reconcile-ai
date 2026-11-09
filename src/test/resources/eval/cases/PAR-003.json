@@ -1,0 +1,20 @@
+{
+ "id": "PAR-003",
+ "ledgerAmount": "3500.00",
+ "externalAmount": "2000.00",
+ "currency": "USD",
+ "evidence": [
+  "par-003-payment-plan.txt"
+ ],
+ "expected": {
+  "rootCause": "PARTIAL_SETTLEMENT",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "par-003-payment-plan.txt"
+  ]
+ },
+ "tags": [
+  "partial",
+  "clean"
+ ]
+}

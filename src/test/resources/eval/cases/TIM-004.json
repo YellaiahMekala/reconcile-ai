@@ -1,0 +1,20 @@
+{
+ "id": "TIM-004",
+ "ledgerAmount": "180000.00",
+ "externalAmount": "150000.00",
+ "currency": "USD",
+ "evidence": [
+  "tim-004-treasury-memo.txt"
+ ],
+ "expected": {
+  "rootCause": "TIMING_DIFFERENCE",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "tim-004-treasury-memo.txt"
+  ]
+ },
+ "tags": [
+  "timing",
+  "material"
+ ]
+}

@@ -1,0 +1,3 @@
+CLEARING HOUSE REPORT
+Batch 2026-06-30 contained payment ref INV-31002 for 18,250.00 USD.
+The batch was released after the cut-off and the funds settled on value date 2026-07-01, the next business day.

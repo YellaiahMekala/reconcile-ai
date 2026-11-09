@@ -1,0 +1,4 @@
+{"id":"TIM-001","ledgerAmount":"50500.00","externalAmount":"50000.00","currency":"USD",
+ "evidence":["tim-001-bank-statement.txt"],
+ "expected":{"rootCause":"TIMING_DIFFERENCE","route":"L1_APPROVAL","mustCiteEvidence":["tim-001-bank-statement.txt"]},
+ "tags":["timing","clean"]}

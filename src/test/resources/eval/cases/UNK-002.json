@@ -1,0 +1,18 @@
+{
+ "id": "UNK-002",
+ "ledgerAmount": "700.00",
+ "externalAmount": "640.00",
+ "currency": "USD",
+ "evidence": [
+  "unk-002-handwritten-note.txt"
+ ],
+ "expected": {
+  "rootCause": "UNKNOWN",
+  "route": "MANUAL_REVIEW",
+  "mustCiteEvidence": []
+ },
+ "tags": [
+  "vague",
+  "no-answer"
+ ]
+}

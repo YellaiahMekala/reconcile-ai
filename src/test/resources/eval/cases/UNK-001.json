@@ -1,0 +1,4 @@
+{"id":"UNK-001","ledgerAmount":"1000.00","externalAmount":"900.00","currency":"USD",
+ "evidence":["unk-001-office-notice.txt"],
+ "expected":{"rootCause":"UNKNOWN","route":"MANUAL_REVIEW","mustCiteEvidence":[]},
+ "tags":["unrelated","no-answer"]}

@@ -1,0 +1,3 @@
+LEDGER CORRECTION REQUEST
+Entry for INV-30519, supplier RIVERSIDE TOOLING. The invoice and the bank payment both show 4,500.00 USD.
+The ledger entry was keyed as 5,400.00 USD: the digits were transposed by the operator during manual entry.

@@ -1,0 +1,20 @@
+{
+ "id": "FXR-002",
+ "ledgerAmount": "7420.00",
+ "externalAmount": "7300.00",
+ "currency": "USD",
+ "evidence": [
+  "fxr-002-rate-sheet.txt"
+ ],
+ "expected": {
+  "rootCause": "FX_RATE_DIFFERENCE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "fxr-002-rate-sheet.txt"
+  ]
+ },
+ "tags": [
+  "fx",
+  "clean"
+ ]
+}

@@ -1,0 +1,4 @@
+{"id":"FXR-001","ledgerAmount":"10250.00","externalAmount":"10000.00","currency":"USD",
+ "evidence":["fxr-001-fx-confirmation.txt"],
+ "expected":{"rootCause":"FX_RATE_DIFFERENCE","route":"L1_APPROVAL","mustCiteEvidence":["fxr-001-fx-confirmation.txt"]},
+ "tags":["fx","clean"]}

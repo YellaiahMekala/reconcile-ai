@@ -1,0 +1,3 @@
+RECONCILIATION WORKSHEET
+Ledger items: INV-31150 27,000.00 and INV-31151 25,000.00.
+Bank items: INV-31150 27,000.00 only. INV-31151 has no counterpart on the bank side.

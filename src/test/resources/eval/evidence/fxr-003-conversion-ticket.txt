@@ -1,0 +1,4 @@
+CONVERSION TICKET 88120
+JPY 4,650,000 sold for USD.
+Booked at 150.00 JPY per USD in the ledger (31,000.00 USD).
+Executed at 152.96 JPY per USD by the dealer (30,400.00 USD). The rate moved between booking and execution.
