@@ -103,7 +103,7 @@ jobs:
       # Report only for now (exit-code 0): findings show in the log without blocking a merge. Make it a gate by
       # setting exit-code to '1' once the baseline is clean.
       - name: Scan image for known vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: reconcile-ai:ci
           severity: HIGH,CRITICAL
