@@ -33,13 +33,19 @@ public class TokenUsageAdvisor implements CallAdvisor {
     private final MeterRegistry meters;
     private final double promptUsdPerMillion;
     private final double completionUsdPerMillion;
+    private final String fallbackModel;
 
     public TokenUsageAdvisor(LlmCallRepository repository, MeterRegistry meters) {
-        this(repository, meters, 0.0, 0.0);
+        this(repository, meters, 0.0, 0.0, "unknown");
     }
 
+    /**
+     * @param fallbackModel label used when the provider's response names no model (Amazon Bedrock does not), so
+     *                      llm_call and the cost metric still say which model was paid for
+     */
     public TokenUsageAdvisor(LlmCallRepository repository, MeterRegistry meters,
-                             double promptUsdPerMillion, double completionUsdPerMillion) {
+                             double promptUsdPerMillion, double completionUsdPerMillion, String fallbackModel) {
+        this.fallbackModel = fallbackModel == null || fallbackModel.isBlank() ? "unknown" : fallbackModel;
         this.repository = repository;
         this.meters = meters;
         this.promptUsdPerMillion = promptUsdPerMillion;
@@ -58,7 +64,7 @@ public class TokenUsageAdvisor implements CallAdvisor {
             Usage usage = md == null ? null : md.getUsage();
             int prompt = usage == null || usage.getPromptTokens() == null ? 0 : usage.getPromptTokens();
             int completion = usage == null || usage.getCompletionTokens() == null ? 0 : usage.getCompletionTokens();
-            String model = md == null || md.getModel() == null || md.getModel().isBlank() ? "unknown" : md.getModel();
+            String model = md == null || md.getModel() == null || md.getModel().isBlank() ? fallbackModel : md.getModel();
 
             repository.save(new LlmCallRecord(tenantId, jobId, model, prompt, completion, ms, "OK"));
             meters.counter("reconcile.llm.tokens", "type", "prompt", "model", model).increment(prompt);

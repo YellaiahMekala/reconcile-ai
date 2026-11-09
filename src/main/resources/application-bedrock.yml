@@ -1,0 +1,18 @@
+# Amazon Bedrock (Converse API) chat model. Needs AWS credentials from the default chain (env vars, SSO profile, role)
+# and model access granted in the Bedrock console. No keys live in this repo.
+# Run with: mvn spring-boot:run -Dspring-boot.run.profiles=bedrock
+# Do not combine with mock-llm, openai or ollama: two ChatModel beans make the investigation client ambiguous.
+spring:
+  ai:
+    model:
+      chat: none                   # BedrockConfig builds the model (its client needs an endpoint override in tests)
+      embedding: openai            # LOCKED: embeddings stay OpenAI text-embedding-3-small (1536-dim)
+reconcile:
+  bedrock:
+    region: ${AWS_REGION:us-east-1}
+    model: ${BEDROCK_CHAT_MODEL:amazon.nova-lite-v1:0}
+  ai:
+    model-label: ${BEDROCK_CHAT_MODEL:amazon.nova-lite-v1:0}      # Bedrock responses name no model; used for llm_call and the cost metric
+    pricing:                       # Nova Lite list price per 1M tokens; check the Bedrock pricing page and override
+      prompt-usd-per-million: ${LLM_PROMPT_USD_PER_MILLION:0.06}
+      completion-usd-per-million: ${LLM_COMPLETION_USD_PER_MILLION:0.24}

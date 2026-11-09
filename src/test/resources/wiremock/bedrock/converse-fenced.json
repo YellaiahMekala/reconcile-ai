@@ -1,0 +1,13 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "text": "```json\n{\"rootCause\":\"TIMING_DIFFERENCE\",\"explanation\":\"Booked before month end, settled the next business day.\",\"recommendedAction\":\"Carry forward and confirm on the next statement.\",\"confidence\":0.85,\"citedChunkIds\":[]}\n```" }
+      ]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": { "inputTokens": 900, "outputTokens": 120, "totalTokens": 1020 },
+  "metrics": { "latencyMs": 380 }
+}

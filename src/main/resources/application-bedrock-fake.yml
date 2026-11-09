@@ -1,0 +1,18 @@
+# Bedrock against a local fake (WireMock) so the adapter can be tested with no AWS account and no cost.
+# reconcile.bedrock.endpoint-override is set by the test; dummy static credentials are used.
+spring:
+  ai:
+    model:
+      chat: none
+      embedding: openai
+reconcile:
+  bedrock:
+    region: us-east-1
+    model: amazon.nova-lite-v1:0
+    static-access-key: fake-access-key
+    static-secret-key: fake-secret-key
+  ai:
+    model-label: amazon.nova-lite-v1:0      # Bedrock responses name no model; used for llm_call and the cost metric
+    pricing:
+      prompt-usd-per-million: 0.06
+      completion-usd-per-million: 0.24
