@@ -1,0 +1,12 @@
+E-mail captured by Mailpit for a synthetic LlmCircuitOpen alert posted to Alertmanager on 2026-11-09. This is the RESOLVED notice sent when the test alert expired (the FIRING notice had subject "[FIRING:1] LlmCircuitOpen (critical)", delivered within seconds).
+Subject: [RESOLVED] LlmCircuitOpen (critical)
+To: oncall@localhost
+
+<h3>LlmCircuitOpen - resolved</h3>
+
+<p><b>LLM circuit breaker is open</b><br/>
+Synthetic test alert.<br/>
+Since: 2026-11-09 17:47:30 UTC</p>
+
+<p>Dashboards: <a href="http://localhost:3000">Grafana</a> | <a href="http://localhost:9090/alerts">Prometheus alerts</a></p>
+

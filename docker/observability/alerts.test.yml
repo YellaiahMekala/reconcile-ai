@@ -1,0 +1,191 @@
+# promtool test rules alerts.test.yml   (run in CI through the pinned prometheus image)
+# Each test checks the alert fires (or stays quiet) with the right severity, labels and annotations.
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+
+tests:
+  - name: breaker open for several minutes pages
+    interval: 1m
+    input_series:
+      - series: 'resilience4j_circuitbreaker_state{name="investigation-llm", state="open"}'
+        values: '0 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: LlmCircuitOpen
+        exp_alerts: []                      # not yet held for 1m
+      - eval_time: 4m
+        alertname: LlmCircuitOpen
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "LLM circuit breaker is open"
+              description: "Model calls are failing fast. Check the provider status, the API key and quota."
+
+  - name: closed breaker stays quiet
+    interval: 1m
+    input_series:
+      - series: 'resilience4j_circuitbreaker_state{name="investigation-llm", state="open"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: LlmCircuitOpen
+        exp_alerts: []
+
+  - name: error rate above 20 percent warns
+    interval: 1m
+    input_series:
+      - series: 'reconcile_llm_errors_total{exception="TransientAiException"}'
+        values: '0+3x20'
+      - series: 'reconcile_llm_latency_seconds_count{model="m", outcome="OK"}'
+        values: '0+5x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: LlmErrorRateHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "More than 20% of model calls failed in the last 10 minutes"
+              description: "Retries are absorbing it for now, but the breaker opens next if this continues."
+
+  - name: low error rate stays quiet
+    interval: 1m
+    input_series:
+      - series: 'reconcile_llm_errors_total{exception="TransientAiException"}'
+        values: '0+1x20'
+      - series: 'reconcile_llm_latency_seconds_count{model="m", outcome="OK"}'
+        values: '0+20x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: LlmErrorRateHigh
+        exp_alerts: []
+
+  - name: spend burn above 5 usd per hour warns
+    interval: 1m
+    input_series:
+      - series: 'reconcile_llm_cost_usd_total{model="m"}'
+        values: '0+0.2x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: LlmSpendBurnHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Estimated model spend above 5 USD in the last hour"
+              description: "Estimated from list prices and provider-reported tokens, not invoiced. Look for a retry loop or an agent running long."
+
+  - name: normal spend stays quiet
+    interval: 1m
+    input_series:
+      - series: 'reconcile_llm_cost_usd_total{model="m"}'
+        values: '0+0.01x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: LlmSpendBurnHigh
+        exp_alerts: []
+
+  - name: ner outage warns
+    interval: 1m
+    input_series:
+      - series: 'reconcile_pii_ner_unavailable_total'
+        values: '0 0 1 2 3'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PiiNerUnavailable
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "PII entity recognition sidecar is unreachable"
+              description: "Person and location names are not being masked (identifier masking still works). If fail-closed is on, model calls are being refused."
+
+  - name: more than 3 failed investigations warns
+    interval: 1m
+    input_series:
+      - series: 'reconcile_investigation_failed_total{reason="LLM_CIRCUIT_OPEN"}'
+        values: '0 1 2 3 4 5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: InvestigationFailuresHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Several investigations failed in the last 15 minutes"
+              description: "Group by the reason label: LLM_CIRCUIT_OPEN, CAPACITY_EXCEEDED, INTERRUPTED, MODEL_OUTPUT_NOT_VALID_JSON."
+
+  - name: one failed investigation is not an alert
+    interval: 1m
+    input_series:
+      - series: 'reconcile_investigation_failed_total{reason="INTERRUPTED"}'
+        values: '0 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: InvestigationFailuresHigh
+        exp_alerts: []
+
+  - name: outbox failures that persist warn
+    interval: 1m
+    input_series:
+      - series: 'reconcile_outbox_failures_total'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: OutboxBacklogGrowing
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Outbox publish failures are persisting"
+              description: "Events are queued in Postgres, not lost, but downstream consumers are falling behind. Check the Kafka broker."
+
+  - name: tool denial warns
+    interval: 1m
+    input_series:
+      - series: 'reconcile_agent_tool_calls_total{tool="searchEvidence", outcome="DENIED"}'
+        values: '0 0 1 1 1'
+      - series: 'reconcile_agent_tool_calls_total{tool="getBreakDetails", outcome="OK"}'
+        values: '0+5x4'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AgentToolDenials
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "The investigation agent had tool calls denied"
+              description: "A caller without the required role reached the agent, or a tool was invoked outside its guard. Review agent_tool_call for the job."
+
+  - name: successful tool calls do not alert
+    interval: 1m
+    input_series:
+      - series: 'reconcile_agent_tool_calls_total{tool="getBreakDetails", outcome="OK"}'
+        values: '0+5x10'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AgentToolDenials
+        exp_alerts: []
+
+  - name: anchor mismatch is critical
+    interval: 1m
+    input_series:
+      - series: 'reconcile_audit_anchor_verify_total{result="mismatch"}'
+        values: '0 0 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: AuditAnchorMismatch
+        exp_alerts:
+          - exp_labels: {severity: critical, result: mismatch}
+            exp_annotations:
+              summary: "Audit chain does not match its immutable anchor"
+              description: "Treat as possible tampering until proven otherwise."
+
+  - name: anchor write errors that persist warn
+    interval: 1m
+    input_series:
+      - series: 'reconcile_audit_anchor_total{result="error"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: AuditAnchorWriteFailing
+        exp_alerts:
+          - exp_labels: {severity: warning, result: error}
+            exp_annotations:
+              summary: "Audit anchor writes are failing"
+              description: "Anchoring errors persisted for 15m; the audit chain exposure window is growing. Check the 'audit anchor failed for tenant' log line and S3/MinIO health."

@@ -1,0 +1,41 @@
+# Alertmanager routing for the local observability profile. Mail goes to Mailpit (UI http://localhost:8025).
+# To use a real SMTP server, change global.smtp_* and keep the credentials in a git-ignored file, never here.
+global:
+  smtp_smarthost: 'mailpit:1025'
+  smtp_from: 'reconcile-alerts@localhost'
+  smtp_require_tls: false          # Mailpit speaks plain SMTP; set true for a real server
+
+templates:
+  - /etc/alertmanager/email.tmpl
+
+route:
+  receiver: ops-email
+  group_by: [alertname]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+  routes:
+    # Critical alerts go out immediately and repeat hourly.
+    - matchers: [severity="critical"]
+      receiver: ops-email
+      group_wait: 0s
+      repeat_interval: 1h
+    # Warnings are batched for 5 minutes so one incident is one e-mail.
+    - matchers: [severity="warning"]
+      receiver: ops-email
+      group_wait: 5m
+      group_interval: 5m
+
+# An open breaker explains the error-rate and failed-job warnings, so they are muted while it is firing.
+inhibit_rules:
+  - source_matchers: [alertname="LlmCircuitOpen"]
+    target_matchers: [alertname=~"LlmErrorRateHigh|InvestigationFailuresHigh"]
+
+receivers:
+  - name: ops-email
+    email_configs:
+      - to: 'oncall@localhost'
+        send_resolved: true
+        headers:
+          subject: '{{ template "reconcile.subject" . }}'
+        html: '{{ template "reconcile.html" . }}'
