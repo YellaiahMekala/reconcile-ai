@@ -14,6 +14,8 @@ spring:
     enabled: true
 
 reconcile:
+  ratelimit:
+    enabled: false                  # RateLimitIT switches it on; other suites start many investigations per tenant
   retrieval:
     similarity-threshold: 0.10      # calibrated for FakeEmbeddingModel bag-of-words vectors (see its Javadoc)
   ai:

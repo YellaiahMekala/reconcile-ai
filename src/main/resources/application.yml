@@ -99,6 +99,10 @@ spring:
 # Application tuning knobs (bound to @ConfigurationProperties classes)
 # ---------------------------------------------------------------------------
 reconcile:
+  ratelimit:                        # per tenant, on POST /investigations (each one can start paid model calls)
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    capacity: 20                    # burst size
+    refill-per-minute: 20           # sustained rate; per JVM (see TokenBucketRateLimiter)
   security:
     # Empty: tokens are verified with the local dev public key above (demo personas, tests).
     # Set to a real IdP issuer to switch to JWKS + issuer + audience validation, e.g. Keycloak:
@@ -236,3 +240,10 @@ logging:
   level:
     org.springframework.security: INFO
     com.reconcileai: DEBUG
+
+# API docs / Swagger UI: OFF unless SWAGGER_ENABLED=true. Never enable on an internet-facing deployment.
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}

@@ -41,6 +41,8 @@ until that test is green.
 | Foundation (Tier 0–1) | Break CRUD, evidence upload with hash dedup, JWT auth, RBAC, tenant isolation | `SecurityAndTenantIsolationIT` green (release-blocking) |
 | AI investigation (Tier 2) | Evidence ingestion, hybrid retrieval, cited proposals, policy gate, maker-checker, hash-chained audit, SSE progress | `InvestigationFlowIT`, `GoldenPathIT`, `AuditChainIT` green |
 | Production hardening | Retry + circuit breaker, PII masking (identifiers + Presidio names), metrics and traces, Angular UI, Redis semantic cache, Kafka outbox, Postgres RLS, cross-instance SSE, daily digest, Keycloak OIDC, audit anchoring, Kubernetes + HPA | Each feature has its own IT on real infrastructure (see section 6); manifests validated on kind |
+| Gap closure (4F) | Original evidence file kept and downloadable, per-tenant rate limit on investigations, optional Swagger UI, SBOM and image scan in CI | `EvidenceContentIT`, `RateLimitIT`, `SwaggerEnabledIT`, `TokenBucketRateLimiterTest` |
+| AI quality, agents and cloud (Phase 4) | Evaluation harness with published numbers, LangChain4j investigation agent with read-only audited tools, Alertmanager e-mail alerts, Amazon Bedrock adapter, AWS deployment with Terraform | Planned — see section 9 |
 | Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Planned — see BRD platform requirements |
 
 **Principles applied in the code** (each is commented at the point of use):
@@ -64,7 +66,7 @@ until that test is green.
 | Area | Feature | Where |
 |---|---|---|
 | Breaks | Create, get, list (tenant-scoped, newest first, size capped) | `BreakController`, `BreakService` |
-| Evidence | Multipart upload with SHA-256 dedup (201 new / 200 duplicate), list, hybrid search | `EvidenceController`, `EvidenceSearchController` |
+| Evidence | Multipart upload with SHA-256 dedup (201 new / 200 duplicate), original file kept (`evidence_content`, RLS) and downloadable as an attachment, list, hybrid search | `EvidenceController`, `EvidenceSearchController` |
 | Ingestion | Tika text extraction, chunking, embeddings into pgvector | `infrastructure/ai/ingestion/EvidenceIngestor` |
 | Retrieval | Dense (pgvector) + sparse (Postgres `tsvector`) fused with Reciprocal Rank Fusion | `infrastructure/ai/retrieval/HybridRetriever`, `RrfFusion` |
 | Investigation | Async job with heartbeat lease, recovery of orphaned jobs, SSE progress (cross-instance via Redis pub/sub when `SSE_FANOUT=redis`) | `InvestigationController`, `InvestigationJobRunner`, `InvestigationRecovery` |
@@ -82,10 +84,13 @@ until that test is green.
 | Cost | Redis semantic cache of verified model drafts (exact + semantic, per tenant, evidence-snapshot bound, fail-open); off by default | `infrastructure/ai/cache/` |
 | UI | Angular 20 console: breaks, evidence + hybrid search, live SSE investigation progress, cited proposals, approvals, audit verify | `ui/` |
 | Reporting | Daily digest per tenant (activity from the audit chain, backlog, AI calls, tokens, estimated cost, root causes); SQL-built, advisory-locked so one instance runs it; `DAILY_DIGEST_READY` outbox event | `application/digest/`, `DigestController` |
+| Cost control | Per-tenant token bucket on `POST /investigations` (default burst 20, 20 per minute); 429 + `Retry-After` before any DB or model work | `TokenBucketRateLimiter`, `RateLimitProperties` |
+| API docs | Optional springdoc Swagger UI with a bearer scheme; paths are not opened unless enabled | `OpenApiConfig`, `SecurityConfig` |
+| Supply chain | CycloneDX SBOM artifact and Trivy image scan (report-only) in CI | `.github/workflows/ci.yml` |
 | Ops | Actuator health and Prometheus only; no error-message leakage | `/actuator/health`, `/actuator/prometheus` |
 | Deployment | Multi-stage Dockerfile (non-root JRE); Kubernetes manifests with Kustomize: probes, CPU-based HPA (2 to 6), PDB, hardened pod security; kind overlay with Postgres and Redis | `Dockerfile`, `k8s/` |
 
-Endpoints are under `/api/v1`. Swagger UI is not part of this build.
+Endpoints are under `/api/v1`. Swagger UI is optional and off by default: set `SWAGGER_ENABLED=true` and open `/swagger-ui.html` (use the Authorize button with a JWT).
 
 ---
 
@@ -107,6 +112,7 @@ Endpoints are under `/api/v1`. Swagger UI is not part of this build.
 | Build | Maven (surefire for `*Test`, failsafe for `*IT`) |
 | Deploy | Docker (multi-stage, Temurin 21 JRE, non-root), Kubernetes 1.31 + Kustomize, HPA (autoscaling/v2), kind for local validation, kubeconform in CI |
 | Integrations | Keycloak 26 (OIDC), Microsoft Presidio analyzer, AWS SDK v2 S3 (MinIO locally) |
+| Planned (Phase 4) | LangChain4j 1.x (core libraries, no starter), Spring AI Bedrock Converse, Alertmanager + Mailpit, WireMock, Terraform (AWS) |
 
 ---
 
@@ -328,7 +334,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **62 unit tests** (surefire), **90 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **12 UI specs** (Karma).
+Current counts: **69 unit tests** (surefire), **99 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **12 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -340,6 +346,9 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `ResolutionPathArchitectureTest` | unit | `ResolutionCommitService` has exactly one caller |
 | `SecurityAndTenantIsolationIT` | IT | 401/403/404 rules, client-supplied tenant ignored — **release-blocking** |
 | `BreakAndEvidenceIT` | IT | Create/fetch, duplicate reference 409, evidence dedup |
+| `EvidenceContentIT` | IT | Uploaded bytes download identically; duplicate keeps one copy; other tenant 404; unknown id 404; pre-V9 row reports CONTENT_NOT_AVAILABLE |
+| `TokenBucketRateLimiterTest`, `RateLimitIT` | unit, IT | Burst then refill, per-tenant buckets; third request of a burst gets 429 + `Retry-After`; other tenant unaffected |
+| `SwaggerEnabledIT`, `SwaggerDisabledByDefaultIT` | IT | Spec and UI served only when enabled; default config exposes nothing |
 | `EvidenceIngestionIT`, `HybridRetrievalIT` | IT | Ingestion into pgvector; tenant-filtered hybrid retrieval |
 | `InvestigationFlowIT`, `GoldenPathIT` | IT | Evidence → cited proposal → route → approval → RESOLVED; injection quarantine |
 | `InvestigationRecoveryIT`, `InvestigationStreamingIT` | IT | Orphaned job recovery; SSE lifecycle and tenant isolation |
@@ -383,8 +392,37 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 - Audit anchors protect history up to the latest anchor; events written since then are covered only by the in-database chain until the next cycle (15 minutes by default). Anchors prove the chain was not changed afterwards, not that each event was true when written.
 - The HPA scales on CPU only. Investigations wait mostly on the model, so a queue-depth or in-flight-jobs metric (KEDA or a custom metric) would track load better; that is not built.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
+- The investigation rate limit is held in memory per instance, so with N replicas a tenant can reach N times the configured rate. A Redis-backed limiter is the upgrade.
+- Evidence bytes are stored in Postgres (`bytea`), which suits the 10 MB upload cap. Evidence uploaded before migration V9 has no stored original. Object storage is the upgrade for larger files.
+- The Trivy image scan in CI reports findings but does not fail the build yet.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.
+- Answer quality is not yet measured against a labelled set; the tests prove the pipeline's controls, not the model's accuracy. Phase 4A closes this.
+
+---
+
+## 9. Roadmap: Phase 4 (planned, not built)
+
+Each item is off by default, gets its own test on real or faithfully faked infrastructure, and ships with a measured
+number. Nothing calls a paid API or creates cloud resources unless explicitly enabled.
+
+| Order | Feature | Design in one line | Local testing | Real mode |
+|---|---|---|---|---|
+| 4A | **Evaluation harness** | 24–30 labelled synthetic breaks run through the real pipeline; root-cause and route accuracy, citation precision/recall, retrieval recall@5 and MRR per leg, p95 latency, tokens and cost per investigation | `mock-llm` baseline as a CI regression gate | OpenAI run, numbers published in `docs/proof/` |
+| 4B | **LangChain4j investigation agent** | Optional `AGENT` mode: the model picks read-only tools (`getBreakSummary`, `listEvidence`, `searchEvidence`, `findSimilarResolvedBreaks`); tenant bound from the job, never a tool argument; tool output masked and injection-scanned; every call audited; the agent only drafts, so citation check, policy gate and maker-checker are unchanged | Scripted fake model | OpenAI; single-call vs agent comparison |
+| 4C | **Alert delivery** | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink | Real SMTP via `.env` |
+| 4D | **Amazon Bedrock** | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API | AWS credentials; OpenAI vs Bedrock comparison |
+| 4E | **AWS deployment** | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov | Manual, approval-gated apply |
+
+Architecture after Phase 4:
+
+```
+InvestigationService ─┬─ SINGLE_CALL ─► InvestigationAiClient (Spring AI advisors) ─┐
+                      └─ AGENT ───────► InvestigationAgent (LangChain4j, read-only   ├─► ProposalDraft ─► CitationVerifier
+                                        tools, AgentRunContext, audited calls)    ──┘      ─► PolicyGate ─► maker-checker
+Chat provider by profile: mock-llm | ollama | openai | bedrock | bedrock-fake      (embeddings: OpenAI, unchanged)
+Prometheus ─► Alertmanager ─► e-mail                AWS: ALB ─► Fargate ─► RDS pgvector · S3 Object Lock · Secrets Manager
+```
 
 ---
 
