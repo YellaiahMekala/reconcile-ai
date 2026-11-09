@@ -1,4 +1,16 @@
 groups:
+  - name: reconcile-availability
+    rules:
+      # Prometheus could not scrape the app: it is down, restarting, or unreachable. Every other rule goes silent then,
+      # so this is the one that catches a total outage.
+      - alert: ReconcileAiDown
+        expr: up{job="reconcile-ai"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "reconcile-ai is not answering metric scrapes"
+          description: "The app is down or unreachable. Check the process or pods, recent deploys and the database."
+
   - name: reconcile-audit-anchor
     rules:
       # A failed anchor is swallowed per tenant (one tenant's storage error must not stop the others), so without this

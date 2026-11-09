@@ -5,6 +5,33 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
+  - name: app down for a minute pages
+    interval: 1m
+    input_series:
+      - series: 'up{job="reconcile-ai", instance="host.docker.internal:8080"}'
+        values: '1 0 0 0'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ReconcileAiDown
+        exp_alerts: []                      # one missed scrape is not an outage yet
+      - eval_time: 3m
+        alertname: ReconcileAiDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: reconcile-ai, instance: "host.docker.internal:8080"}
+            exp_annotations:
+              summary: "reconcile-ai is not answering metric scrapes"
+              description: "The app is down or unreachable. Check the process or pods, recent deploys and the database."
+
+  - name: app up stays quiet
+    interval: 1m
+    input_series:
+      - series: 'up{job="reconcile-ai", instance="host.docker.internal:8080"}'
+        values: '1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ReconcileAiDown
+        exp_alerts: []
+
   - name: breaker open for several minutes pages
     interval: 1m
     input_series:
