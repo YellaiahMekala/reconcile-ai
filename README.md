@@ -357,12 +357,12 @@ curl.exe -s http://localhost:8080/actuator/prometheus | Select-String reconcile_
 
 **Alerts by e-mail.** Prometheus evaluates `docker/observability/alerts.yml` and hands firing alerts to Alertmanager,
 which e-mails them. Locally the mail goes to Mailpit, a catch-all inbox at http://localhost:8025, so nothing real is
-sent. Alerts: `LlmCircuitOpen` (critical), `LlmErrorRateHigh`, `LlmSpendBurnHigh`, `InvestigationFailuresHigh`,
+sent. Alerts: `ReconcileAiDown` (critical), `LlmCircuitOpen` (critical), `LlmErrorRateHigh`, `LlmSpendBurnHigh`, `InvestigationFailuresHigh`,
 `OutboxBacklogGrowing`, `PiiNerUnavailable`, `AgentToolDenials`, `AuditAnchorWriteFailing`, and `AuditAnchorMismatch`
 (critical). Critical alerts go out immediately; warnings are grouped for 5 minutes; an open breaker mutes the
 error-rate and failed-job warnings it explains. To try it, run the app with `mock-llm`, add `simulate provider outage`
-evidence to 5 breaks and start investigations: the breaker opens and, once it has stayed open for a minute, the e-mail should arrive (the rules and the mail path are tested separately; this full run is a manual check).
-- Every rule has a unit test in `docker/observability/alerts.test.yml` (`promtool test rules`, 14 cases covering both
+evidence to 5 breaks and start investigations: the breaker opens and, once it has stayed open for a minute, the e-mail arrives. This was run end to end against the real app on 2026-11-10 (`docs/proof/4c-outage-drill-2026-11-10.md`).
+- Every rule has a unit test in `docker/observability/alerts.test.yml` (`promtool test rules`, 16 cases covering both
   firing and staying quiet); CI runs it and `amtool check-config` in the `alerts` job.
   `ObservabilityIT.seriesUsedByTheAlertRulesAreExposed` fails if a metric the rules depend on is renamed.
 - The spend threshold (5 USD/hour) is a literal in the rule because Prometheus cannot read the app's environment;
@@ -384,7 +384,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **83 unit tests** (surefire), **128 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
+Current counts: **83 unit tests** (surefire), **129 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -402,6 +402,7 @@ Tests tagged `openai` and `ollama` need a real key or a running Ollama and are e
 | `EvalCaseLoaderTest` | unit | Case files validate (enums, evidence exists, ids unique); every root cause has a case; metrics, percentiles and cost arithmetic |
 | `InvestigationEvalIT` | IT | All cases through the real pipeline on mock-llm; report written; metrics stay at or above `thresholds-mock.json`; nothing routes to AUTO_RESOLVE |
 | `RetrievalEvalIT` | IT | recall@5, MRR and hit@1 for the dense leg, the keyword leg and the fused result; hybrid is at least as good as either leg |
+| `BedrockFakeEvalIT` | IT | All 28 eval cases through the Bedrock adapter against a fake Converse endpoint using the mock-llm rules; scores must equal the mock-llm floor (adapter fidelity) |
 | `BedrockAdapterIT` | IT | Bedrock adapter against a fake Converse endpoint: parsing, usage and cost, output cap, throttle retry, no retry on bad input, breaker opens on outage |
 | `ObservabilityIT` | IT | Prometheus exposes the series the alert rules query (a rename would silently disable an alert) |
 | `alerts.test.yml`, `infra/**/tests/*.tftest.hcl` | promtool, terraform test | 14 alert-rule cases; 38 Terraform checks on a mock AWS provider (run in CI, outside Maven) |
@@ -509,9 +510,9 @@ number. Nothing calls a paid API or creates cloud resources unless explicitly en
 |---|---|---|---|---|
 | 4A | **Evaluation harness** (built; live run done) | 24–30 labelled synthetic breaks run through the real pipeline; root-cause and route accuracy, citation precision/recall, retrieval recall@5 and MRR per leg, p95 latency, tokens and cost per investigation | `mock-llm` baseline as a CI regression gate | OpenAI run, numbers published in `docs/proof/` |
 | 4B | **LangChain4j investigation agent** (built; live run done) | Optional `AGENT` mode: the model picks read-only tools (`getBreakSummary`, `listEvidence`, `searchEvidence`, `findSimilarResolvedBreaks`); tenant bound from the job, never a tool argument; tool output masked and injection-scanned; every call audited; the agent only drafts, so citation check, policy gate and maker-checker are unchanged | Scripted fake model (19 agent ITs, 9 unit tests); enable with `AGENT_ENABLED=true`, start with `{"mode":"AGENT"}`; tool calls at `GET /api/v1/investigations/{id}/tool-calls` | OpenAI; `OpenAiAgentEvalIT` single-call vs agent comparison |
-| 4C | **Alert delivery** (built) | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink; `promtool` rule tests (14) in CI | Real SMTP: edit `alertmanager.yml` |
-| 4D | **Amazon Bedrock** (built; live run not done) | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API | AWS credentials; OpenAI vs Bedrock comparison |
-| 4E | **AWS deployment** (built; never applied) | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov | Manual, approval-gated apply |
+| 4C | **Alert delivery** (built) | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink; `promtool` rule tests (16) in CI; real-app outage drill recorded | Real SMTP: edit `alertmanager.yml` |
+| 4D | **Amazon Bedrock** (built; adapter-fidelity eval done, live run pending) | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API; `BedrockFakeEvalIT` scores identical to mock-llm through the adapter | AWS credentials for the live row of the provider comparison |
+| 4E | **AWS deployment** (built; applied and destroyed against LocalStack, never against a real account) | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov; `envs/localstack` real apply + destroy in CI (network, secrets, storage, ci modules) | Manual, approval-gated apply |
 
 Architecture after Phase 4:
 
