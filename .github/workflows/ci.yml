@@ -152,7 +152,7 @@ jobs:
 
       - name: Validate and test every module and the demo environment
         run: |
-          for d in modules/* envs/demo; do
+          for d in modules/* envs/demo envs/localstack; do
             echo "::group::$d"
             terraform -chdir="$d" init -backend=false -input=false
             terraform -chdir="$d" validate
@@ -168,7 +168,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           tflint --init
-          for d in modules/* envs/demo; do
+          for d in modules/* envs/demo envs/localstack; do
             echo "::group::$d"
             tflint --chdir="$d" --config="$PWD/.tflint.hcl"
             echo "::endgroup::"
@@ -176,6 +176,49 @@ jobs:
 
       - name: checkov (security policy checks)
         run: docker run --rm -v "$PWD:/data" -w /data bridgecrew/checkov:3.2.450 -d . --framework terraform --quiet --compact
+
+  terraform-localstack:
+    name: terraform apply + destroy against LocalStack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A real apply of the network, secrets, storage and ci modules against an AWS emulator (free, test account
+    # 000000000000). ECS, RDS, the load balancer and Budgets are paid-tier emulations and stay with the mock tests.
+    services:
+      localstack:
+        image: localstack/localstack:4.9
+        ports: ["4566:4566"]
+        env:
+          SERVICES: ec2,s3,kms,secretsmanager,iam,sts,logs
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/localstack
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.0
+          terraform_wrapper: false
+      - run: terraform init -input=false
+      - name: Apply
+        run: terraform apply -auto-approve -input=false -no-color
+      - name: No drift straight after apply
+        run: terraform plan -detailed-exitcode -input=false -no-color
+      - name: Object Lock refuses a delete
+        run: |
+          pip install -q awscli-local awscli
+          export AWS_DEFAULT_REGION=ap-south-1
+          B=$(terraform output -raw anchor_bucket)
+          echo anchor > anchor.txt
+          V=$(awslocal s3api put-object --bucket "$B" --key anchors/ci --body anchor.txt --object-lock-mode GOVERNANCE                 --object-lock-retain-until-date "$(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ)" --query VersionId --output text)
+          if awslocal s3api delete-object --bucket "$B" --key anchors/ci --version-id "$V"; then
+            echo "::error::a locked anchor could be deleted"; exit 1
+          fi
+      - name: Destroy
+        if: always()
+        run: terraform destroy -auto-approve -input=false -no-color
 
   ui:
     name: ui build + test (Angular)

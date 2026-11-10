@@ -140,4 +140,20 @@ run the golden-path script from your machine.
   skipped on purpose for cost and recorded as explicit checkov skips next to each resource.
 - **Agent mode on Bedrock** is not wired (the agent uses an OpenAI model); single-call investigation works with both providers.
 - **`terraform destroy` removes the secrets immediately** (recovery window 0) so the next demo can reuse the names.
-- **Not yet run against a real AWS account.** Everything above is validated by static checks and mock-provider tests only.
+- **Not yet run against a real AWS account.** Static checks and mock-provider tests cover everything; a real apply and destroy
+  runs in CI against LocalStack (below) for the modules the free emulator supports.
+
+## Apply against LocalStack (free, no account)
+
+`envs/localstack` wires the network, secrets, storage and ci modules to a LocalStack container (test account `000000000000`,
+credentials `test`/`test`, every endpoint pointed at the emulator). ECS, ECR, RDS, the load balancer and Budgets are paid-tier
+emulations and are left out. Recorded run: `docs/proof/4e-localstack-apply-2026-11-10.md` (47 resources, no drift, Object Lock
+refuses a delete, clean destroy). CI repeats it on every push (`terraform-localstack` job).
+
+```powershell
+docker run -d --name reconcile-localstack -p 4566:4566 -e SERVICES=ec2,s3,kms,secretsmanager,iam,sts,logs localstack/localstack:4.9
+cd infra/terraform/envs/localstack
+terraform init; terraform apply -auto-approve; terraform plan      # plan must say: No changes
+terraform destroy -auto-approve; docker rm -f reconcile-localstack
+```
+If Terraform itself runs in Docker, add `-var endpoint=http://host.docker.internal:4566`.
