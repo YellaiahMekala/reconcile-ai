@@ -207,6 +207,7 @@ resource "aws_lb_listener" "https" {
 
 resource "aws_lb_listener" "http" {
   #checkov:skip=CKV_AWS_103: Plain HTTP exists only in the demo (no certificate) and only for allowed_cidrs. With certificate_arn this listener is not created and HTTPS uses a TLS 1.3/1.2 policy.
+  #checkov:skip=CKV_AWS_2: Demo has no certificate or domain, so HTTPS cannot be issued. The listener is open only to allowed_cidrs. With certificate_arn it is not created. Production: HTTPS only, plus an HTTP to HTTPS redirect.
   count             = local.has_cert ? 0 : 1
   load_balancer_arn = aws_lb.this.arn
   port              = 80
