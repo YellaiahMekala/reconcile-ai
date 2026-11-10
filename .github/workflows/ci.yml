@@ -150,13 +150,16 @@ jobs:
       # No AWS account, credentials or network access to AWS: tests use a mock provider.
       - run: terraform fmt -check -recursive
 
-      - name: Validate and test every module and the demo environment
+      - name: Validate every module and environment, test the modules and the demo
         run: |
           for d in modules/* envs/demo envs/localstack; do
             echo "::group::$d"
             terraform -chdir="$d" init -backend=false -input=false
             terraform -chdir="$d" validate
-            terraform -chdir="$d" test
+            # envs/localstack has no .tftest.hcl files; its real proof is the terraform-localstack job.
+            if [ "$d" != "envs/localstack" ]; then
+              terraform -chdir="$d" test
+            fi
             echo "::endgroup::"
           done
 
@@ -207,13 +210,23 @@ jobs:
       - name: No drift straight after apply
         run: terraform plan -detailed-exitcode -input=false -no-color
       - name: Object Lock refuses a delete
+        # Uses the AWS CLI v2 preinstalled on the runner, pointed at LocalStack. No pip packages: awscli-local
+        # pulls in an old botocore that imports botocore.vendored, which current botocore no longer ships.
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: ap-south-1
+          AWS_PAGER: ""
+          LOCALSTACK_URL: http://localhost:4566
         run: |
-          pip install -q awscli-local awscli
-          export AWS_DEFAULT_REGION=ap-south-1
+          aws() { command aws --endpoint-url "$LOCALSTACK_URL" "$@"; }
           B=$(terraform output -raw anchor_bucket)
           echo anchor > anchor.txt
-          V=$(awslocal s3api put-object --bucket "$B" --key anchors/ci --body anchor.txt --object-lock-mode GOVERNANCE                 --object-lock-retain-until-date "$(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ)" --query VersionId --output text)
-          if awslocal s3api delete-object --bucket "$B" --key anchors/ci --version-id "$V"; then
+          V=$(aws s3api put-object --bucket "$B" --key anchors/ci --body anchor.txt \
+            --object-lock-mode GOVERNANCE \
+            --object-lock-retain-until-date "$(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ)" \
+            --query VersionId --output text)
+          if aws s3api delete-object --bucket "$B" --key anchors/ci --version-id "$V"; then
             echo "::error::a locked anchor could be deleted"; exit 1
           fi
       - name: Destroy

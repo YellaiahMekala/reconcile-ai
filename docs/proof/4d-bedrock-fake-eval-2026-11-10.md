@@ -1,6 +1,6 @@
 # 4D.4 proof, local edition: the eval set through the Bedrock adapter (2026-11-10)
 
-`BedrockFakeEvalIT` runs all 28 labelled cases through the **real Amazon Bedrock adapter** (AWS SDK v2, Converse wire
+`BedrockFakeEvalIT` runs all 28 labeled cases through the **real Amazon Bedrock adapter** (AWS SDK v2, Converse wire
 format, usage and cost recording, model label) against a fake Converse endpoint in the test JVM. No AWS account, no cost.
 The fake answers each request by applying the deterministic mock-llm rules to the prompt text it actually receives, so
 the run measures **adapter fidelity**: if the adapter dropped prompt text, mis-parsed the answer or lost citations, the

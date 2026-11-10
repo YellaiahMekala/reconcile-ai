@@ -24,7 +24,7 @@ in `infra/terraform/envs/localstack` routes every service endpoint to the emulat
 | plan after apply | no changes |
 | destroy | 51 s |
 
-## Checks made inside the emulator (awslocal, region ap-south-1)
+## Checks made inside the emulator (AWS CLI v2 with --endpoint-url, region ap-south-1)
 
 ```
 Object Lock      {"ObjectLockEnabled":"Enabled","Rule":{"DefaultRetention":{"Mode":"GOVERNANCE","Days":1}}}
