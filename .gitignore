@@ -16,3 +16,11 @@ app-run.pid
 
 # local tooling, never part of the project
 npm-global/
+
+# Terraform: local state, plugin cache and real variable values never go to git (the lock file for envs/demo does)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+backend.hcl
+infra/terraform/modules/**/.terraform.lock.hcl

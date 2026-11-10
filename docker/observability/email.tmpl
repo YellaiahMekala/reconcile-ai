@@ -1,0 +1,13 @@
+{{ define "reconcile.subject" -}}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.alertname }} ({{ (index .Alerts 0).Labels.severity }})
+{{- end }}
+
+{{ define "reconcile.html" -}}
+<h3>{{ .GroupLabels.alertname }} - {{ .Status }}</h3>
+{{ range .Alerts }}
+<p><b>{{ .Annotations.summary }}</b><br/>
+{{ .Annotations.description }}<br/>
+Since: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}</p>
+{{ end }}
+<p>Dashboards: <a href="http://localhost:3000">Grafana</a> | <a href="http://localhost:9090/alerts">Prometheus alerts</a></p>
+{{ end }}

@@ -1,7 +1,7 @@
 # reconcile-ai local infrastructure.
 #
 #   docker compose -f docker/docker-compose.yml up -d                          # Postgres only (default)
-#   docker compose -f docker/docker-compose.yml --profile observability up -d  # + Jaeger, Prometheus, Grafana
+#   docker compose -f docker/docker-compose.yml --profile observability up -d  # + Jaeger, Prometheus, Grafana, Alertmanager, Mailpit
 #   docker compose -f docker/docker-compose.yml --profile keycloak up -d       # + Keycloak (OIDC) on :8180
 #   docker compose -f docker/docker-compose.yml --profile presidio up -d       # + Presidio analyzer on :5002 (PII names)
 #   docker compose -f docker/docker-compose.yml --profile anchor up -d         # + MinIO with Object Lock on :9000 (audit anchors)
@@ -112,6 +112,28 @@ services:
       - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9090:9090"
+    depends_on: [alertmanager]
+
+  # Alerts go to Mailpit, a local mail catcher (UI http://localhost:8025). Nothing real is sent unless you
+  # change the smtp settings in observability/alertmanager.yml (credentials stay out of git).
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: reconcile-alertmanager
+    profiles: ["observability"]
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./observability/email.tmpl:/etc/alertmanager/email.tmpl:ro
+    ports:
+      - "9093:9093"
+    depends_on: [mailpit]
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: reconcile-mailpit
+    profiles: ["observability"]
+    ports:
+      - "8025:8025"     # web UI
+      - "1025:1025"     # SMTP
 
   grafana:
     image: grafana/grafana:11.3.0

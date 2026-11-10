@@ -3,6 +3,8 @@ package com.reconcileai.infrastructure.ai.resilience;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalFunction;
@@ -121,6 +123,13 @@ public class LlmResilience {
         for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
             if (c instanceof PromptBlockedException || c instanceof NonTransientAiException) {
                 return false;
+            }
+            // Amazon Bedrock (AWS SDK): throttling (429) and 5xx are worth retrying; 400/403 (bad request, no model access) are not.
+            if (c instanceof AwsServiceException aws) {
+                return aws.statusCode() == 429 || aws.statusCode() >= 500;
+            }
+            if (c instanceof SdkClientException) { // connect/read timeouts and dropped connections
+                return true;
             }
             if (c instanceof TransientAiException
                 || c instanceof ResourceAccessException

@@ -68,12 +68,13 @@ public class AiConfig {
                                        @Value("${reconcile.ai.pii-masking.ner.fail-closed:false}") boolean nerFailClosed,
                                        @Value("${reconcile.ai.pricing.prompt-usd-per-million:0}") double promptPrice,
                                        @Value("${reconcile.ai.pricing.completion-usd-per-million:0}") double completionPrice,
+                                       @Value("${reconcile.ai.model-label:unknown}") String modelLabel,
                                        ObjectProvider<ObservationRegistry> observations) {
         // Hard ceiling = evidence budget + generous allowance for system prompt, schema and break facts (chars ≈ tokens*4).
         int maxPromptChars = (maxContextTokens + 1500) * 4;
         ChatClient.Builder builder = ChatClient.builder(chatModel, observations.getIfAvailable(() -> ObservationRegistry.NOOP), null, null)
             .defaultAdvisors(new InputGuardAdvisor(scanner, maxPromptChars),
-                new TokenUsageAdvisor(llmCalls, meters, promptPrice, completionPrice));
+                new TokenUsageAdvisor(llmCalls, meters, promptPrice, completionPrice, modelLabel));
         if (piiMasking) {
             builder.defaultAdvisors(new PiiMaskingAdvisor(meters, ner.getIfAvailable(), nerFailClosed));
         }

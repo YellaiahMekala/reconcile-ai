@@ -1,0 +1,11 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [ { "text": "I think this is probably a bank fee, but I am not certain." } ]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": { "inputTokens": 800, "outputTokens": 20, "totalTokens": 820 },
+  "metrics": { "latencyMs": 200 }
+}

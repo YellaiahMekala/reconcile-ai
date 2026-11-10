@@ -120,6 +120,119 @@ jobs:
           ignore-unfixed: true
           exit-code: '0'
 
+  alerts:
+    name: alert rules + alertmanager config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check and unit-test the alert rules
+        run: |
+          docker run --rm -v "$PWD/docker/observability:/w" -w /w --entrypoint promtool prom/prometheus:v2.55.1 check rules alerts.yml
+          docker run --rm -v "$PWD/docker/observability:/w" -w /w --entrypoint promtool prom/prometheus:v2.55.1 test rules alerts.test.yml
+      - name: amtool check the routing and template
+        run: docker run --rm -v "$PWD/docker/observability:/etc/alertmanager" --entrypoint amtool prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
+
+  terraform:
+    name: terraform fmt, validate, test, tflint, checkov
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.0
+          terraform_wrapper: false
+
+      # No AWS account, credentials or network access to AWS: tests use a mock provider.
+      - run: terraform fmt -check -recursive
+
+      - name: Validate every module and environment, test the modules and the demo
+        run: |
+          for d in modules/* envs/demo envs/localstack; do
+            echo "::group::$d"
+            terraform -chdir="$d" init -backend=false -input=false
+            terraform -chdir="$d" validate
+            # envs/localstack has no .tftest.hcl files; its real proof is the terraform-localstack job.
+            if [ "$d" != "envs/localstack" ]; then
+              terraform -chdir="$d" test
+            fi
+            echo "::endgroup::"
+          done
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.55.1
+      - name: tflint (AWS ruleset)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          for d in modules/* envs/demo envs/localstack; do
+            echo "::group::$d"
+            tflint --chdir="$d" --config="$PWD/.tflint.hcl"
+            echo "::endgroup::"
+          done
+
+      - name: checkov (security policy checks)
+        run: docker run --rm -v "$PWD:/data" -w /data bridgecrew/checkov:3.2.450 -d . --framework terraform --quiet --compact
+
+  terraform-localstack:
+    name: terraform apply + destroy against LocalStack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A real apply of the network, secrets, storage and ci modules against an AWS emulator (free, test account
+    # 000000000000). ECS, RDS, the load balancer and Budgets are paid-tier emulations and stay with the mock tests.
+    services:
+      localstack:
+        image: localstack/localstack:4.9
+        ports: ["4566:4566"]
+        env:
+          SERVICES: ec2,s3,kms,secretsmanager,iam,sts,logs
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/localstack
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.0
+          terraform_wrapper: false
+      - run: terraform init -input=false
+      - name: Apply
+        run: terraform apply -auto-approve -input=false -no-color
+      - name: No drift straight after apply
+        run: terraform plan -detailed-exitcode -input=false -no-color
+      - name: Object Lock refuses a delete
+        # Uses the AWS CLI v2 preinstalled on the runner, pointed at LocalStack. No pip packages: awscli-local
+        # pulls in an old botocore that imports botocore.vendored, which current botocore no longer ships.
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: ap-south-1
+          AWS_PAGER: ""
+          LOCALSTACK_URL: http://localhost:4566
+        run: |
+          aws() { command aws --endpoint-url "$LOCALSTACK_URL" "$@"; }
+          B=$(terraform output -raw anchor_bucket)
+          echo anchor > anchor.txt
+          V=$(aws s3api put-object --bucket "$B" --key anchors/ci --body anchor.txt \
+            --object-lock-mode GOVERNANCE \
+            --object-lock-retain-until-date "$(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ)" \
+            --query VersionId --output text)
+          if aws s3api delete-object --bucket "$B" --key anchors/ci --version-id "$V"; then
+            echo "::error::a locked anchor could be deleted"; exit 1
+          fi
+      - name: Destroy
+        if: always()
+        run: terraform destroy -auto-approve -input=false -no-color
+
   ui:
     name: ui build + test (Angular)
     runs-on: ubuntu-latest

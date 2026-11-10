@@ -1,0 +1,13 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "text": "{\"rootCause\":\"FEE_OR_CHARGE\",\"explanation\":\"An intermediary bank deducted a wire fee before crediting the account.\",\"recommendedAction\":\"Post the fee to bank charges and match the net receipt.\",\"confidence\":0.9,\"citedChunkIds\":[]}" }
+      ]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": { "inputTokens": 1200, "outputTokens": 300, "totalTokens": 1500 },
+  "metrics": { "latencyMs": 420 }
+}

@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. Only the first two lines are required.
+
+allowed_cidrs = ["203.0.113.7/32"]      # your public IP; find it at https://checkip.amazonaws.com
+budget_emails = ["you@example.com"]
+
+# region             = "ap-south-1"
+# chat_profile       = "bedrock"                  # or "openai"; default mock-llm makes no model calls
+# bedrock_model_id   = "amazon.nova-lite-v1:0"
+# bedrock_region     = "us-east-1"
+# monthly_budget_usd = 25
+
+# Deploy from GitHub Actions without stored keys:
+# github_repository = "OWNER/REPO"
+# state_bucket      = "your-terraform-state-bucket"

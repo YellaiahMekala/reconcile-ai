@@ -83,10 +83,17 @@ public class InvestigationJobRunner {
     private final TransactionTemplate tx;
     private ObservationRegistry observations = ObservationRegistry.NOOP;
     private SemanticCache cache = SemanticCache.DISABLED;
+    private io.micrometer.core.instrument.MeterRegistry meters;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSemanticCache(SemanticCache cache) {
         this.cache = cache;
+    }
+
+    /** Optional: counts failed jobs ({@code reconcile.investigation.failed}) so Prometheus can alert on them. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setMeterRegistry(io.micrometer.core.instrument.MeterRegistry meters) {
+        this.meters = meters;
     }
 
     /** Optional: one span per job (retrieval, model call and DB work nest under it). NOOP when tracing is off. */
@@ -240,6 +247,9 @@ public class InvestigationJobRunner {
                 return j;
             }
             j.fail(reason);
+            if (meters != null) {
+                meters.counter("reconcile.investigation.failed", "reason", String.valueOf(reason)).increment();
+            }
             breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).ifPresent(b -> {
                 b.markInvestigationFailed();
                 breaks.save(b);
