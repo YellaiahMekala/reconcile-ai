@@ -416,6 +416,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 ## 6. Test suite
 
 Current counts: **96 unit tests** (surefire), **142 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
+Current counts: **83 unit tests** (surefire), **129 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -545,6 +546,9 @@ number. Nothing calls a paid API or creates cloud resources unless explicitly en
 | 4D | **Amazon Bedrock** (built; adapter-fidelity eval done, **live run pending AWS credentials**) | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API; `BedrockFakeEvalIT` scores identical to mock-llm through the adapter | AWS credentials for the live row of the provider comparison |
 | 4E | **AWS deployment** (built; applied and destroyed against LocalStack, **real apply pending AWS credit and your go-ahead**) | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov; `envs/localstack` real apply + destroy in CI (network, secrets, storage, ci modules) | Manual, approval-gated apply |
 | 4G | **Supervisor agents** (built, offline-tested; live comparison pending an API key) | `SUPERVISED` (fixed order) and `SUPERVISED_PLANNED` (supervisor model) modes: analyst, risk checker and reviewer under one shared budget; the reviewer can only escalate to manual review through a deterministic gate rule; off by default | Scripted models, no paid calls; 12 hard cases; `SupervisedInvestigationIT` (9), `SupervisedDisabledByDefaultIT`, `SupervisedEvalIT`, `ReviewerVerdictTest` (9) | Live four-mode comparison (`OpenAiModeComparisonIT`) needs `OPENAI_API_KEY` and your go-ahead; the result is published either way |
+| 4C | **Alert delivery** (built) | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink; `promtool` rule tests (16) in CI; real-app outage drill recorded | Real SMTP: edit `alertmanager.yml` |
+| 4D | **Amazon Bedrock** (built; adapter-fidelity eval done, live run pending) | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API; `BedrockFakeEvalIT` scores identical to mock-llm through the adapter | AWS credentials for the live row of the provider comparison |
+| 4E | **AWS deployment** (built; applied and destroyed against LocalStack, never against a real account) | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov; `envs/localstack` real apply + destroy in CI (network, secrets, storage, ci modules) | Manual, approval-gated apply |
 
 Architecture after Phase 4:
 
