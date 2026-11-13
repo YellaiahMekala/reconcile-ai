@@ -16,6 +16,8 @@ spring:
 reconcile:
   agent:
     enabled: true                   # AgentDisabledByDefaultIT switches it back off
+    supervised:
+      enabled: true                 # SupervisedDisabledByDefaultIT switches it back off
   ratelimit:
     enabled: false                  # RateLimitIT switches it on; other suites start many investigations per tenant
   retrieval:

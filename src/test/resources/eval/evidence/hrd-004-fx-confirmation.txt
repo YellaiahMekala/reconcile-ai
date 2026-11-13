@@ -1,0 +1,2 @@
+FX CONFIRMATION
+EUR 20,000.00 for INV-40450 was converted at 1.1000 on settlement. The ledger had booked the receivable at the order-date rate of 1.1250 (22,500.00 USD).

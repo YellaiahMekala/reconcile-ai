@@ -1,0 +1,21 @@
+{
+ "id": "HRD-004",
+ "ledgerAmount": "22500.00",
+ "externalAmount": "22000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-004-fx-confirmation.txt",
+  "hrd-004-ops-memo.txt"
+ ],
+ "expected": {
+  "rootCause": "FX_RATE_DIFFERENCE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-004-fx-confirmation.txt"
+  ]
+ },
+ "tags": [
+  "conflicting",
+  "hard"
+ ]
+}

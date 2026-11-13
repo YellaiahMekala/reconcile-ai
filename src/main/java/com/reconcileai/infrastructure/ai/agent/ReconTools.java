@@ -125,7 +125,8 @@ public class ReconTools {
                 if (scanner.isSuspect(c.text())) {
                     continue; // never shown to the model, and never citable
                 }
-                ctx.addRetrieved(c.chunkId());
+                // Keep the text as the model will see it (masked), so a reviewer can check quotes against it.
+                ctx.addRetrieved(c.chunkId(), PiiMasker.mask(c.text()).text());
                 out.append(InvestigationPromptBuilder.evidenceBlock(c));
             }
             return hits.isEmpty() || out.indexOf("<<<EVIDENCE") < 0 ? "No matching evidence found for that query." : out.toString();
@@ -169,13 +170,14 @@ public class ReconTools {
      *                  delimiters, and scanning the assembled blocks would trip the delimiter rule on our own markup
      */
     String guarded(String tool, String args, boolean scanWhole, Supplier<String> body) {
-        int seq = ctx.nextToolCall();
+        int count = ctx.nextToolCall();
+        int seq = ctx.nextSeq();
         long started = System.nanoTime();
         ctx.checkDeadline();
 
         String outcome;
         String result;
-        if (seq > ctx.maxToolCalls()) {
+        if (count > ctx.maxToolCalls()) {
             outcome = "LIMIT_REACHED";
             result = "LIMIT_REACHED: the tool-call budget is used up. Give your final JSON answer now.";
         } else if (!ctx.hasRole(REQUIRED_ROLE)) {
@@ -200,7 +202,7 @@ public class ReconTools {
             }
         }
         long ms = (System.nanoTime() - started) / 1_000_000;
-        ctx.record(new ToolCallTrace(seq, tool, sha256(args), result.length(), outcome, ms));
+        ctx.record(new ToolCallTrace(seq, tool, sha256(args), result.length(), outcome, ms, ctx.currentAgent()));
         meters.counter("reconcile.agent.tool.calls", "tool", tool, "outcome", outcome).increment();
         return result;
     }

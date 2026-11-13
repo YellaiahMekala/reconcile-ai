@@ -1,0 +1,2 @@
+CLEARING REPORT
+INV-7001 (11,000.00 USD) and INV-7002 (1,000.00 USD) were booked on 2026-06-30. INV-7001 cleared on 2026-06-30; INV-7002 was released after the cut-off and settled on value date 2026-07-01. Both were received in full.

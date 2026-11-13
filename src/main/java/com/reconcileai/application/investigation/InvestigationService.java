@@ -16,6 +16,7 @@ import com.reconcileai.domain.InvestigationJob;
 import com.reconcileai.domain.InvestigationMode;
 import com.reconcileai.infrastructure.ai.agent.AgentToolCallStore;
 import com.reconcileai.infrastructure.ai.agent.InvestigationAgent;
+import com.reconcileai.infrastructure.ai.agent.SupervisedInvestigation;
 import com.reconcileai.domain.JobStatus;
 import com.reconcileai.domain.ResolutionProposal;
 import com.reconcileai.infrastructure.ai.guard.InjectionScanner;
@@ -67,6 +68,12 @@ public class InvestigationService {
     private final TokenBucketRateLimiter rateLimiter;
     private final RateLimitProperties rateLimit;
     private final InvestigationAgent agent;
+    private SupervisedInvestigation supervised;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSupervisedInvestigation(SupervisedInvestigation supervised) {
+        this.supervised = supervised;
+    }
     private final AgentToolCallStore toolCallStore;
 
     public InvestigationService(TenantContext tenantContext, BreakItemRepository breaks, EvidenceRepository evidence,
@@ -95,12 +102,18 @@ public class InvestigationService {
         return start(breakId, analystNote, null);
     }
 
-    /** @param modeName SINGLE_CALL (or null) for the original flow, AGENT for the tool-using agent */
+    /**
+     * @param modeName SINGLE_CALL (or null) for the original flow, AGENT for the tool-using agent, SUPERVISED or
+     *                 SUPERVISED_PLANNED for the specialist agents
+     */
     public InvestigationJob start(UUID breakId, String analystNote, String modeName) {
         CurrentUser user = tenantContext.currentUser();
         InvestigationMode mode = parseMode(modeName);
         if (mode == InvestigationMode.AGENT && !agent.available()) {
             throw new InputRejectedException("Agent mode is not enabled on this server");
+        }
+        if (mode.supervised() && (supervised == null || !supervised.available())) {
+            throw new InputRejectedException("Supervised mode is not enabled on this server");
         }
         if (rateLimit.enabled()) {
             // Before any DB or model work: a throttled request costs nothing.
@@ -153,7 +166,7 @@ public class InvestigationService {
         return job;
     }
 
-    /** The tool calls an AGENT job made, in order. Empty for single-call jobs. 404 for another tenant's job. */
+    /** The tool calls an AGENT or supervised job made, in order. Empty for single-call jobs. 404 for another tenant's job. */
     @Transactional(readOnly = true)
     public List<AgentToolCallStore.StoredToolCall> toolCalls(UUID jobId) {
         InvestigationJob job = getJob(jobId);
@@ -167,7 +180,7 @@ public class InvestigationService {
         try {
             return InvestigationMode.valueOf(name.strip().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new InputRejectedException("mode must be SINGLE_CALL or AGENT");
+            throw new InputRejectedException("mode must be SINGLE_CALL, AGENT, SUPERVISED or SUPERVISED_PLANNED");
         }
     }
 

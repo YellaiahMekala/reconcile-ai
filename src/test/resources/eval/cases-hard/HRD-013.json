@@ -1,0 +1,21 @@
+{
+ "id": "HRD-013",
+ "ledgerAmount": "2500.00",
+ "externalAmount": "2000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-013-fee-schedule.txt",
+  "hrd-013-instalment-plan.txt"
+ ],
+ "expected": {
+  "rootCause": "PARTIAL_SETTLEMENT",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-013-instalment-plan.txt"
+  ]
+ },
+ "tags": [
+  "unsupported-citation",
+  "hard"
+ ]
+}

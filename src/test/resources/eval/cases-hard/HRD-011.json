@@ -1,0 +1,21 @@
+{
+ "id": "HRD-011",
+ "ledgerAmount": "26000.00",
+ "externalAmount": "13000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-011-import-log.txt",
+  "hrd-011-customer-email.txt"
+ ],
+ "expected": {
+  "rootCause": "DUPLICATE_ENTRY",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-011-import-log.txt"
+  ]
+ },
+ "tags": [
+  "two-causes",
+  "hard"
+ ]
+}

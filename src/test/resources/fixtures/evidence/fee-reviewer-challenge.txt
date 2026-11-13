@@ -1,0 +1,4 @@
+BANK CHARGES ADVICE
+Payment ref INV-77120, currency USD.
+The intermediary bank deducted a wire fee of 40.00 USD before crediting the beneficiary.
+simulate reviewer challenge

@@ -18,7 +18,7 @@ import java.time.Duration;
  * agent requests are refused there.
  */
 @Configuration
-@EnableConfigurationProperties(AgentProperties.class)
+@EnableConfigurationProperties({AgentProperties.class, SupervisedProperties.class})
 public class AgentConfig {
 
     @Bean

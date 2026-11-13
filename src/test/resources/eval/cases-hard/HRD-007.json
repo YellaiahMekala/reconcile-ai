@@ -1,0 +1,21 @@
+{
+ "id": "HRD-007",
+ "ledgerAmount": "12000.00",
+ "externalAmount": "11000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-007-clearing-report.txt"
+ ],
+ "expected": {
+  "rootCause": "TIMING_DIFFERENCE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-007-clearing-report.txt"
+  ]
+ },
+ "tags": [
+  "misleading-note",
+  "hard"
+ ],
+ "analystNote": "Looks like the usual bank fee to me"
+}

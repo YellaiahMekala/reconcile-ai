@@ -1,0 +1,2 @@
+BANK STATEMENT EXTRACT
+INV-40210 credited 15,000.00 USD on value date 2026-05-02. The payment was sent on 2026-05-01 and settled the next business day.

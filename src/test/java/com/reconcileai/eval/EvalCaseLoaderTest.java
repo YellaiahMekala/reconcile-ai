@@ -36,6 +36,27 @@ class EvalCaseLoaderTest {
     }
 
     @Test
+    void theHardSetIsSeparateLabelledAndCoversTheFourWeaknessTypes() {
+        List<EvalCase> hard = new EvalCaseLoader().loadHard();
+        assertThat(hard).hasSize(12).allMatch(c -> c.tags().contains("hard"));
+        assertThat(hard).extracting(EvalCase::id).doesNotContainAnyElementsOf(cases.stream().map(EvalCase::id).toList());
+        Set<String> kinds = hard.stream().flatMap(c -> c.tags().stream()).collect(Collectors.toSet());
+        assertThat(kinds).contains("conflicting", "misleading-note", "two-causes", "unsupported-citation");
+        assertThat(hard).filteredOn(c -> c.tags().contains("misleading-note")).allMatch(c -> c.analystNote() != null);
+        assertThat(cases).hasSize(28); // the easy set, and every floor built on it, is unchanged
+    }
+
+    @Test
+    void aWrongCauseCountsAgainstSafetyOnlyWhenItReachesAnApprover() {
+        EvalCaseResult toApprover = result("A-1", "FEE_OR_CHARGE", "TIMING_DIFFERENCE", "L1_APPROVAL", "L1_APPROVAL", 1, 1, 1);
+        EvalCaseResult toPerson = result("A-2", "FEE_OR_CHARGE", "TIMING_DIFFERENCE", "L1_APPROVAL", "MANUAL_REVIEW", 1, 1, 1);
+        EvalCaseResult right = result("A-3", "FEE_OR_CHARGE", "FEE_OR_CHARGE", "L1_APPROVAL", "L1_APPROVAL", 1, 1, 1);
+        assertThat(toApprover.wrongCauseReachedApprover()).isTrue();
+        assertThat(toPerson.wrongCauseReachedApprover()).isFalse();
+        assertThat(right.wrongCauseReachedApprover()).isFalse();
+    }
+
+    @Test
     void summaryComputesAccuracyPercentilesAndCost() {
         EvalCaseResult right = result("A-1", "FEE_OR_CHARGE", "FEE_OR_CHARGE", "L1_APPROVAL", "L1_APPROVAL", 1000, 200, 100);
         EvalCaseResult wrong = result("A-2", "FEE_OR_CHARGE", "UNKNOWN", "L1_APPROVAL", "MANUAL_REVIEW", 1000, 200, 900);
@@ -57,6 +78,6 @@ class EvalCaseLoaderTest {
     private static EvalCaseResult result(String id, String expRoot, String root, String expRoute, String route,
                                          int prompt, int completion, long wall) {
         return new EvalCaseResult(id, List.of("fee"), expRoot, expRoute, true, null, root, route, "STANDARD", true,
-            List.of("f.txt"), List.of(), prompt, completion, wall, wall, "m", null);
+            List.of("f.txt"), List.of(), prompt, completion, wall, wall, "m", null, 1, null);
     }
 }

@@ -1,0 +1,21 @@
+{
+ "id": "HRD-006",
+ "ledgerAmount": "3200.00",
+ "externalAmount": "3950.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-006-bank-extract.txt",
+  "hrd-006-clearing-note.txt"
+ ],
+ "expected": {
+  "rootCause": "MISSING_ENTRY",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-006-bank-extract.txt"
+  ]
+ },
+ "tags": [
+  "conflicting",
+  "hard"
+ ]
+}

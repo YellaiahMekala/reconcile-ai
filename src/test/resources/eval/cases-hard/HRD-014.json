@@ -1,0 +1,21 @@
+{
+ "id": "HRD-014",
+ "ledgerAmount": "6300.00",
+ "externalAmount": "6000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-014-account-note.txt",
+  "hrd-014-correction-ticket.txt"
+ ],
+ "expected": {
+  "rootCause": "DATA_ENTRY_ERROR",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-014-correction-ticket.txt"
+  ]
+ },
+ "tags": [
+  "unsupported-citation",
+  "hard"
+ ]
+}

@@ -1,0 +1,2 @@
+LEDGER IMPORT LOG
+INV-8810 for 13,000.00 USD was loaded in batch 14 and loaded again in batch 15 after a restart. Only one invoice exists.

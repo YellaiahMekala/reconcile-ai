@@ -17,6 +17,8 @@ import com.reconcileai.domain.RootCauseCategory;
 import com.reconcileai.domain.InvestigationMode;
 import com.reconcileai.infrastructure.ai.InvestigationAiClient;
 import com.reconcileai.infrastructure.ai.agent.InvestigationAgent;
+import com.reconcileai.infrastructure.ai.agent.ReviewerVerdict;
+import com.reconcileai.infrastructure.ai.agent.SupervisedInvestigation;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
 import com.reconcileai.infrastructure.ai.cache.SemanticCache;
 import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
@@ -84,6 +86,13 @@ public class InvestigationJobRunner {
     private ObservationRegistry observations = ObservationRegistry.NOOP;
     private SemanticCache cache = SemanticCache.DISABLED;
     private io.micrometer.core.instrument.MeterRegistry meters;
+    private SupervisedInvestigation supervised;
+
+    /** Optional: the supervised modes (specialist agents). Missing only in slices that do not load the agent package. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSupervisedInvestigation(SupervisedInvestigation supervised) {
+        this.supervised = supervised;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSemanticCache(SemanticCache cache) {
@@ -148,6 +157,10 @@ public class InvestigationJobRunner {
             BreakItem breakItem = breaks.findByIdAndTenantId(job.getBreakItemId(), tenantId).orElseThrow();
             if (job.getMode() == InvestigationMode.AGENT) {
                 runAgent(jobId, tenantId, job, breakItem);
+                return;
+            }
+            if (job.getMode().supervised()) {
+                runSupervised(jobId, tenantId, job, breakItem);
                 return;
             }
 
@@ -217,21 +230,60 @@ public class InvestigationJobRunner {
         verifyRouteAndPersist(jobId, tenantId, breakItem, draft, snapshot);
     }
 
-    /** Citation check against the retrieval snapshot, policy gate, then proposal + job SUCCEEDED in one transaction. */
+    /**
+     * Supervised modes: specialist agents draft, comment and review; the shared budget covers all of them. The
+     * reviewer's verdict enters the policy gate as one boolean (rule 0, REVIEWER_CHALLENGE), which can only send the
+     * break to a person. Risk flags are stored for the approver and never change the route.
+     */
+    private void runSupervised(UUID jobId, String tenantId, InvestigationJob job, BreakItem breakItem) {
+        if (supervised == null) {
+            throw new IllegalStateException("SUPERVISED_UNAVAILABLE");
+        }
+        stage(jobId, tenantId, JobStage.CALLING_MODEL, null);
+        SupervisedInvestigation.Variant variant = job.getMode() == InvestigationMode.SUPERVISED_PLANNED
+            ? SupervisedInvestigation.Variant.PLANNED : SupervisedInvestigation.Variant.FIXED;
+        SupervisedInvestigation.Result result = supervised.run(variant, tenantId, breakItem.getId(), jobId, job.getAnalystNote());
+        List<String> snapshot = result.retrievedChunkIds();
+
+        NormalizedDraft draft = InvestigationPromptBuilder.normalize(result.draft());
+        ReviewerVerdict verdict = result.verdict();
+        if (snapshot.isEmpty()) {
+            draft = new NormalizedDraft(RootCauseCategory.UNKNOWN,
+                "The agents found no usable evidence (none uploaded, none relevant, or all quarantined).",
+                "Upload evidence that explains the variance, then re-run the investigation.",
+                BigDecimal.ZERO.setScale(3), List.of());
+            verdict = ReviewerVerdict.notRun("NO_EVIDENCE");
+        }
+        ReviewerVerdict finalVerdict = verdict;
+        stage(jobId, tenantId, JobStage.VERIFYING, j -> j.recordRetrieval(snapshot, 0));
+        verifyRouteAndPersist(jobId, tenantId, breakItem, draft, snapshot, finalVerdict.challenged(),
+            j -> j.recordReview(finalVerdict.verdict().name(), result.riskFlags()));
+    }
+
     private CitationResult verifyRouteAndPersist(UUID jobId, String tenantId, BreakItem breakItem, NormalizedDraft draft,
                                                  List<String> snapshotChunkIds) {
+        return verifyRouteAndPersist(jobId, tenantId, breakItem, draft, snapshotChunkIds, false, null);
+    }
+
+    /** Citation check against the retrieval snapshot, policy gate, then proposal + job SUCCEEDED in one transaction. */
+    private CitationResult verifyRouteAndPersist(UUID jobId, String tenantId, BreakItem breakItem, NormalizedDraft draft,
+                                                 List<String> snapshotChunkIds, boolean reviewerChallenged,
+                                                 java.util.function.Consumer<InvestigationJob> beforeSucceed) {
         CitationResult citations = citationVerifier.verify(draft.citedChunkIds(), snapshotChunkIds);
         // No-evidence path has no citations by construction; the UNKNOWN root cause routes it to manual review.
         boolean citationsOk = citations.valid() || draft.citedChunkIds().isEmpty() && draft.rootCause() == RootCauseCategory.UNKNOWN;
         stage(jobId, tenantId, JobStage.ROUTING, null);
         PolicyDecision decision = policyGate.evaluate(
-            new PolicyInput(breakItem.variance(), draft.confidence(), draft.rootCause(), citationsOk));
+            new PolicyInput(breakItem.variance(), draft.confidence(), draft.rootCause(), citationsOk, reviewerChallenged));
 
         InvestigationJob done = tx.execute(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
             BreakItem b = breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).orElseThrow();
             ResolutionProposal p = proposalService.persistProposal(j, b, draft, citations.valid(),
                 citations.invalidIds(), decision);
+            if (beforeSucceed != null) {
+                beforeSucceed.accept(j);
+            }
             j.succeed(p.getId());
             return jobs.save(j);
         });

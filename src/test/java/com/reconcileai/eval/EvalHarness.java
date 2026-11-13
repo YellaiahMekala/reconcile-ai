@@ -26,11 +26,15 @@ final class EvalHarness {
     }
 
     static Outcome runAndReport(JdbcTemplate admin, String label, String notes, boolean agentMode) {
-        List<EvalCase> cases = new EvalCaseLoader().loadAll();
+        return runAndReport(admin, label, notes, agentMode ? "AGENT" : "SINGLE_CALL", new EvalCaseLoader().loadAll());
+    }
+
+    /** Runs the given cases in one mode and writes the usual report under target/eval. */
+    static Outcome runAndReport(JdbcTemplate admin, String label, String notes, String mode, List<EvalCase> cases) {
         String bearer = JwtTestSupport.bearer("eval-analyst", "TENANT_EVAL_" + UUID.randomUUID().toString().substring(0, 8),
             List.of("RECON_ANALYST"));
 
-        List<EvalCaseResult> results = new EvalRunner(bearer, admin, agentMode).runAll(cases);
+        List<EvalCaseResult> results = new EvalRunner(bearer, admin, mode).runAll(cases);
         EvalSummary summary = EvalSummary.of(results, pricing());
         Path[] files = new EvalReportWriter().write(REPORT_DIR, label, notes, summary, results, HumanScores.load(HUMAN_SCORES));
         System.out.println("[eval] " + label + ": root-cause " + summary.rootCauseAccuracy() + ", route " + summary.routeAccuracy()
@@ -38,7 +42,7 @@ final class EvalHarness {
         return new Outcome(results, summary);
     }
 
-    private static Properties pricing() {
+    static Properties pricing() {
         Properties p = new Properties();
         try (InputStream in = EvalHarness.class.getResourceAsStream("/eval/pricing.properties")) {
             p.load(in);

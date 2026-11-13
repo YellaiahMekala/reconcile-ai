@@ -22,14 +22,24 @@ import java.util.Set;
 public final class EvalCaseLoader {
 
     static final String CASES = "classpath*:eval/cases/*.json";
+    /** Labelled before any run (Phase 4G): conflicting evidence, misleading notes, two causes, unsupported citations. */
+    static final String HARD_CASES = "classpath*:eval/cases-hard/*.json";
     static final String EVIDENCE_DIR = "/eval/evidence/";
 
     private final ObjectMapper mapper = new ObjectMapper();
 
     public List<EvalCase> loadAll() {
+        return load(CASES);
+    }
+
+    public List<EvalCase> loadHard() {
+        return load(HARD_CASES);
+    }
+
+    public List<EvalCase> load(String pattern) {
         List<EvalCase> cases = new ArrayList<>();
         try {
-            for (Resource r : new PathMatchingResourcePatternResolver().getResources(CASES)) {
+            for (Resource r : new PathMatchingResourcePatternResolver().getResources(pattern)) {
                 try (InputStream in = r.getInputStream()) {
                     cases.add(validate(mapper.readValue(in, EvalCase.class), r.getFilename()));
                 }

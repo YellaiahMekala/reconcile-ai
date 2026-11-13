@@ -1,0 +1,2 @@
+BANK EXTRACT
+Receipt of 30,000.00 USD for INV-12200 arrived with value date 2026-07-02. The ledger booked it on 2026-06-30, before the funds settled.

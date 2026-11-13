@@ -1,0 +1,21 @@
+{
+ "id": "HRD-003",
+ "ledgerAmount": "15040.00",
+ "externalAmount": "15000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-003-statement.txt",
+  "hrd-003-confirmation.txt"
+ ],
+ "expected": {
+  "rootCause": "FEE_OR_CHARGE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-003-confirmation.txt"
+  ]
+ },
+ "tags": [
+  "conflicting",
+  "hard"
+ ]
+}

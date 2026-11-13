@@ -4,7 +4,8 @@ import java.util.List;
 
 /**
  * One labelled break for the evaluation harness. The expected block is what a careful human reviewer would
- * decide, not what any particular model happens to answer.
+ * decide, not what any particular model happens to answer. {@code analystNote} is optional; the hard set uses it to
+ * test a misleading hint from the analyst.
  */
 public record EvalCase(
     String id,
@@ -13,7 +14,8 @@ public record EvalCase(
     String currency,
     List<String> evidence,
     Expected expected,
-    List<String> tags
+    List<String> tags,
+    String analystNote
 ) {
 
     /**
