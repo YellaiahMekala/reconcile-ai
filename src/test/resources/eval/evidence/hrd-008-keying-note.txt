@@ -1,0 +1,2 @@
+KEYING REVIEW NOTE
+Invoice INV-8120 is for 4,750.00 USD. The ledger entry was typed as 7,450.00 USD: the first two digits were transposed. The bank amount is correct.

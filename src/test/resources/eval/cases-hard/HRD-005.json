@@ -1,0 +1,21 @@
+{
+ "id": "HRD-005",
+ "ledgerAmount": "9000.00",
+ "externalAmount": "4500.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-005-import-log.txt",
+  "hrd-005-customer-letter.txt"
+ ],
+ "expected": {
+  "rootCause": "DUPLICATE_ENTRY",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-005-import-log.txt"
+  ]
+ },
+ "tags": [
+  "conflicting",
+  "hard"
+ ]
+}

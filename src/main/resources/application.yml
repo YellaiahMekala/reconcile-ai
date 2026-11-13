@@ -105,6 +105,12 @@ reconcile:
     max-model-turns: 8              # each tool round trip is one turn
     timeout-seconds: 60
     max-tool-result-chars: 4000
+    supervised:                     # specialist agents (Phase 4G); also needs agent.enabled; off by default
+      enabled: ${SUPERVISED_ENABLED:false}
+      max-tool-calls: 8             # shared by ALL specialists in one run, not per agent
+      max-model-turns: 14           # analyst + risk checker + reviewer (+ supervisor in the planned variant)
+      timeout-seconds: 120
+      max-delegations: 6            # planned variant: hand-offs the supervisor model may make
   ratelimit:                        # per tenant, on POST /investigations (each one can start paid model calls)
     enabled: ${RATE_LIMIT_ENABLED:true}
     capacity: 20                    # burst size

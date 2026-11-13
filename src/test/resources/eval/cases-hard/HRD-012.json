@@ -1,0 +1,22 @@
+{
+ "id": "HRD-012",
+ "ledgerAmount": "48000.00",
+ "externalAmount": "18000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-012-bank-extract.txt",
+  "hrd-012-worksheet.txt"
+ ],
+ "expected": {
+  "rootCause": "TIMING_DIFFERENCE",
+  "route": "L2_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-012-bank-extract.txt"
+  ]
+ },
+ "tags": [
+  "two-causes",
+  "hard",
+  "material"
+ ]
+}

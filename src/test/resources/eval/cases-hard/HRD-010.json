@@ -1,0 +1,21 @@
+{
+ "id": "HRD-010",
+ "ledgerAmount": "5030.00",
+ "externalAmount": "5000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-010-correspondent.txt",
+  "hrd-010-fx-note.txt"
+ ],
+ "expected": {
+  "rootCause": "FEE_OR_CHARGE",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-010-correspondent.txt"
+  ]
+ },
+ "tags": [
+  "two-causes",
+  "hard"
+ ]
+}

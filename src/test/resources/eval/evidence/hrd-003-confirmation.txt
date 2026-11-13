@@ -1,0 +1,2 @@
+BENEFICIARY BANK CONFIRMATION
+For INV-40210 the beneficiary bank deducted a lifting charge of 40.00 USD before crediting the account.

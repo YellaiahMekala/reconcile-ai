@@ -24,21 +24,26 @@ public class AgentToolCallStore {
     public void saveAll(String tenantId, UUID jobId, List<ToolCallTrace> calls) {
         for (ToolCallTrace c : calls) {
             jdbc.update("""
-                INSERT INTO agent_tool_call (id, tenant_id, job_id, seq, tool, arg_hash, result_chars, outcome, latency_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                UUID.randomUUID(), tenantId, jobId, c.seq(), c.tool(), c.argHash(), c.resultChars(), c.outcome(), c.latencyMs());
+                INSERT INTO agent_tool_call (id, tenant_id, job_id, seq, tool, arg_hash, result_chars, outcome, latency_ms,
+                                             agent_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                UUID.randomUUID(), tenantId, jobId, c.seq(), c.tool(), c.argHash(), c.resultChars(), c.outcome(), c.latencyMs(),
+                c.agentName());
         }
     }
 
-    /** One stored tool call, as shown to a reviewer (no arguments, only their hash). */
-    public record StoredToolCall(int seq, String tool, String outcome, int resultChars, long latencyMs) {}
+    /**
+     * One stored tool call, as shown to a reviewer (no arguments, only their hash). {@code agentName} says which
+     * specialist made it in supervised mode; null in agent mode.
+     */
+    public record StoredToolCall(int seq, String tool, String outcome, int resultChars, long latencyMs, String agentName) {}
 
     public List<StoredToolCall> find(String tenantId, UUID jobId) {
         return jdbc.query("""
-            SELECT seq, tool, outcome, result_chars, latency_ms FROM agent_tool_call
+            SELECT seq, tool, outcome, result_chars, latency_ms, agent_name FROM agent_tool_call
              WHERE tenant_id = ? AND job_id = ? ORDER BY seq""",
             (rs, i) -> new StoredToolCall(rs.getInt("seq"), rs.getString("tool"), rs.getString("outcome"),
-                rs.getInt("result_chars"), rs.getLong("latency_ms")),
+                rs.getInt("result_chars"), rs.getLong("latency_ms"), rs.getString("agent_name")),
             tenantId, jobId);
     }
 
@@ -47,7 +52,11 @@ public class AgentToolCallStore {
         StringBuilder sb = new StringBuilder();
         for (ToolCallTrace c : calls) {
             sb.append(c.seq()).append('|').append(c.tool()).append('|').append(c.argHash()).append('|')
-                .append(c.outcome()).append('\n');
+                .append(c.outcome());
+            if (c.agentName() != null) {
+                sb.append('|').append(c.agentName()); // agent-mode digests stay exactly as before
+            }
+            sb.append('\n');
         }
         try {
             return HexFormat.of().formatHex(

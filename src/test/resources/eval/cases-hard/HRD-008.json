@@ -1,0 +1,21 @@
+{
+ "id": "HRD-008",
+ "ledgerAmount": "7450.00",
+ "externalAmount": "4750.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-008-keying-note.txt"
+ ],
+ "expected": {
+  "rootCause": "DATA_ENTRY_ERROR",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-008-keying-note.txt"
+  ]
+ },
+ "tags": [
+  "misleading-note",
+  "hard"
+ ],
+ "analystNote": "Probably a timing difference that clears tomorrow"
+}

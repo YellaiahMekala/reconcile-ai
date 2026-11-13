@@ -80,4 +80,27 @@ class PolicyGateServiceTest {
             new PolicyProperties.AutoResolve(false, new BigDecimal("1000"), new BigDecimal("0.95"))))
             .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void reviewerChallengeAlwaysMeansManualReviewAndIsCheckedFirst() {
+        // a draft that would otherwise go to L1, and one that would go to L2
+        PolicyGateService auto = new PolicyGateService(props(true));
+        for (PolicyGateService g : java.util.List.of(gate, auto)) {
+            var d = g.evaluate(new PolicyInput(Money.of("10.00", "USD"), new BigDecimal("0.99"),
+                RootCauseCategory.FEE_OR_CHARGE, true, true));
+            assertThat(d.route()).isEqualTo(RoutingDecision.MANUAL_REVIEW);
+            assertThat(d.reason()).isEqualTo("REVIEWER_CHALLENGE");
+        }
+        var material = gate.evaluate(new PolicyInput(Money.of("90000.00", "EUR"), new BigDecimal("0.99"),
+            RootCauseCategory.FEE_OR_CHARGE, false, true));
+        assertThat(material.reason()).isEqualTo("REVIEWER_CHALLENGE");
+    }
+
+    @Test
+    void noChallengeChangesNothing() {
+        PolicyInput withFlag = new PolicyInput(Money.of("500.00", "USD"), new BigDecimal("0.90"), RootCauseCategory.FEE_OR_CHARGE, true, false);
+        PolicyInput legacy = in("500.00", "USD", "0.90", RootCauseCategory.FEE_OR_CHARGE, true);
+        assertThat(gate.evaluate(withFlag)).isEqualTo(gate.evaluate(legacy));
+        assertThat(gate.evaluate(withFlag).route()).isEqualTo(RoutingDecision.L1_APPROVAL);
+    }
 }

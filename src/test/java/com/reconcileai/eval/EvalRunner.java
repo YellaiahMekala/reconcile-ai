@@ -22,17 +22,22 @@ public final class EvalRunner {
 
     private final String bearer;
     private final JdbcTemplate admin;
-    private final boolean agentMode;
+    private final String mode;
 
     public EvalRunner(String bearer, JdbcTemplate admin) {
-        this(bearer, admin, false);
+        this(bearer, admin, "SINGLE_CALL");
     }
 
     /** @param agentMode true to start every investigation in AGENT mode instead of the single-call mode */
     public EvalRunner(String bearer, JdbcTemplate admin, boolean agentMode) {
+        this(bearer, admin, agentMode ? "AGENT" : "SINGLE_CALL");
+    }
+
+    /** @param mode SINGLE_CALL, AGENT, SUPERVISED or SUPERVISED_PLANNED */
+    public EvalRunner(String bearer, JdbcTemplate admin, String mode) {
         this.bearer = bearer;
         this.admin = admin;
-        this.agentMode = agentMode;
+        this.mode = mode;
     }
 
     public List<EvalCaseResult> runAll(List<EvalCase> cases) {
@@ -54,25 +59,27 @@ public final class EvalRunner {
         }
 
         long started = System.nanoTime();
-        String jobStarted = agentMode ? InvestigationTestSupport.startAgent(bearer, breakId)
-            : InvestigationTestSupport.start(bearer, breakId, null);
+        String jobStarted = "SINGLE_CALL".equals(mode) ? InvestigationTestSupport.start(bearer, breakId, c.analystNote())
+            : InvestigationTestSupport.startMode(bearer, breakId, mode, c.analystNote());
         JsonPath job = InvestigationTestSupport.awaitTerminal(bearer, jobStarted);
         long wallMs = (System.nanoTime() - started) / 1_000_000;
 
         String jobId = job.getString("id");
         Map<String, Object> usage = admin.queryForMap("""
             SELECT coalesce(sum(prompt_tokens), 0) AS p, coalesce(sum(completion_tokens), 0) AS c,
-                   coalesce(sum(latency_ms), 0) AS l, max(model) AS model
+                   coalesce(sum(latency_ms), 0) AS l, max(model) AS model, count(*) AS n
               FROM llm_call WHERE job_id = ?::uuid""", jobId);
         int prompt = ((Number) usage.get("p")).intValue();
         int completion = ((Number) usage.get("c")).intValue();
         long llmMs = ((Number) usage.get("l")).longValue();
         String model = (String) usage.get("model");
+        int calls = ((Number) usage.get("n")).intValue();
+        String verdict = job.getString("reviewVerdict");
 
         if (!"SUCCEEDED".equals(job.getString("status"))) {
             return new EvalCaseResult(c.id(), c.tags(), c.expected().rootCause(), c.expected().route(), false,
                 job.getString("failureReason"), null, null, null, null, List.of(), c.expected().mustCiteEvidence(),
-                prompt, completion, llmMs, wallMs, model, toolTrace(jobId));
+                prompt, completion, llmMs, wallMs, model, toolTrace(jobId), calls, verdict);
         }
 
         JsonPath p = InvestigationTestSupport.proposal(bearer, job.getString("proposalId"));
@@ -85,12 +92,12 @@ public final class EvalRunner {
 
         return new EvalCaseResult(c.id(), c.tags(), c.expected().rootCause(), c.expected().route(), true, null,
             p.getString("rootCause"), p.getString("route"), p.getString("routeReason"), p.getBoolean("citationsValid"),
-            citedFiles, missing, prompt, completion, llmMs, wallMs, model, toolTrace(jobId));
+            citedFiles, missing, prompt, completion, llmMs, wallMs, model, toolTrace(jobId), calls, verdict);
     }
 
-    /** One short line per run, e.g. getBreakSummary:OK:120 > searchEvidence:OK:43; null outside agent mode. */
+    /** One short line per run, e.g. getBreakSummary:OK:120 > searchEvidence:OK:43; null in single-call mode. */
     private String toolTrace(String jobId) {
-        if (!agentMode) {
+        if ("SINGLE_CALL".equals(mode)) {
             return null;
         }
         return String.join(" > ", admin.queryForList(

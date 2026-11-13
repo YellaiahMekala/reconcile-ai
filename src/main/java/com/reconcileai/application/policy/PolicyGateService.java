@@ -13,6 +13,7 @@ import java.math.BigDecimal;
  *
  * <h2>Rules, evaluated top to bottom (first match wins)</h2>
  * <pre>
+ *  0. supervised review: reviewer CHALLENGE                       -> MANUAL_REVIEW  REVIEWER_CHALLENGE
  *  1. citations invalid (missing / not in retrieval snapshot)    -> MANUAL_REVIEW  CITATIONS_INVALID
  *  2. root cause UNKNOWN                                          -> MANUAL_REVIEW  UNKNOWN_ROOT_CAUSE
  *  3. confidence < 0.80                                           -> MANUAL_REVIEW  LOW_CONFIDENCE
@@ -21,6 +22,9 @@ import java.math.BigDecimal;
  *  6. auto-resolve ENABLED && variance <= cap && conf >= min      -> AUTO_RESOLVE   WITHIN_AUTO_POLICY
  *  7. otherwise                                                   -> L1_APPROVAL    STANDARD
  * </pre>
+ *
+ * Rule 0 only exists in the supervised modes and can only send MORE work to a person: the reviewer agent never
+ * sets a route, it only supplies one more boolean that is checked here.
  *
  * <h2>Materiality</h2>
  * Always the VARIANCE |ledger − external|, never the raw ledger amount. A 10,000,000 USD payment that is off by
@@ -38,11 +42,20 @@ public class PolicyGateService {
         this.props = props;
     }
 
-    public record PolicyInput(Money variance, BigDecimal confidence, RootCauseCategory rootCause, boolean citationsValid) {}
+    /** @param reviewerChallenged true when a supervised-mode reviewer found a cited claim its chunk does not support */
+    public record PolicyInput(Money variance, BigDecimal confidence, RootCauseCategory rootCause, boolean citationsValid,
+                              boolean reviewerChallenged) {
+        public PolicyInput(Money variance, BigDecimal confidence, RootCauseCategory rootCause, boolean citationsValid) {
+            this(variance, confidence, rootCause, citationsValid, false);
+        }
+    }
 
     public record PolicyDecision(RoutingDecision route, String reason) {}
 
     public PolicyDecision evaluate(PolicyInput in) {
+        if (in.reviewerChallenged()) {
+            return new PolicyDecision(RoutingDecision.MANUAL_REVIEW, "REVIEWER_CHALLENGE");
+        }
         if (!in.citationsValid()) {
             return new PolicyDecision(RoutingDecision.MANUAL_REVIEW, "CITATIONS_INVALID");
         }

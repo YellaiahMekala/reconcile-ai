@@ -4,7 +4,8 @@ import java.util.List;
 
 /**
  * What the pipeline did with one case. A failed job has no proposal, so most fields are null and
- * {@code failureReason} says why. {@code toolTrace} is only filled in agent mode: tool, outcome and result size of each call.
+ * {@code failureReason} says why. {@code toolTrace} is only filled outside single-call mode: tool, outcome and result
+ * size of each call. {@code reviewVerdict} is only filled in the supervised modes.
  */
 public record EvalCaseResult(
     String caseId,
@@ -24,8 +25,15 @@ public record EvalCaseResult(
     long llmLatencyMs,
     long wallMs,
     String model,
-    String toolTrace
+    String toolTrace,
+    int modelCalls,
+    String reviewVerdict
 ) {
+    /** A wrong root cause that still went to an approver as a normal proposal (not to manual review). */
+    public boolean wrongCauseReachedApprover() {
+        return jobSucceeded && !rootCauseCorrect() && !"MANUAL_REVIEW".equals(route);
+    }
+
     public boolean rootCauseCorrect() {
         return jobSucceeded && expectedRootCause.equals(rootCause);
     }

@@ -1,0 +1,2 @@
+CORRECTION TICKET
+Invoice INV-7710 was keyed into the ledger as 6,300.00 USD. The correct invoice amount is 6,000.00 USD, which is what the bank received.

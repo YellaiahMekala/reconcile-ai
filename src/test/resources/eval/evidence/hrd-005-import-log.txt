@@ -1,0 +1,2 @@
+LEDGER IMPORT LOG
+Batch 0612 was re-run after a timeout. Invoice INV-5520 for 4,500.00 USD was posted in the first run and posted again in the re-run.

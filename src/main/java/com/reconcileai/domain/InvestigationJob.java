@@ -49,8 +49,16 @@ public class InvestigationJob {
     private String analystNote;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, updatable = false, length = 16)
+    @Column(nullable = false, updatable = false, length = 24)
     private InvestigationMode mode = InvestigationMode.SINGLE_CALL;
+
+    /** Supervised modes only: AGREE, CHALLENGE or NOT_RUN from the reviewer agent (verdict derived in code). */
+    @Column(name = "review_verdict", length = 16)
+    private String reviewVerdict;
+
+    /** Supervised modes only: the risk checker's advisory flags, one per line. Shown to the approver; never routes. */
+    @Column(name = "risk_flags", columnDefinition = "text")
+    private String riskFlags;
 
     /** Comma-separated vector_store ids that were placed in the prompt. The ONLY ids a proposal may cite. */
     @Column(name = "retrieved_chunk_ids", columnDefinition = "text")
@@ -147,6 +155,17 @@ public class InvestigationJob {
     public String getInitiatedBy() { return initiatedBy; }
     public String getAnalystNote() { return analystNote; }
     public InvestigationMode getMode() { return mode; }
+    public String getReviewVerdict() { return reviewVerdict; }
+
+    public java.util.List<String> getRiskFlags() {
+        return riskFlags == null || riskFlags.isEmpty() ? java.util.List.of() : java.util.List.of(riskFlags.split("\n"));
+    }
+
+    /** Stores what the supervised review produced; called in the same transaction as the proposal. */
+    public void recordReview(String verdict, java.util.List<String> flags) {
+        this.reviewVerdict = verdict;
+        this.riskFlags = flags == null || flags.isEmpty() ? null : String.join("\n", flags);
+    }
     public Integer getContextTokenEstimate() { return contextTokenEstimate; }
     public String getFailureReason() { return failureReason; }
     public UUID getProposalId() { return proposalId; }

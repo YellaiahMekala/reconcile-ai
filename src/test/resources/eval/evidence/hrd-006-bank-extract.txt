@@ -1,0 +1,2 @@
+BANK EXTRACT
+Incoming credit 750.00 USD on 2026-04-18, reference SUPPLIER REFUND RF-2291. No matching entry exists in the ledger for this refund.

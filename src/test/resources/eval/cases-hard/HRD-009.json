@@ -1,0 +1,21 @@
+{
+ "id": "HRD-009",
+ "ledgerAmount": "10000.00",
+ "externalAmount": "6000.00",
+ "currency": "USD",
+ "evidence": [
+  "hrd-009-remittance.txt"
+ ],
+ "expected": {
+  "rootCause": "PARTIAL_SETTLEMENT",
+  "route": "L1_APPROVAL",
+  "mustCiteEvidence": [
+   "hrd-009-remittance.txt"
+  ]
+ },
+ "tags": [
+  "misleading-note",
+  "hard"
+ ],
+ "analystNote": "Customer probably paid twice, check for duplicates"
+}

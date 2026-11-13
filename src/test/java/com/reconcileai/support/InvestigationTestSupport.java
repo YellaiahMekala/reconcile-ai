@@ -28,6 +28,21 @@ public final class InvestigationTestSupport {
         .then().statusCode(202).body("mode", org.hamcrest.Matchers.equalTo("AGENT")).extract().path("id");
     }
 
+    /** Starts an investigation in the given mode (SINGLE_CALL, AGENT, SUPERVISED, SUPERVISED_PLANNED), optional note. */
+    public static String startMode(String bearer, String breakId, String mode, String note) {
+        String body = note == null ? "{\"mode\":\"" + mode + "\"}"
+            : "{\"mode\":\"" + mode + "\",\"analystNote\":\"" + note + "\"}";
+        return given().header("Authorization", bearer).contentType(ContentType.JSON).body(body)
+        .when().post("/api/v1/breaks/" + breakId + "/investigations")
+        .then().statusCode(202).body("mode", org.hamcrest.Matchers.equalTo(mode)).extract().path("id");
+    }
+
+    /** Break + one fixture + investigation in the given mode, waits for the job; returns the job JSON. */
+    public static JsonPath investigateWithMode(String bearer, String breakId, String fixture, String mode, String note) {
+        ApiTestSupport.upload(bearer, breakId, fixture, "text/plain");
+        return awaitTerminal(bearer, startMode(bearer, breakId, mode, note));
+    }
+
     /** Break + one fixture + agent investigation, waits for the job; returns the job JSON. */
     public static JsonPath investigateWithAgent(String bearer, String breakId, String fixture) {
         ApiTestSupport.upload(bearer, breakId, fixture, "text/plain");
