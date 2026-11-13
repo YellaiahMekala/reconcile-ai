@@ -44,6 +44,7 @@ until that test is green.
 | Gap closure (4F) | Original evidence file kept and downloadable, per-tenant rate limit on investigations, optional Swagger UI, SBOM and image scan in CI | `EvidenceContentIT`, `RateLimitIT`, `SwaggerEnabledIT`, `TokenBucketRateLimiterTest` |
 | Evaluation harness (4A) | 28 labelled synthetic breaks run through the real pipeline; accuracy, citation and retrieval numbers per leg; mock-llm regression gate in the build; real-model run on request | `EvalCaseLoaderTest`, `InvestigationEvalIT`, `RetrievalEvalIT` |
 | Agents and cloud (rest of Phase 4) | LangChain4j investigation agent with read-only audited tools, Alertmanager e-mail alerts, Amazon Bedrock adapter, AWS deployment with Terraform | 4B, 4C, 4D and 4E built (4D and 4E not yet run against a real AWS account) — see section 9 |
+| Supervisor agents | Specialist agents with a reviewer, compared with the existing modes on the evaluation set | Built and tested offline (4G); live comparison on a real model pending your API key |
 | Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Planned — see BRD platform requirements |
 
 **Principles applied in the code** (each is commented at the point of use):
@@ -59,6 +60,36 @@ until that test is green.
 6. **Money is exact.** `BigDecimal` via the `Money` value object. Amounts arrive as JSON strings. `double` is never used.
 7. **Flyway owns the schema.** Hibernate only validates it (`ddl-auto: validate`).
 8. **Real infrastructure in tests.** Postgres runs in Testcontainers (pgvector image) and is never mocked.
+
+---
+
+### Status at a glance
+
+Updated 2026-11-10. Three groups, so nothing is presented as more finished than it is.
+
+**Built and verified locally** (unit, integration on real containers, UI specs; CI green)
+Break and evidence CRUD, hybrid retrieval, cited proposals, policy gate, maker-checker, hash-chained audit with signed
+anchors, resilience, PII masking (identifiers and Presidio), Redis cache and SSE fan-out, Kafka outbox, Postgres RLS,
+Keycloak OIDC, daily digest, Kubernetes manifests and HPA (validated on kind), evaluation harness, single-tool-using
+agent mode (off by default), Prometheus alert rules, rate limiting and stored evidence bytes.
+
+**Built, waiting for a test with real credentials or accounts**
+
+| Item | What was verified | What is still needed |
+|---|---|---|
+| Supervisor agents on a real model (`OpenAiModeComparisonIT`) | Offline: both variants, reviewer gate rule, shared budget, tenant isolation, audit chain, 40-case comparison on scripted models | `OPENAI_API_KEY` and your go-ahead (well under 1 USD on gpt-4o-mini); decides whether the mode is worth recommending |
+| E-mail alerts (Gmail or any real SMTP) | Rules pass `promtool` tests; routing proven against a local Mailpit sink; outage drill recorded | Real SMTP credentials in `alertmanager.yml` (kept out of git) and one live delivery |
+| Amazon Bedrock live run (`BedrockEvalIT`, `BedrockChatSmokeIT`, `BEDROCK_LIVE=true`) | Adapter proven against a WireMock Converse API; `BedrockFakeEvalIT` scores match mock-llm | AWS credentials and Bedrock model access; fills the last row of the provider comparison |
+| AWS deployment (`envs/demo`: ECS Fargate, RDS, ALB, Secrets Manager, S3 Object Lock, Budgets) | `terraform validate` and `test` with mock providers, tflint, checkov; `envs/localstack` applied and destroyed in CI | A real account, AWS credit, and your explicit go-ahead for one apply, record, destroy session (about 0.20 USD per hour) |
+| Shared stream fan-out between two Fargate tasks | Redis fan-out tested locally | Redis in the AWS stack (not built there) |
+
+**Pending implementation** (designed, not started)
+
+| Item | Status |
+|---|---|
+| Expose the read-only tools over MCP for other services | Not started; needs a token-based tenant design |
+| Platform integration (shared token issuer, knowledge search, recommendation intake) | Planned |
+| Queue-depth autoscaling, Redis-backed rate limiter, Trivy scan that fails the build | Listed under Known limitations |
 
 ---
 
@@ -384,7 +415,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts: **83 unit tests** (surefire), **129 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
+Current counts: **96 unit tests** (surefire), **142 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai` and `ollama` need a real key or a running Ollama and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -510,9 +541,10 @@ number. Nothing calls a paid API or creates cloud resources unless explicitly en
 |---|---|---|---|---|
 | 4A | **Evaluation harness** (built; live run done) | 24–30 labelled synthetic breaks run through the real pipeline; root-cause and route accuracy, citation precision/recall, retrieval recall@5 and MRR per leg, p95 latency, tokens and cost per investigation | `mock-llm` baseline as a CI regression gate | OpenAI run, numbers published in `docs/proof/` |
 | 4B | **LangChain4j investigation agent** (built; live run done) | Optional `AGENT` mode: the model picks read-only tools (`getBreakSummary`, `listEvidence`, `searchEvidence`, `findSimilarResolvedBreaks`); tenant bound from the job, never a tool argument; tool output masked and injection-scanned; every call audited; the agent only drafts, so citation check, policy gate and maker-checker are unchanged | Scripted fake model (19 agent ITs, 9 unit tests); enable with `AGENT_ENABLED=true`, start with `{"mode":"AGENT"}`; tool calls at `GET /api/v1/investigations/{id}/tool-calls` | OpenAI; `OpenAiAgentEvalIT` single-call vs agent comparison |
-| 4C | **Alert delivery** (built) | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink; `promtool` rule tests (16) in CI; real-app outage drill recorded | Real SMTP: edit `alertmanager.yml` |
-| 4D | **Amazon Bedrock** (built; adapter-fidelity eval done, live run pending) | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API; `BedrockFakeEvalIT` scores identical to mock-llm through the adapter | AWS credentials for the live row of the provider comparison |
-| 4E | **AWS deployment** (built; applied and destroyed against LocalStack, never against a real account) | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov; `envs/localstack` real apply + destroy in CI (network, secrets, storage, ci modules) | Manual, approval-gated apply |
+| 4C | **Alert delivery** (built) | Alertmanager routes Prometheus alerts (circuit open, LLM error rate, spend burn, outbox backlog, NER down, anchor failures) to e-mail | Mailpit SMTP sink; `promtool` rule tests (16) in CI; real-app outage drill recorded | Real SMTP: edit `alertmanager.yml`. **Live delivery to a real mailbox not yet tested** |
+| 4D | **Amazon Bedrock** (built; adapter-fidelity eval done, **live run pending AWS credentials**) | `bedrock` chat profile next to `openai` and `ollama`; embeddings stay on OpenAI | WireMock-stubbed Converse API; `BedrockFakeEvalIT` scores identical to mock-llm through the adapter | AWS credentials for the live row of the provider comparison |
+| 4E | **AWS deployment** (built; applied and destroyed against LocalStack, **real apply pending AWS credit and your go-ahead**) | Terraform: ECS Fargate, RDS Postgres + pgvector, S3 Object Lock anchors, Secrets Manager, GitHub OIDC; deploy, record, destroy | `terraform validate`/`test` with mock providers, tflint, checkov; `envs/localstack` real apply + destroy in CI (network, secrets, storage, ci modules) | Manual, approval-gated apply |
+| 4G | **Supervisor agents** (built, offline-tested; live comparison pending an API key) | `SUPERVISED` (fixed order) and `SUPERVISED_PLANNED` (supervisor model) modes: analyst, risk checker and reviewer under one shared budget; the reviewer can only escalate to manual review through a deterministic gate rule; off by default | Scripted models, no paid calls; 12 hard cases; `SupervisedInvestigationIT` (9), `SupervisedDisabledByDefaultIT`, `SupervisedEvalIT`, `ReviewerVerdictTest` (9) | Live four-mode comparison (`OpenAiModeComparisonIT`) needs `OPENAI_API_KEY` and your go-ahead; the result is published either way |
 
 Architecture after Phase 4:
 
