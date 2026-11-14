@@ -61,7 +61,8 @@ public final class EvalRunner {
         long started = System.nanoTime();
         String jobStarted = "SINGLE_CALL".equals(mode) ? InvestigationTestSupport.start(bearer, breakId, c.analystNote())
             : InvestigationTestSupport.startMode(bearer, breakId, mode, c.analystNote());
-        JsonPath job = InvestigationTestSupport.awaitTerminal(bearer, jobStarted);
+        // Longer than any mode's own timeout (supervised: 180 s), so a slow job is recorded as FAILED, not a harness crash.
+        JsonPath job = InvestigationTestSupport.awaitTerminal(bearer, jobStarted, java.time.Duration.ofSeconds(240));
         long wallMs = (System.nanoTime() - started) / 1_000_000;
 
         String jobId = job.getString("id");
@@ -85,7 +86,9 @@ public final class EvalRunner {
         JsonPath p = InvestigationTestSupport.proposal(bearer, job.getString("proposalId"));
         List<String> citedFiles = new ArrayList<>();
         for (String chunkId : p.getList("citedChunkIds", String.class)) {
-            admin.queryForList("SELECT metadata->>'fileName' FROM vector_store WHERE id = ?::uuid", String.class, chunkId)
+            // Compare as text: a model can cite a malformed id (live run: a UUID with a dropped digit). That is an
+            // invalid citation, scored as not cited; casting it to uuid would crash the whole comparison instead.
+            admin.queryForList("SELECT metadata->>'fileName' FROM vector_store WHERE id::text = ?", String.class, chunkId)
                 .stream().filter(f -> !citedFiles.contains(f)).forEach(citedFiles::add);
         }
         List<String> missing = c.expected().mustCiteEvidence().stream().filter(f -> !citedFiles.contains(f)).toList();

@@ -33,6 +33,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = "spring.ai.model.embedding=none")
 class OpenAiModeComparisonIT extends AbstractPostgresIT {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.reconcileai.infrastructure.ai.resilience.LlmResilience llmResilience;
+
     @LocalServerPort
     int port;
 
@@ -47,8 +50,14 @@ class OpenAiModeComparisonIT extends AbstractPostgresIT {
         String label = "openai-" + model;
         String notes = "Chat model: " + model + " (temperature 0), same model for every agent. Embeddings: test hashing model. "
             + "Cases: 28 easy + 12 hard, labelled before the run.";
-        List<ModeComparison.Row> rows = ModeComparison.run(adminJdbc(), label, notes, ModeComparison.ALL_MODES, true);
+        List<ModeComparison.Row> rows = ModeComparison.run(adminJdbc(), label, notes, ModeComparison.ALL_MODES, true, llmResilience::reset);
         ModeComparison.write(label, notes, rows);
         assertThat(rows).hasSize(ModeComparison.ALL_MODES.size() * 2);
+        // A job that failed because the provider was unreachable (LLM_UNAVAILABLE, LLM_CIRCUIT_OPEN) measures the
+        // network, not the mode: fail loudly instead of reporting it. A job that ran out of its budget
+        // (AGENT_TURN_LIMIT and friends) is a real result and stays in the report.
+        assertThat(rows).allSatisfy(r -> assertThat(r.results())
+            .as("provider failures in " + r.mode() + " " + r.set())
+            .noneMatch(c -> c.failureReason() != null && c.failureReason().startsWith("LLM_")));
     }
 }

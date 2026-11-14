@@ -107,9 +107,12 @@ reconcile:
     max-tool-result-chars: 4000
     supervised:                     # specialist agents (Phase 4G); also needs agent.enabled; off by default
       enabled: ${SUPERVISED_ENABLED:false}
-      max-tool-calls: 8             # shared by ALL specialists in one run, not per agent
-      max-model-turns: 14           # analyst + risk checker + reviewer (+ supervisor in the planned variant)
-      timeout-seconds: 120
+      # Sized from the live run of 2026-11-13: on gpt-4o-mini the analyst alone uses 6-8 turns (the same as agent
+      # mode), so the first budget (8 calls, 14 turns) failed 4 of 12 hard cases and 18 of 28 planned cases with
+      # AGENT_TURN_LIMIT. Still one budget shared by every specialist, not one per agent.
+      max-tool-calls: 12            # shared by ALL specialists in one run, not per agent
+      max-model-turns: 24           # analyst (up to 9) + risk checker (2) + reviewer (1) + supervisor hand-offs
+      timeout-seconds: 180
       max-delegations: 6            # planned variant: hand-offs the supervisor model may make
   ratelimit:                        # per tenant, on POST /investigations (each one can start paid model calls)
     enabled: ${RATE_LIMIT_ENABLED:true}

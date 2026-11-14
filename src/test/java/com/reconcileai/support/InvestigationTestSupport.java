@@ -50,8 +50,13 @@ public final class InvestigationTestSupport {
     }
 
     public static JsonPath awaitTerminal(String bearer, String jobId) {
+        return awaitTerminal(bearer, jobId, Duration.ofSeconds(30));
+    }
+
+    /** Live supervised runs can take minutes (whole-run timeout 180 s), so the eval harness waits longer than the tests. */
+    public static JsonPath awaitTerminal(String bearer, String jobId, Duration atMost) {
         JsonPath[] last = new JsonPath[1];
-        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).until(() -> {
+        await().atMost(atMost).pollInterval(Duration.ofMillis(200)).until(() -> {
             last[0] = given().header("Authorization", bearer).when().get("/api/v1/investigations/" + jobId)
                 .then().statusCode(200).extract().jsonPath();
             String s = last[0].getString("status");

@@ -2,6 +2,13 @@
 # Run with: mvn spring-boot:run -Dspring-boot.run.profiles=openai
 # Do not combine with mock-llm or ollama: two ChatModel beans make the investigation client ambiguous.
 spring:
+  http:
+    client:
+      # HTTP/1.1 client (HttpURLConnection) for Spring AI's RestClient instead of the JDK HttpClient (HTTP/2).
+      # Phase 4G live run: single-call responses arrived truncated (JsonEOFException) while LangChain4j calls worked.
+      factory: simple
+      connect-timeout: 10s
+      read-timeout: 60s
   ai:
     model:
       chat: openai
