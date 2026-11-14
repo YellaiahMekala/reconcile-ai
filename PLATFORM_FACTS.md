@@ -1,6 +1,6 @@
 # PLATFORM_FACTS
 
-Facts read from code on 2026-11-13 (commit 9ee707d plus the local working tree). Paths are relative to `reconcile-ai/`.
+Facts read from code on 2026-11-13 (commit 9ee707d), refreshed on 2026-11-14 for commit 0393997 (supervisor changes in #7 and #8). Paths are relative to `reconcile-ai/`.
 Abbreviations: `api/` = `src/main/java/com/reconcileai/api/`, `app/` = `.../application/`, `infra/` = `.../infrastructure/`,
 `dom/` = `.../domain/`, `yml` = `src/main/resources/application.yml`. UNVERIFIED = not confirmed in code.
 
@@ -108,7 +108,7 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 | spring profile | mock-llm | chat model: mock-llm, ollama, openai, bedrock, bedrock-fake (`src/main/resources/application-*.yml`) |
 | OPENAI_API_KEY | empty | embeddings always OpenAI text-embedding-3-small |
 | AGENT_ENABLED | false | allows mode AGENT |
-| SUPERVISED_ENABLED | false | allows SUPERVISED / SUPERVISED_PLANNED (also needs agent enabled) |
+| SUPERVISED_ENABLED | false | allows SUPERVISED / SUPERVISED_PLANNED (also needs agent enabled); one shared budget of 12 tool calls, 24 model turns, 180 s, 6 delegations (`yml`, `infra/ai/agent/SupervisedProperties.java`) |
 | RATE_LIMIT_ENABLED | true | 20 burst, 20/min per tenant per JVM on POST investigations |
 | KAFKA_ENABLED / KAFKA_BOOTSTRAP | false / localhost:9092 | creates producer, intake consumer and outbox relay |
 | CACHE_ENABLED | false | Redis semantic cache of verified drafts (threshold 0.95, TTL 24 h, 500 per tenant) |
@@ -121,6 +121,7 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 | reconcile.policy.* | 0.80 / 25000 / USD / auto off, cap 1000, min 0.95 | gate thresholds (not env-driven) |
 | reconcile.investigation.* | pool 2–4, queue 50, lease 300 s, context 3000 tokens, output 700 | job execution |
 | reconcile.ai.resilience.* | 3 attempts, 500 ms backoff, 50% over 10 calls, open 30 s | `infra/ai/resilience/LlmResilience.java` |
+| profile `openai` HTTP client | `spring.http.client.factory: simple`, connect 10 s, read 60 s | HTTP/1.1 for Spring AI's RestClient (`application-openai.yml`) |
 
 ## 5. Events (`infra/messaging/`)
 
@@ -134,9 +135,9 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 
 ## 6. Test counts
 
-- Last green CI: run **#29**, workflow `ci`, `main`, commit 9ee707d, 2026-11-13 11:26 UTC: `https://github.com/<owner>/reconcile-ai/actions/runs/43417091664`
-- From that run's log: unit (surefire) **96**, integration (failsafe) **140**, UI (Karma) **15**; all passed. Excluded by default: groups `openai`, `ollama`, `bedrock` (live tests).
-- Local `target/` reports mix several runs from 14:04–18:38 on 2026-11-13. The last local failsafe summary covered 27 tests. `OpenAiModeComparisonIT` has an error in its local report. This is not a full local run.
+- Last green CI: run **#33**, workflow `ci`, `main`, commit 0393997, 2026-11-14 06:02 UTC: `https://github.com/<owner>/reconcile-ai/actions/runs/43564404616`
+- From that run's log: unit (surefire) **96**, integration (failsafe) **143**, UI (Karma) **15**; all passed. Excluded by default: groups `openai`, `ollama`, `bedrock` (live tests).
+- Earlier: run #29 (9ee707d) had 96 / 140 / 15. The 3 new ITs are `EvalRunnerCitedFilesIT` (2) and one more case in `SupervisedInvestigationIT`.
 - Other CI jobs in run #29: Angular, mvn clean verify, alert rules, k8s + image, terraform checks, terraform on LocalStack, SBOM.
 
 ## 7. Built / not built / built but not run live
@@ -145,7 +146,8 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 |---|---|---|
 | REST API, JWT, RLS, maker-checker, hash-chained audit, digest | Built | sections 1–3 |
 | Hybrid retrieval (pgvector + tsvector, RRF k=60) | Built | `infra/ai/retrieval/HybridRetriever.java`, `RrfFusion.java` |
-| Modes SINGLE_CALL, AGENT, SUPERVISED, SUPERVISED_PLANNED | Built, AGENT/SUPERVISED off by default | `dom/InvestigationMode.java`, `yml` |
+| Modes SINGLE_CALL, AGENT, SUPERVISED, SUPERVISED_PLANNED | Built, AGENT/SUPERVISED off by default. Supervised measured live 2026-11-13: decision rule not met | `dom/InvestigationMode.java`, `yml`, `docs/proof/phase4g-supervised-eval.md` |
+| SUPERVISED_PLANNED refuses delegation after an agreed review | Built (outcome `ALREADY_REVIEWED`, not counted as a delegation); proven offline only, not re-measured live | `infra/ai/agent/SupervisedInvestigation.java` `delegate()`, `SupervisedInvestigationIT` |
 | Resilience4j retry + circuit breaker (per instance) | Built | `LlmResilience.java` |
 | Redis semantic cache, Redis SSE fan-out | Built, off by default | `infra/ai/cache/`, `infra/streaming/RedisProgressFanout.java` |
 | Kafka intake + outbox relay | Built, off by default | `infra/messaging/` |
@@ -156,25 +158,31 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 | Idempotency-Key header | Not built | none in `api/` |
 | problem+json errors | Not built | `ApiError.java` |
 | Service-account client | Not built | realm json |
-| OpenAI chat | Run live (eval, smoke) | README; `OpenAiModeComparisonIT` local error, UNVERIFIED |
+| OpenAI chat | Run live (4B eval; 4G four-mode comparison, 40 cases, 2026-11-13) | `docs/proof/phase4-openai-eval.md`, `docs/proof/phase4g-supervised-eval.md` |
 | Bedrock | Built, run only against a fake endpoint; live not run | `BedrockFakeEvalIT`, `BedrockEvalIT` tagged `bedrock` |
 | AWS Terraform | Applied to LocalStack only; never to a real account | CI job `terraform apply + destroy against LocalStack` |
 | Alertmanager e-mail | Mailpit only; real SMTP not run | README roadmap 4C |
 
 ## 8. Docs vs code disagreements
 
-1. TDD §7 topics `automatch.proposals`, `recon.resolution.committed`, `.DLT` → code uses `reconcile.break.intake`, `reconcile.break.events`, `reconcile.break.intake.dlt`.
-2. BRD FR-02 and TDD say Kafka carries "break-proposal events" → intake creates a break only; `BreakSource.MATCH_PROPOSAL` exists but is unused.
-3. BRD NFR-03, TDD §11, BRD Risks say circuit open → manual-review queue → code marks the job FAILED and the break FAILED_RETRYABLE (`InvestigationJobRunner.java:60, 294`).
-4. BRD FR-08 lists auto-resolve as a route → even when enabled, AUTO_RESOLVE is persisted as L1_APPROVAL.
-5. README §6 has two count lines (418: 96/142/15; 419: 83/129/15) → CI #29 shows 96/140/15.
-6. README §7 "Amounts as JSON strings" → responses return amounts as JSON numbers; only requests and Kafka use strings.
-7. TDD §10 metric names (`llm.calls`, `agent.cache.hit_rate`, `hitl.queue_depth`, `hitl.decision_latency`) → code uses `reconcile.llm.*`, `reconcile.llm.cache*`, etc. No HITL queue-depth metric found.
-8. TDD §8 says L1 Caffeine + L2 Redis → only L2 Redis exists (TDD itself notes this).
-9. TDD §13 `demo/run_golden_paths.sh` → file does not exist; `scripts/demo-golden-path.ps1` does.
-10. BRD §4.2 says Kubernetes manifests are untested → CI job "k8s manifests + container image" runs; TDD §9 says kind overlay validated.
-11. BRD/TDD describe "Repo A/Repo B" → only this repo is present; Repo B is UNVERIFIED.
-12. Local JWT mode checks neither issuer nor audience; docs that describe audience validation apply to OIDC mode only.
+Status as of 2026-11-14 (Q0.3). "Annotated" means the private BRD/TDD keep the design text and add a **[Built: ...]** note with the code fact.
+
+| # | Doc says → code does | Status |
+|---|---|---|
+| 1 | TDD §7 topics `automatch.proposals`, `recon.resolution.committed`, `.DLT` → code uses `reconcile.break.intake`, `reconcile.break.events`, `reconcile.break.intake.dlt` | TDD §1, §4, §7 annotated |
+| 2 | BRD FR-02 and TDD say Kafka carries "break-proposal events" → intake creates a break only; `BreakSource.MATCH_PROPOSAL` exists but is unused | BRD FR-02, TDD §6, §7 annotated |
+| 3 | BRD NFR-03, TDD §11, BRD Risks say circuit open → manual-review queue → code marks the job FAILED and the break FAILED_RETRYABLE (`InvestigationJobRunner.java:60, 294`) | annotated in all three places |
+| 4 | BRD FR-08 lists auto-resolve as a route → even when enabled, AUTO_RESOLVE is persisted as L1_APPROVAL | BRD FR-08, TDD §6 annotated |
+| 5 | README §6 had two count lines → CI shows one set | fixed in README at 0393997 (96 / 143 / 15, CI #33) |
+| 6 | README "Amounts as JSON strings" → responses return JSON numbers; only requests and Kafka use strings | README §1 principle 6 and §7 table fixed |
+| 7 | TDD §10 metric names (`llm.calls`, `agent.cache.hit_rate`, `hitl.*`) → code uses `reconcile.*`; no HITL queue-depth metric | TDD §10 annotated |
+| 8 | TDD §8 says L1 Caffeine + L2 Redis → only L2 Redis exists | TDD §1 note added (§5.1, §8 were already annotated); BRD §8 and Risks annotated |
+| 9 | TDD §13 `demo/run_golden_paths.sh` → only `scripts/demo-golden-path.ps1` exists | TDD §13 annotated |
+| 10 | BRD §4.2 says Kubernetes manifests are untested → CI renders them with kustomize and schema-checks them with kubeconform (no cluster in CI) | BRD §4.2 and TDD §9 reworded |
+| 11 | BRD/TDD describe "Repo A/Repo B" → only this repo exists | BRD header and TDD header annotated |
+| 12 | Local JWT mode checks neither issuer nor audience | README security row fixed |
+| 13 | TDD §9 "Idempotency keys on every mutating request" → no `Idempotency-Key` header; only unique break reference, evidence SHA-256 dedup and the one-running-job 409 | TDD §9 annotated (found in Q0.3) |
+| 14 | TDD §4 API table (sync `/investigate`, `/approve`, `/reject`, `/breaks/{id}/audit`) → async jobs, one `/decision` endpoint, `/audit/aggregates/{id}` | TDD §4 annotated, points to §1 here (found in Q0.3) |
 
 ## 9. External recommender and EKA
 
