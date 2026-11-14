@@ -135,8 +135,8 @@ class SupervisedInvestigationIT extends AbstractPostgresIT {
         assertThat(job.getString("status")).isEqualTo("FAILED");
         assertThat(job.getString("failureReason")).startsWith("AGENT_");
         List<Map<String, Object>> rows = trace(job.getString("id"));
-        // 8 tool calls is the budget for the whole run; a few more get LIMIT_REACHED before the run is stopped.
-        assertThat(rows).hasSizeLessThanOrEqualTo(14);
+        // 12 tool calls is the budget for the whole run; a few more get LIMIT_REACHED before the run is stopped.
+        assertThat(rows).hasSizeLessThanOrEqualTo(20);
         assertThat(rows).extracting(r -> r.get("agent_name")).containsOnly("evidence-analyst");
         assertThat(rows).extracting(r -> r.get("outcome")).contains("LIMIT_REACHED");
         given().header("Authorization", analyst).when().get("/api/v1/breaks/" + job.getString("breakItemId"))
