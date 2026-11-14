@@ -84,18 +84,29 @@ public final class EvalRunner {
         }
 
         JsonPath p = InvestigationTestSupport.proposal(bearer, job.getString("proposalId"));
-        List<String> citedFiles = new ArrayList<>();
-        for (String chunkId : p.getList("citedChunkIds", String.class)) {
-            // Compare as text: a model can cite a malformed id (live run: a UUID with a dropped digit). That is an
-            // invalid citation, scored as not cited; casting it to uuid would crash the whole comparison instead.
-            admin.queryForList("SELECT metadata->>'fileName' FROM vector_store WHERE id::text = ?", String.class, chunkId)
-                .stream().filter(f -> !citedFiles.contains(f)).forEach(citedFiles::add);
-        }
+        List<String> citedFiles = citedFiles(admin, p.getList("citedChunkIds", String.class));
         List<String> missing = c.expected().mustCiteEvidence().stream().filter(f -> !citedFiles.contains(f)).toList();
 
         return new EvalCaseResult(c.id(), c.tags(), c.expected().rootCause(), c.expected().route(), true, null,
             p.getString("rootCause"), p.getString("route"), p.getString("routeReason"), p.getBoolean("citationsValid"),
             citedFiles, missing, prompt, completion, llmMs, wallMs, model, toolTrace(jobId), calls, verdict);
+    }
+
+    /**
+     * The distinct evidence file names behind the cited chunk ids, in citation order. Compared as text on purpose:
+     * a model can cite a malformed id (live run 2026-11-13: a UUID with a dropped digit). That is an invalid citation
+     * and scores as "not cited"; casting it to uuid in SQL crashed the whole comparison instead.
+     */
+    static List<String> citedFiles(JdbcTemplate admin, List<String> chunkIds) {
+        List<String> files = new ArrayList<>();
+        for (String chunkId : chunkIds == null ? List.<String>of() : chunkIds) {
+            if (chunkId == null || chunkId.isBlank()) {
+                continue;
+            }
+            admin.queryForList("SELECT metadata->>'fileName' FROM vector_store WHERE id::text = ?", String.class, chunkId)
+                .stream().filter(f -> f != null && !files.contains(f)).forEach(files::add);
+        }
+        return files;
     }
 
     /** One short line per run, e.g. getBreakSummary:OK:120 > searchEvidence:OK:43; null in single-call mode. */

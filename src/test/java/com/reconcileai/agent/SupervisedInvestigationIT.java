@@ -129,6 +129,32 @@ class SupervisedInvestigationIT extends AbstractPostgresIT {
     }
 
     @Test
+    void aSupervisorThatRestartsTheAnalystAfterAnAgreedReviewIsRefusedAndTheReviewedDraftStays() {
+        // Live run 2026-11-13: gpt-4o-mini got the reviewer's AGREE and then called the analyst again. The second
+        // analyst ran out of budget and its empty draft replaced the reviewed one. The code now refuses that call.
+        JsonPath job = run(TIMING, "SUPERVISED_PLANNED", "simulate supervisor repeats");
+
+        assertThat(job.getString("status")).isEqualTo("SUCCEEDED");
+        assertThat(job.getString("reviewVerdict")).isEqualTo("AGREE");
+        JsonPath p = InvestigationTestSupport.proposal(analyst, job.getString("proposalId"));
+        assertThat(p.getString("rootCause")).isEqualTo("FEE_OR_CHARGE");
+        assertThat(p.getString("route")).isEqualTo("L1_APPROVAL");
+
+        List<Map<String, Object>> rows = trace(job.getString("id"));
+        List<String> refused = rows.stream()
+            .filter(r -> "delegate:evidence-analyst".equals(r.get("tool")) && "ALREADY_REVIEWED".equals(r.get("outcome")))
+            .map(r -> String.valueOf(r.get("tool"))).toList();
+        assertThat(refused).isNotEmpty();
+        // The analyst and the reviewer each ran exactly once: the refused delegations never reached a specialist.
+        assertThat(rows).filteredOn(r -> "searchEvidence".equals(r.get("tool"))).hasSize(1);
+        assertThat(rows).filteredOn(r -> "review".equals(r.get("tool"))).hasSize(1);
+        String details = admin.queryForObject(
+            "SELECT details FROM audit_event WHERE event_type = 'AGENT_RUN_COMPLETED' AND aggregate_id = ?::uuid",
+            String.class, job.getString("breakItemId"));
+        assertThat(details).contains("\"plannerOverrides\":0");
+    }
+
+    @Test
     void allSpecialistsShareOneBudgetSoARunawayAnalystStopsTheWholeRun() {
         JsonPath job = run("/fixtures/evidence/agent-loop.txt", "SUPERVISED", null);
 

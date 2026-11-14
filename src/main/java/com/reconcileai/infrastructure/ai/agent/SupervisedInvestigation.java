@@ -278,13 +278,25 @@ public class SupervisedInvestigation {
             return v;
         }
 
+        private boolean reviewedAndAgreed() {
+            return draft != null && reviewedCurrentDraft && verdict != null
+                && verdict.verdict() == ReviewerVerdict.Verdict.AGREE;
+        }
+
         /** PLANNED only: one delegation from the supervisor model, traced and capped. */
         String delegate(String specialist, Supplier<String> body) {
             int seq = ctx.nextSeq();
             long started = System.nanoTime();
             String outcome = "OK";
             String result;
-            if (++delegations > props.maxDelegations()) {
+            if (reviewedAndAgreed()) {
+                // The live run (2026-11-13) showed gpt-4o-mini starting a second round after an AGREE, although the
+                // prompt allows a re-run only after a challenge. The second analyst ran out of budget and its empty draft
+                // replaced the reviewed one. Enforce the rule in code: once the current draft is reviewed and agreed,
+                // there is nothing left to delegate. Not counted as a delegation.
+                outcome = "ALREADY_REVIEWED";
+                result = "ALREADY_REVIEWED: the current draft has been reviewed and the reviewer agreed. Reply DONE now.";
+            } else if (++delegations > props.maxDelegations()) {
                 outcome = "LIMIT_REACHED";
                 result = "LIMIT_REACHED: no delegations left. Reply DONE now.";
             } else {
