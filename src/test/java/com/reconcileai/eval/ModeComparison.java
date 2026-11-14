@@ -47,6 +47,12 @@ final class ModeComparison {
     private ModeComparison() {}
 
     static List<Row> run(JdbcTemplate admin, String label, String notes, List<String> modes, boolean includeEasySet) {
+        return run(admin, label, notes, modes, includeEasySet, () -> { });
+    }
+
+    /** beforePhase runs before every mode/set phase (live runs reset the circuit breaker so one bad phase cannot fail the next). */
+    static List<Row> run(JdbcTemplate admin, String label, String notes, List<String> modes, boolean includeEasySet,
+                         Runnable beforePhase) {
         EvalCaseLoader loader = new EvalCaseLoader();
         List<EvalCase> easy = includeEasySet ? loader.loadAll() : List.of();
         List<EvalCase> hard = loader.loadHard();
@@ -54,9 +60,11 @@ final class ModeComparison {
         for (String mode : modes) {
             String m = mode.toLowerCase(Locale.ROOT).replace('_', '-');
             if (!easy.isEmpty()) {
+                beforePhase.run();
                 EvalHarness.Outcome o = EvalHarness.runAndReport(admin, label + "-" + m + "-easy", notes, mode, easy);
                 rows.add(new Row(mode, "easy", o.summary(), o.results()));
             }
+            beforePhase.run();
             EvalHarness.Outcome o = EvalHarness.runAndReport(admin, label + "-" + m + "-hard", notes, mode, hard);
             rows.add(new Row(mode, "hard", o.summary(), o.results()));
         }

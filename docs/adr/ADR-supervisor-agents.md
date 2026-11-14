@@ -1,6 +1,6 @@
-# ADR: supervisor with specialist agents (built, live measurement pending)
+# ADR: supervisor with specialist agents (built, measured: decision rule not met)
 
-Status: **implemented and tested offline** (Phase 4G, uncommitted on `feature/supervisor-agents`). Both variants, the reviewer gate rule, V11, 12 hard cases and the comparison harness exist and pass with scripted models. **Not yet run against a paid model:** the live comparison (`OpenAiModeComparisonIT`) is pending an API key, so the question in section 1 is still open.
+Status: **implemented, tested offline and measured live (2026-11-13). The decision rule in section 5 was not met, so supervised modes stay off by default and single call stays the default.** Both variants, the reviewer gate rule, V11, 12 hard cases and the comparison harness exist. Live result on gpt-4o-mini (40 cases): no wrong cause reached an approver in any mode on the hard set (nothing to halve); cost per case was 7.9x (S1) and 12.3x (S2) single call against a 5x limit; S2 reached only 50% root cause on the hard set. Full write-up: `docs/proof/phase4g-supervised-eval.md`.
 
 ## 1. Question to answer
 
@@ -102,7 +102,7 @@ LangChain4j stays (already on the classpath, version 1.18.1, core libraries only
 3. Run SINGLE_CALL, AGENT, S1 and S2 on all 40, same model, temperature 0.
 4. Metrics: root-cause accuracy, route accuracy, share of wrong-cause answers that end in MANUAL_REVIEW (safety), citation-supported rate (judged by reading the chunk, not just id membership), p50/p95 latency, cost per case, model calls per case.
 5. Decision rule written now: the supervisor is "worth it" only if on the hard set it cuts wrong-cause answers that reach an approver by a clear margin (suggest at least half) and total cost stays below 5x single call. Otherwise, publish the negative result and leave it off.
-6. Offline first: scripted models prove the plumbing and the gate rule at zero cost. The live run comes second.
+6. Offline first: scripted models prove the plumbing and the gate rule at zero cost. The live run comes second (done 2026-11-13).
 
 Expected cost of the live run: 40 cases x 4 modes x a few calls each on gpt-4o-mini is in the range of a few cents to well under a dollar, by extrapolation from the 4B run ($0.0012/case for the single agent). Confirm with you before any paid call.
 
@@ -142,4 +142,4 @@ Honest limits to state in the write-up: 40 author-written cases are not a benchm
 - S2 cannot skip the essentials: if the supervisor ends without a draft or without reviewing the final draft, Java runs the step and counts it as `plannerOverrides` in the audit event.
 - Persistence: V11 adds `agent_name` on `agent_tool_call`, plus `review_verdict` and `risk_flags` on `investigation_job`.
 - Offline result: all jobs succeed in all four modes, no `AUTO_RESOLVE`, the easy-set floor holds. The scripted model is keyword rules, so its accuracy says nothing about real models. Model calls per case: 1.0, 3.0, 4.7 and 8.7 (single, agent, supervised, planned).
-- Open: the live comparison and the verdict against the decision rule in section 5.
+- Live result (run 3, shared budget 12/24/180): rule not met by either variant (see `docs/proof/phase4g-supervised-eval.md`). Decision: keep single call as the default, leave supervised off. The reviewer worked (it challenged the unsupported-citation case) but added manual work. The shared budget was first 8/14/120, too small for a real model (all failures `AGENT_TURN_LIMIT`); it was raised after seeing run 1 and both runs are kept. Open: why the planned supervisor often ends without a reviewed draft.

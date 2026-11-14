@@ -19,9 +19,9 @@ public record SupervisedProperties(boolean enabled, int maxToolCalls, int maxMod
                                    int maxDelegations) {
 
     public SupervisedProperties {
-        maxToolCalls = maxToolCalls <= 0 ? 8 : maxToolCalls;
-        maxModelTurns = maxModelTurns <= 0 ? 14 : maxModelTurns;
-        timeoutSeconds = timeoutSeconds <= 0 ? 120 : timeoutSeconds;
+        maxToolCalls = maxToolCalls <= 0 ? 12 : maxToolCalls;
+        maxModelTurns = maxModelTurns <= 0 ? 24 : maxModelTurns;
+        timeoutSeconds = timeoutSeconds <= 0 ? 180 : timeoutSeconds;
         maxDelegations = maxDelegations <= 0 ? 6 : maxDelegations;
     }
 }
