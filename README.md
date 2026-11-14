@@ -57,7 +57,9 @@ until that test is green.
    variance thresholds are enforced in `PolicyGateService`, never by the model.
 5. **Single resolution path.** Only `ResolutionCommitService` can move a break to RESOLVED, and only
    `ApprovalService` calls it. An architecture test enforces this.
-6. **Money is exact.** `BigDecimal` via the `Money` value object. Amounts arrive as JSON strings. `double` is never used.
+6. **Money is exact.** `BigDecimal` via the `Money` value object. Requests and Kafka messages carry amounts as JSON
+   strings; responses serialize `BigDecimal` as JSON numbers with the exact digits (a JavaScript client that parses
+   them as numbers loses precision beyond about 15 significant digits). `double` is never used.
 7. **Flyway owns the schema.** Hibernate only validates it (`ddl-auto: validate`).
 8. **Real infrastructure in tests.** Postgres runs in Testcontainers (pgvector image) and is never mocked.
 
@@ -106,7 +108,7 @@ agent mode (off by default), Prometheus alert rules, rate limiting and stored ev
 | Approvals | L1/L2 queues, maker-checker, stricter-of-stored-and-recomputed tier | `ApprovalController`, `ApprovalService` |
 | Audit | Hash-chained, append-only `audit_event`; verify endpoint for SRE_ADMIN; optional Ed25519-signed chain heads anchored in S3 Object Lock (MinIO locally) with an anchor verify endpoint | `HashChainAuditRecorder`, `AuditController`, `application/audit/anchor/` |
 | Safety | Injection scanner before any model call; advisor chain (input guard, token usage) | `InputGuardAdvisor`, `TokenUsageAdvisor`, `InjectionScanner` |
-| Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set; real IdP mode (Keycloak realm included; JWKS, issuer and audience checks) or demo keys | `SecurityConfig`, `TenantContext`, `Role`, `docker/keycloak/` |
+| Security | RS256 JWT resource server, mandatory `tenant_id`, closed role set; real IdP mode (Keycloak realm included; JWKS, issuer and audience checks) or demo keys (signature, expiry and `tenant_id` only; no issuer or audience check) | `SecurityConfig`, `TenantContext`, `Role`, `docker/keycloak/` |
 | Tenant isolation (DB) | Postgres Row-Level Security on every tenant table and `vector_store`; app runs as a non-owner role; connections bound to the caller's tenant on checkout; fail closed | `V6__row_level_security.sql`, `TenantAwareDataSource`, `TenantScope` |
 | Resilience | LLM retry (transient only, exponential backoff) inside a circuit breaker; fail fast when open | `infrastructure/ai/resilience/LlmResilience` |
 | Privacy | PII masking of accounts, IBANs, cards (Luhn), emails and phones before every model call; optional Presidio entity recognition masks person names and locations (fail-open or fail-closed) | `PiiMaskingAdvisor`, `PiiMasker`, `PresidioNerDetector` |
@@ -512,7 +514,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 | Model proposes, Java decides | One hallucinated sentence must not cause a ledger write |
 | Hybrid RRF retrieval | Narrative text favours dense search; reference codes and amounts favour exact match |
 | Singleton Testcontainers base | `@Container` in a shared base class breaks the second IT class through context caching |
-| Amounts as JSON strings | Avoids binary floating-point on the wire |
+| Amounts as JSON strings on input (requests, Kafka) | Avoids binary floating-point when parsing; responses still return JSON numbers |
 | Self-signed RSA dev keys | No authorization server to run locally; swapping in a real IdP only changes the public key config |
 
 ## 8. Known limitations
