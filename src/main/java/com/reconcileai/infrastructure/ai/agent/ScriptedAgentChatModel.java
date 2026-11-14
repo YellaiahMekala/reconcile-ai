@@ -39,6 +39,8 @@ import java.util.regex.Pattern;
  *                                   (code must turn this into a CHALLENGE)
  *  "simulate supervisor skips review"  the supervisor answers DONE without calling the reviewer
  *                                   (code must run the reviewer anyway)
+ *  "simulate supervisor repeats"    after the review the supervisor calls the analyst again
+ *                                   (code must refuse: the agreed draft is final)
  * </pre>
  */
 public class ScriptedAgentChatModel implements ChatModel {
@@ -142,6 +144,11 @@ public class ScriptedAgentChatModel implements ChatModel {
         }
         if (!skipReview && results.stream().noneMatch(r -> "runReviewer".equals(r.toolName()))) {
             return call("runReviewer", "{}");
+        }
+        // Plays the live-run behaviour: after the review it starts the analyst again (three attempts at most).
+        if (user.toLowerCase(Locale.ROOT).contains("simulate supervisor repeats")
+            && results.stream().filter(r -> "runEvidenceAnalyst".equals(r.toolName())).count() < 3) {
+            return call("runEvidenceAnalyst", "{}");
         }
         return AiMessage.from("DONE");
     }

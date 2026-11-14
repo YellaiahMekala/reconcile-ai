@@ -36,7 +36,7 @@ Citations were valid in 100% of cause-claiming answers in every phase.
 
 - The reviewer works as designed. It challenged HRD-012 and HRD-013 (the unsupported-citation case) under SUPERVISED, and both went to manual review. The price is more manual work: the hard-set route score is 41.7% for SUPERVISED against 75.0% for single call.
 - Single call already had the right root cause on all 12 hard cases, so accuracy did not separate the modes, and safety (no wrong cause to an approver) was equal in every mode.
-- SUPERVISED_PLANNED, where the model decides the order, was the weakest: 50.0% root cause on the hard set. In 5 of 12 hard cases it ended with `UNKNOWN` and no reviewed draft, and one case hit `AGENT_TURN_LIMIT`. The reason the supervisor model ends early has not been investigated, so no cause is claimed.
+- SUPERVISED_PLANNED, where the model decides the order, was the weakest: 50.0% root cause on the hard set. In 5 of 12 hard cases it ended with `UNKNOWN` and no reviewed draft, and one case hit `AGENT_TURN_LIMIT`. The cause was found afterwards in the traces; see "After the run".
 - The route scores of agent and supervised modes are low mainly because of `LOW_CONFIDENCE` answers that go to manual review. That is the safe direction, but it means fewer cases are handled without a person.
 
 ## How we got here (honest account)
@@ -45,6 +45,26 @@ Citations were valid in 100% of cause-claiming answers in every phase.
 2. **Run 2** crashed after 50 minutes because the harness waited 30 s for a job that may legitimately run for up to 120 s.
 3. Fixes between runs: HTTP/1.1 client for the `openai` profile (an earlier single-call run had truncated replies; whether this change or a transient problem was the cause is not proven); a malformed model-cited chunk id no longer crashes the harness; the harness waits 240 s per job; the live test fails only on provider failures; **the shared budget was raised to 12 / 24 / 180 s after seeing run-1 results**.
 4. **Run 3** completed all eight phases. It is the run reported above. Run 1's reports are kept so the budget change is visible.
+
+## After the run: why the planned supervisor lost its reviewed draft (2026-11-14)
+
+Read from the run-3 JSON traces; no new paid call.
+
+Planned mode had 11 cases with a failed job or a wrong root cause (5 easy, 6 hard).
+
+| Pattern | Cases | What happened |
+|---|---|---|
+| Restarted after AGREE | 10: HRD-002, MIS-001, MIS-002, TIM-002, TIM-003 (easy); HRD-004, HRD-006, HRD-009, HRD-011, HRD-014 (hard) | Analyst, risk checker and reviewer ran and the reviewer agreed. The supervisor then started the analyst again. The second analyst ran out of the shared budget and its empty `UNKNOWN` draft replaced the reviewed one (7 cases), or the whole run hit `AGENT_TURN_LIMIT` (HRD-002, MIS-001, HRD-009). |
+| Challenged, then re-run | 1: HRD-012 | The reviewer challenged the draft, the supervisor re-ran the analyst as allowed, and the re-run ran out of budget. |
+
+The three cases that expect `UNKNOWN` (UNK-001 to UNK-003) answered `UNKNOWN` correctly; with no cause claimed there is nothing to review.
+
+The prompt already said "re-run the analyst at most once if the reviewer challenged the draft". gpt-4o-mini did not follow it. The fix enforces the rule in code: once the current draft is reviewed and agreed, every further delegation is refused with `ALREADY_REVIEWED` and the supervisor is told to reply DONE. The reviewed draft stays.
+
+- Offline proof: `SupervisedInvestigationIT` plays a supervisor that keeps restarting the analyst after the review (fault marker `simulate supervisor repeats`). The run succeeds with the reviewed `FEE_OR_CHARGE` draft, the analyst and the reviewer each run once, and the refused calls appear in the trace as `ALREADY_REVIEWED`.
+- Not yet proven live. The results table is still the run-3 result, before the fix. The fix keeps the first reviewed draft, but whether that draft had the right cause is only known from a rerun. A rerun of the planned phases costs about 0.20 USD and needs the owner's go-ahead.
+- The verdict cannot change either way: single call had 0 wrong causes reaching an approver on the hard set, so no variant can halve it.
+- The malformed-citation fix from run 1 is now covered by `EvalRunnerCitedFilesIT`: a malformed id, a non-uuid string, a blank id and an unknown uuid all score as "not cited", and a real chunk id still maps to its evidence file.
 
 ## Limits
 
