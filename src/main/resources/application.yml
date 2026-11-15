@@ -152,6 +152,14 @@ reconcile:
     max-context-tokens: 3000        # evidence budget per prompt (TOKEN OPTIMIZATION)
     max-output-tokens: 700          # model output cap (TOKEN OPTIMIZATION)
     max-analyst-note-chars: 1000
+  gateway:                          # platform Q2.1: route the investigation model call through ai-gateway; off by default
+    enabled: ${GATEWAY_ENABLED:false}
+    base-url: ${GATEWAY_BASE_URL:http://localhost:8080}
+    token-uri: ${GATEWAY_TOKEN_URI:http://localhost:8180/realms/ai-gateway/protocol/openid-connect/token}
+    client-id: ${GATEWAY_CLIENT_ID:reconcile-ai}
+    client-secret: ${GATEWAY_CLIENT_SECRET:}
+    connect-timeout: 3s
+    request-timeout: 60s            # per attempt; a timeout after sending is an unknown outcome and is never retried
   ai:
     log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
     pricing:                        # list price per 1M tokens for the cost metric (ESTIMATED). Defaults: gpt-4o-mini

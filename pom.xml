@@ -220,6 +220,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- ai-gateway consumer contract: request bodies are checked against chat-request.v1.json in tests -->
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>1.5.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>

@@ -1,5 +1,7 @@
 package com.reconcileai.infrastructure.ai;
 
+import com.reconcileai.application.gateway.GatewayChatPort;
+import com.reconcileai.application.gateway.IdempotencyKeys;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor;
 import com.reconcileai.infrastructure.ai.advisor.TokenUsageAdvisor;
 import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.BuiltPrompt;
@@ -9,9 +11,12 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -32,20 +37,60 @@ import java.util.UUID;
 @Component
 public class InvestigationAiClient {
 
+    /** Workflow step name in the idempotency key; a re-claimed job reuses it (see {@link IdempotencyKeys}). */
+    static final String STEP = "investigate";
+    /** Deadline for the gateway call, including its one permitted transport retry. */
+    static final Duration GATEWAY_DEADLINE = Duration.ofSeconds(120);
+
     private final ChatClient chatClient;
     private final int maxOutputTokens;
     private final LlmResilience resilience;
+    private final ObjectProvider<GatewayChatPort> gateway;
     private final BeanOutputConverter<ProposalDraft> converter = new BeanOutputConverter<>(ProposalDraft.class);
 
     public InvestigationAiClient(ChatClient investigationChatClient,
                                  @Value("${reconcile.investigation.max-output-tokens}") int maxOutputTokens,
-                                 LlmResilience resilience) {
+                                 LlmResilience resilience,
+                                 ObjectProvider<GatewayChatPort> gateway) {
         this.chatClient = investigationChatClient;
         this.resilience = resilience;
         this.maxOutputTokens = maxOutputTokens;
+        this.gateway = gateway;
     }
 
     public ProposalDraft investigate(BuiltPrompt prompt, String tenantId, UUID jobId, String analystNote) {
+        GatewayChatPort port = gateway.getIfAvailable();
+        if (port != null) {
+            return viaGateway(port, prompt, jobId);
+        }
+        return direct(prompt, tenantId, jobId, analystNote);
+    }
+
+    /**
+     * Platform Q2.1: the gateway route. The gateway applies its own governance (risk signalling, budget, ledger),
+     * so this path does not run the ChatClient advisors or {@link LlmResilience}; the one transport retry lives in
+     * the adapter, under the same idempotency key. Typed handling of each gateway code is Q2.2.
+     */
+    private ProposalDraft viaGateway(GatewayChatPort port, BuiltPrompt prompt, UUID jobId) {
+        GatewayChatPort.Request request = new GatewayChatPort.Request(
+            IdempotencyKeys.forStep(jobId, STEP, 1),
+            prompt.system() + "\n" + converter.getFormat(),
+            prompt.user(),
+            maxOutputTokens,
+            0.0,
+            Instant.now().plus(GATEWAY_DEADLINE));
+        GatewayChatPort.Reply reply = port.chat(request);
+        if (reply.output() == null || reply.output().isBlank()) {
+            throw new IllegalStateException("MODEL_RETURNED_NO_RESULT");
+        }
+        try {
+            return converter.convert(reply.output());
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("MODEL_OUTPUT_NOT_VALID_JSON", e);
+        }
+    }
+
+    private ProposalDraft direct(BuiltPrompt prompt, String tenantId, UUID jobId, String analystNote) {
         // Retry (transient only) inside a circuit breaker; see LlmResilience for what is and is not retried.
         ChatClientResponse response = resilience.call(() -> chatClient.prompt()
             .system(prompt.system() + "\n" + converter.getFormat())

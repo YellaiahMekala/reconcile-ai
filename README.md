@@ -518,6 +518,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 | Amounts as JSON strings on input (requests, Kafka) | Avoids binary floating-point when parsing; responses still return JSON numbers |
 | Self-signed RSA dev keys | No authorization server to run locally; swapping in a real IdP only changes the public key config |
 | Virtual threads for requests, bounded platform pool for investigations | Requests are I/O-bound; the investigation pool's full queue is the 503 back-pressure and must stay bounded. Isolation under virtual threads: `VirtualThreadsTenantIsolationIT` |
+| `GatewayChatPort` behind `GATEWAY_ENABLED` (default off) | The investigation model call can go through ai-gateway (`POST /api/v1/chat`, service token, idempotency key `recon:<jobId>:<step>:<attempt>`). The key is fixed per job step, so a re-claimed job or a transport retry presents the same key and the gateway replays instead of billing twice. One retry at most, only on codes where nothing reached the provider, never on an unknown outcome. Tests: `HttpGatewayChatAdapterTest`, `IdempotencyKeysTest`, `GatewayConfigTest` against a fake gateway and the contract schema `chat-request.v1.json` |
 
 ## 8. Known limitations
 
@@ -532,6 +533,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 - Evidence bytes are stored in Postgres (`bytea`), which suits the 10 MB upload cap. Evidence uploaded before migration V9 has no stored original. Object storage is the upgrade for larger files.
 - The Trivy image scan in CI reports findings but does not fail the build yet.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
+- The ai-gateway route (`GATEWAY_ENABLED=true`) has been tested only against a fake gateway in unit tests, not end to end against a running ai-gateway. On that route the gateway's own governance applies and the local advisor chain and circuit breaker are bypassed; gateway error codes are surfaced as `GatewayCallException` and are not yet mapped to job states.
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.
 - Answer quality is measured on 28 synthetic cases (see Quality above), not on real customer data, and the real-model runs use test hashing embeddings, so the dense retrieval leg is not semantic there. The Bedrock live run and the AWS deployment have not been run against a real account.
 
