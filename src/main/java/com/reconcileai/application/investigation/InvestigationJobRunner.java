@@ -19,6 +19,8 @@ import com.reconcileai.infrastructure.ai.InvestigationAiClient;
 import com.reconcileai.infrastructure.ai.agent.InvestigationAgent;
 import com.reconcileai.infrastructure.ai.agent.ReviewerVerdict;
 import com.reconcileai.infrastructure.ai.agent.SupervisedInvestigation;
+import com.reconcileai.application.gateway.GatewayCallException;
+import com.reconcileai.application.gateway.GatewayFailure;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
 import com.reconcileai.infrastructure.ai.cache.SemanticCache;
 import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
@@ -205,7 +207,11 @@ public class InvestigationJobRunner {
             }
         } catch (Exception e) {
             log.warn("Investigation {} failed: {}", jobId, e.toString());
-            failJob(jobId, tenantId, reasonOf(e));
+            if (e instanceof GatewayCallException gateway) {
+                failJob(jobId, tenantId, GatewayFailure.reason(gateway), gateway);
+            } else {
+                failJob(jobId, tenantId, reasonOf(e));
+            }
         }
     }
 
@@ -293,6 +299,14 @@ public class InvestigationJobRunner {
 
     /** Marks a job FAILED and its break FAILED_RETRYABLE in one transaction. Idempotent for terminal jobs. */
     public void failJob(UUID jobId, String tenantId, String reason) {
+        failJob(jobId, tenantId, reason, null);
+    }
+
+    /**
+     * Same, for an ai-gateway refusal: the audit entry also carries the gateway's invocation id (when it sent one)
+     * and whether the outcome is unknown, so a person can reconcile before anything is re-run.
+     */
+    public void failJob(UUID jobId, String tenantId, String reason, GatewayCallException gateway) {
         InvestigationJob failed = tx.execute(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
             if (j.isTerminal()) {
@@ -306,8 +320,16 @@ public class InvestigationJobRunner {
                 b.markInvestigationFailed();
                 breaks.save(b);
             });
-            audit.record(new AuditEntry(tenantId, "INVESTIGATION_FAILED", "BREAK", j.getBreakItemId(), ACTOR,
-                Map.of("jobId", jobId.toString(), "reason", reason)));
+            Map<String, Object> details = new java.util.LinkedHashMap<>();
+            details.put("jobId", jobId.toString());
+            details.put("reason", reason);
+            if (gateway != null) {
+                details.put("gatewayOutcomeUnknown", GatewayFailure.outcomeUnknown(gateway));
+                if (gateway.invocationId() != null) {
+                    details.put("gatewayInvocationId", gateway.invocationId().toString());
+                }
+            }
+            audit.record(new AuditEntry(tenantId, "INVESTIGATION_FAILED", "BREAK", j.getBreakItemId(), ACTOR, details));
             return jobs.save(j);
         });
         progress.publish(failed);

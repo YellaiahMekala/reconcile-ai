@@ -533,7 +533,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 - Evidence bytes are stored in Postgres (`bytea`), which suits the 10 MB upload cap. Evidence uploaded before migration V9 has no stored original. Object storage is the upgrade for larger files.
 - The Trivy image scan in CI reports findings but does not fail the build yet.
 - Auto-resolve is implemented but disabled by configuration (ADR-9).
-- The ai-gateway route (`GATEWAY_ENABLED=true`) has been tested only against a fake gateway in unit tests, not end to end against a running ai-gateway. On that route the gateway's own governance applies and the local advisor chain and circuit breaker are bypassed; gateway error codes are surfaced as `GatewayCallException` and are not yet mapped to job states.
+- The ai-gateway route (`GATEWAY_ENABLED=true`) has been tested only against a fake gateway in unit tests, not end to end against a running ai-gateway. On that route the gateway's own governance applies and the local advisor chain and circuit breaker are bypassed; a gateway refusal fails the job with reason `GATEWAY_<code>`, and the audit entry records the gateway invocation id and whether the outcome is unknown. Re-running after an unknown outcome is not yet guarded: it starts a new job with a new key, which can bill again (platform Q2.3).
 - The RSA keys in `src/test/resources/jwt` and `scripts/jwt` are throwaway development material. Do not reuse them outside local development.
 - Answer quality is measured on 28 synthetic cases (see Quality above), not on real customer data, and the real-model runs use test hashing embeddings, so the dense retrieval leg is not semantic there. The Bedrock live run and the AWS deployment have not been run against a real account.
 
