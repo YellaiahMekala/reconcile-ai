@@ -36,6 +36,13 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 12MB
+  threads:
+    # Java 21 virtual threads for request handling, @Scheduled and the default task executor (ADR-virtual-threads).
+    # Request work is I/O-bound (Postgres, model provider, EKA); a platform thread per request idles on those calls.
+    # The investigation executor stays a bounded platform pool on purpose: its full queue is the 503 back-pressure.
+    # Tenant identity is per-thread (SecurityContextHolder, TenantScope) and never inherited: VirtualThreadsTenantIsolationIT.
+    virtual:
+      enabled: true
   # -------------------------------------------------------------------------
   # Spring AI (Phase 2)
   # -------------------------------------------------------------------------

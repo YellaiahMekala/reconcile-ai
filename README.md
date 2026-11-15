@@ -131,7 +131,7 @@ Endpoints are under `/api/v1`. Swagger UI is optional and off by default: set `S
 
 | Layer | Technology |
 |---|---|
-| Language | Java 21 (records, pattern matching, text blocks) |
+| Language | Java 21 (records, pattern matching, text blocks; virtual threads for request handling, see `docs/adr/ADR-virtual-threads.md`) |
 | Framework | Spring Boot 3.5.16, Spring MVC + `SseEmitter` (no WebFlux) |
 | Security | Spring Security OAuth2 Resource Server, Nimbus JOSE (RS256) |
 | Persistence | Spring Data JPA / Hibernate, PostgreSQL 16 with pgvector |
@@ -416,7 +416,7 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts in the default build: **96 unit tests** (surefire), **143 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
+Current counts in the default build: **98 unit tests** (surefire), **144 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build.
 
 | Class | Type | Proves |
@@ -427,6 +427,7 @@ Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama 
 | `CitationVerifierTest`, `InjectionScannerTest` | unit | Citation validity; injection pattern detection |
 | `ResolutionPathArchitectureTest` | unit | `ResolutionCommitService` has exactly one caller |
 | `SecurityAndTenantIsolationIT` | IT | 401/403/404 rules, client-supplied tenant ignored — **release-blocking** |
+| `VirtualThreadsTenantIsolationIT`, `TenantScopeVirtualThreadTest` | IT, unit | Under Java 21 virtual threads, 120 interleaved requests never see another tenant's rows and every request runs on a virtual thread; `TenantScope` is per thread and never inherited — **release-blocking** |
 | `BreakAndEvidenceIT` | IT | Create/fetch, duplicate reference 409, evidence dedup |
 | `EvidenceContentIT` | IT | Uploaded bytes download identically; duplicate keeps one copy; other tenant 404; unknown id 404; pre-V9 row reports CONTENT_NOT_AVAILABLE |
 | `TokenBucketRateLimiterTest`, `RateLimitIT` | unit, IT | Burst then refill, per-tenant buckets; third request of a burst gets 429 + `Retry-After`; other tenant unaffected |
@@ -516,6 +517,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 | Singleton Testcontainers base | `@Container` in a shared base class breaks the second IT class through context caching |
 | Amounts as JSON strings on input (requests, Kafka) | Avoids binary floating-point when parsing; responses still return JSON numbers |
 | Self-signed RSA dev keys | No authorization server to run locally; swapping in a real IdP only changes the public key config |
+| Virtual threads for requests, bounded platform pool for investigations | Requests are I/O-bound; the investigation pool's full queue is the 503 back-pressure and must stay bounded. Isolation under virtual threads: `VirtualThreadsTenantIsolationIT` |
 
 ## 8. Known limitations
 
