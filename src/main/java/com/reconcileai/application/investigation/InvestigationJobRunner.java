@@ -302,15 +302,33 @@ public class InvestigationJobRunner {
         failJob(jobId, tenantId, reason, false, null);
     }
 
+    /**
+     * A gateway refusal (platform Q2.2 to Q2.5). Three shapes:
+     * <ul>
+     *   <li>outcome unknown (504, 409 unknown outcome, timeout after sending): job FAILED and flagged so the break
+     *       cannot be re-run until a person reconciles it against the gateway ledger (Q2.3);</li>
+     *   <li>policy block (RISK_BLOCKED, SENSITIVITY_BLOCKED): job FAILED with the reason, break to
+     *       MANUAL_REVIEW_REQUIRED, because the same input would be refused again (Q2.5);</li>
+     *   <li>anything else (budget, not-sent, schema, auth): job FAILED, break FAILED_RETRYABLE, no proposal (Q2.6).</li>
+     * </ul>
+     * In every case the audit entry carries the gateway's invocation id when it sent one.
+     */
     public void failJob(UUID jobId, String tenantId, String reason, GatewayCallException gateway) {
-        failJob(jobId, tenantId, reason, GatewayFailure.outcomeUnknown(gateway), gateway.invocationId());
+        failJob(jobId, tenantId, reason, GatewayFailure.outcomeUnknown(gateway), GatewayFailure.policyBlocked(gateway),
+            gateway.invocationId());
+    }
+
+    public void failJob(UUID jobId, String tenantId, String reason, boolean outcomeUnknown, UUID gatewayInvocationId) {
+        failJob(jobId, tenantId, reason, outcomeUnknown, false, gatewayInvocationId);
     }
 
     /**
      * Same, when the gateway call may have run: the job is flagged outcome-unknown, which blocks a re-run until a person
      * reconciles it (platform Q2.3), and the audit entry carries the gateway's invocation id when it sent one.
      */
-    public void failJob(UUID jobId, String tenantId, String reason, boolean outcomeUnknown, UUID gatewayInvocationId) {
+    @SuppressWarnings("java:S107")
+    public void failJob(UUID jobId, String tenantId, String reason, boolean outcomeUnknown, boolean policyBlocked,
+                        UUID gatewayInvocationId) {
         InvestigationJob failed = tx.execute(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
             if (j.isTerminal()) {
@@ -321,7 +339,11 @@ public class InvestigationJobRunner {
                 meters.counter("reconcile.investigation.failed", "reason", String.valueOf(reason)).increment();
             }
             breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).ifPresent(b -> {
-                b.markInvestigationFailed();
+                if (policyBlocked) {
+                    b.markPolicyBlocked();
+                } else {
+                    b.markInvestigationFailed();
+                }
                 breaks.save(b);
             });
             Map<String, Object> details = new java.util.LinkedHashMap<>();
@@ -330,6 +352,10 @@ public class InvestigationJobRunner {
             if (outcomeUnknown) {
                 j.markOutcomeUnknown();
                 details.put("gatewayOutcomeUnknown", true);
+            }
+            if (policyBlocked) {
+                details.put("gatewayPolicyBlocked", true);
+                details.put("route", "MANUAL_REVIEW");
             }
             if (gatewayInvocationId != null) {
                 details.put("gatewayInvocationId", gatewayInvocationId.toString());

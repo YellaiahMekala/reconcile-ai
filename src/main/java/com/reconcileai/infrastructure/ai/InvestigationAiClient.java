@@ -4,9 +4,12 @@ import com.reconcileai.application.gateway.GatewayChatPort;
 import com.reconcileai.application.gateway.IdempotencyKeys;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor;
 import com.reconcileai.infrastructure.ai.advisor.TokenUsageAdvisor;
+import com.reconcileai.infrastructure.ai.pii.PiiMasker;
+import com.reconcileai.infrastructure.ai.pii.PiiMasker.MaskResult;
 import com.reconcileai.infrastructure.ai.prompt.InvestigationPromptBuilder.BuiltPrompt;
 import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
 import com.reconcileai.infrastructure.ai.resilience.LlmResilience;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -46,22 +49,25 @@ public class InvestigationAiClient {
     private final int maxOutputTokens;
     private final LlmResilience resilience;
     private final ObjectProvider<GatewayChatPort> gateway;
+    private final ObjectProvider<MeterRegistry> meters;
     private final BeanOutputConverter<ProposalDraft> converter = new BeanOutputConverter<>(ProposalDraft.class);
 
     public InvestigationAiClient(ChatClient investigationChatClient,
                                  @Value("${reconcile.investigation.max-output-tokens}") int maxOutputTokens,
                                  LlmResilience resilience,
-                                 ObjectProvider<GatewayChatPort> gateway) {
+                                 ObjectProvider<GatewayChatPort> gateway,
+                                 ObjectProvider<MeterRegistry> meters) {
         this.chatClient = investigationChatClient;
         this.resilience = resilience;
         this.maxOutputTokens = maxOutputTokens;
         this.gateway = gateway;
+        this.meters = meters;
     }
 
     public ProposalDraft investigate(BuiltPrompt prompt, String tenantId, UUID jobId, String analystNote) {
         GatewayChatPort port = gateway.getIfAvailable();
         if (port != null) {
-            return viaGateway(port, prompt, jobId);
+            return viaGateway(port, prompt, tenantId, jobId);
         }
         return direct(prompt, tenantId, jobId, analystNote);
     }
@@ -70,12 +76,23 @@ public class InvestigationAiClient {
      * Platform Q2.1: the gateway route. The gateway applies its own governance (risk signalling, budget, ledger),
      * so this path does not run the ChatClient advisors or {@link LlmResilience}; the one transport retry lives in
      * the adapter, under the same idempotency key. Typed handling of each gateway code is Q2.2.
+     * <p>
+     * Structured identifiers (IBAN, card, account, e-mail, phone) are masked on the wire exactly as the direct
+     * path's {@code PiiMaskingAdvisor} does (platform Q2.5): the gateway must never receive what the model must
+     * never see. The injection guard is not repeated here: the analyst note was already scanned at job start, and
+     * the gateway runs its own risk detectors on the request.
      */
-    private ProposalDraft viaGateway(GatewayChatPort port, BuiltPrompt prompt, UUID jobId) {
+    private ProposalDraft viaGateway(GatewayChatPort port, BuiltPrompt prompt, String tenantId, UUID jobId) {
+        MaskResult system = PiiMasker.mask(prompt.system() + "\n" + converter.getFormat());
+        MaskResult user = PiiMasker.mask(prompt.user());
+        countMasked(system);
+        countMasked(user);
         GatewayChatPort.Request request = new GatewayChatPort.Request(
+            tenantId,
+            jobId,
             IdempotencyKeys.forStep(jobId, STEP, 1),
-            prompt.system() + "\n" + converter.getFormat(),
-            prompt.user(),
+            system.text(),
+            user.text(),
             maxOutputTokens,
             0.0,
             Instant.now().plus(GATEWAY_DEADLINE));
@@ -88,6 +105,16 @@ public class InvestigationAiClient {
         } catch (RuntimeException e) {
             throw new IllegalStateException("MODEL_OUTPUT_NOT_VALID_JSON", e);
         }
+    }
+
+    /** Same series as PiiMaskingAdvisor ({@code reconcile.pii.masked{type}}), so the dashboard panel covers both routes. */
+    private void countMasked(MaskResult result) {
+        MeterRegistry registry = meters.getIfAvailable();
+        if (registry == null) {
+            return;
+        }
+        result.counts().forEach((type, n) ->
+            registry.counter("reconcile.pii.masked", "type", type.name()).increment(n));
     }
 
     private ProposalDraft direct(BuiltPrompt prompt, String tenantId, UUID jobId, String analystNote) {

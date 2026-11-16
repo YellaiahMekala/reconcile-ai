@@ -84,6 +84,13 @@ public class InvestigationJob {
     @Column(name = "reconcile_ref", length = 64)
     private String reconcileRef;
 
+    /** What the gateway ledger said about the referenced invocation when the job was reconciled (V14). */
+    @Column(name = "ledger_execution_certainty", length = 32)
+    private String ledgerExecutionCertainty;
+
+    @Column(name = "ledger_status", length = 48)
+    private String ledgerStatus;
+
     @Column(name = "proposal_id", columnDefinition = "uuid")
     private UUID proposalId;
 
@@ -158,15 +165,34 @@ public class InvestigationJob {
 
     /** Clears the unknown outcome after someone checked the gateway ledger. Only a failed, unreconciled job qualifies. */
     public void reconcile(String by, String reference, Instant at) {
+        reconcile(by, reference, at, null, null);
+    }
+
+    /**
+     * @param ledgerCertainty the gateway ledger's {@code executionCertainty} for the referenced invocation, when
+     *                        reconcile-ai read it itself; null for a ticket reference
+     * @param ledgerStatus    the ledger's {@code status} for that invocation, or null
+     */
+    public void reconcile(String by, String reference, Instant at, String ledgerCertainty, String ledgerStatus) {
         if (status != JobStatus.FAILED || !outcomeUnknown || reconciledAt != null) {
             throw new IllegalStateException("JOB_NOT_AWAITING_RECONCILIATION");
         }
         this.reconciledBy = by;
         this.reconcileRef = reference;
         this.reconciledAt = at;
+        this.ledgerExecutionCertainty = ledgerCertainty;
+        this.ledgerStatus = ledgerStatus;
     }
 
     public boolean isOutcomeUnknown() { return outcomeUnknown; }
+
+    public String getReconciledBy() { return reconciledBy; }
+
+    public String getReconcileRef() { return reconcileRef; }
+
+    public String getLedgerExecutionCertainty() { return ledgerExecutionCertainty; }
+
+    public String getLedgerStatus() { return ledgerStatus; }
 
     public Instant getReconciledAt() { return reconciledAt; }
 

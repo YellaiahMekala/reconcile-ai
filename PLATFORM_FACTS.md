@@ -1,6 +1,6 @@
 # PLATFORM_FACTS
 
-Facts read from code on 2026-11-13 (commit 9ee707d), refreshed on 2026-11-14 for commit 0393997 (supervisor changes in #7 and #8). Paths are relative to `reconcile-ai/`.
+Facts read from code on 2026-11-13 (commit 9ee707d), refreshed on 2026-11-14 for commit 0393997 (supervisor changes in #7 and #8) and on 2026-11-16 for the Q2 gateway work (5A virtual threads, Q2.1 to Q2.7 on branch `feature/q2-gateway-governance`, uncommitted at the time of writing; the last commit on main is `7c0f9c3`, Q2.3). Paths are relative to `reconcile-ai/`.
 Abbreviations: `api/` = `src/main/java/com/reconcileai/api/`, `app/` = `.../application/`, `infra/` = `.../infrastructure/`,
 `dom/` = `.../domain/`, `yml` = `src/main/resources/application.yml`. UNVERIFIED = not confirmed in code.
 
@@ -21,6 +21,8 @@ Roles: ANY = RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN. All paths need 
 | GET | /api/v1/investigations/{jobId} | ANY | – | 200 InvestigationJobResponse (polling path) | `api/InvestigationController.java` |
 | GET | /api/v1/investigations/{jobId}/events | ANY | `Authorization` header (use fetch, not EventSource) | `text/event-stream`, event name `progress`, JSON data; keep-alive comments; DB snapshot on subscribe; stream expires after 120 s | `api/InvestigationController.java`, `infra/streaming/SseProgressBroadcaster.java`, `yml` emitter-timeout-ms |
 | GET | /api/v1/investigations/{jobId}/tool-calls | ANY | – | 200 array `{seq, tool, outcome, resultChars, latencyMs, agentName}`; no arguments | `infra/ai/agent/AgentToolCallStore.java` |
+| POST | /api/v1/investigations/{jobId}/reconcile | SRE_ADMIN, APPROVER_L2 | JSON `reference` (required, `[A-Za-z0-9._:-]{3,64}`: a gateway invocation id or ticket id) | 200 InvestigationJobResponse; 409 `RECONCILER_MUST_DIFFER` (same `sub` as the starter), 409 `NOT_AWAITING_RECONCILIATION`, 409 `INVOCATION_NOT_FOR_JOB` (UUID reference not returned to this job's gateway calls; no ledger read), 409 `LEDGER_ENTRY_NOT_FOUND` (ledger 404), 503 `GATEWAY_LEDGER_UNAVAILABLE` + `Retry-After: 30` (ledger unreachable or non-200; nothing recorded), 404 other tenant. A canonical UUID reference with the gateway route on makes the app read `GET /api/v1/invocations/{id}` with the tenant's token before recording; a ticket reference skips the read. An `EXECUTED` ledger answer does not block reconciling. Audit `INVESTIGATION_OUTCOME_RECONCILED` records `ledgerChecked` plus certainty, status, tokens, cost | `api/InvestigationController.java`, `app/investigation/InvestigationService.java`, `V12__gateway_outcome_unknown.sql` (Q2.3), `V14` (ledger fields); `GatewayReconcileLedgerIT` |
+| GET | /api/v1/investigations/{jobId}/gateway-calls | SRE_ADMIN, APPROVER_L2 | – | 200 array: each `gateway_call` row plus `ledgerResult` (`FOUND`, `NOT_FOUND`, `UNAVAILABLE`, `NOT_CHECKED`) and the ledger fields; 404 for another tenant's job | `api/InvestigationController.java`; `GatewayReconcileLedgerIT` |
 | GET | /api/v1/breaks/{breakId}/proposals | ANY | – | 200 array ProposalResponse | `api/InvestigationController.java` |
 | GET | /api/v1/proposals/{proposalId} | ANY | – | 200 ProposalResponse | same |
 | GET | /api/v1/approvals | APPROVER_L1, APPROVER_L2 | – | 200 caller's queue; maker's own tasks filtered out | `api/ApprovalController.java`, `app/approval/ApprovalService.java:94` |
@@ -40,7 +42,7 @@ Roles: ANY = RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN. All paths need 
 - BreakResponse: `id, breakReference, status, ledgerAmount, externalAmount, variance, currency, source, version, createdAt`. Amounts are `BigDecimal`; no `@JsonFormat(STRING)` or `WRITE_BIGDECIMAL_AS_STRING` found, so they serialize as **JSON numbers**. Only requests and Kafka messages carry amounts as strings.
 - EvidenceResponse: `id, breakItemId, fileName, contentType, contentHash, sizeBytes, status (PROCESSING|READY|FAILED), deduplicated, chunkCount, suspectChunkCount, failureReason, createdAt`.
 - SearchHit: `chunkId, evidenceId, fileName, chunkIndex, vectorScore, keywordRank, fusedScore, snippet (max 300 chars)`.
-- InvestigationJobResponse: `id, breakItemId, mode, status, stage, initiatedBy, contextTokenEstimate, failureReason, proposalId, createdAt, startedAt, finishedAt, reviewVerdict, riskFlags`.
+- InvestigationJobResponse: `id, breakItemId, mode, status, stage, initiatedBy, contextTokenEstimate, failureReason, proposalId, createdAt, startedAt, finishedAt, reviewVerdict, riskFlags, outcomeUnknown, reconciledAt, reconciledBy, reconcileRef, ledgerExecutionCertainty, ledgerStatus`.
 - ProposalResponse: `id, breakItemId, jobId, rootCause, explanation, recommendedAction, confidence (BigDecimal), citedChunkIds, citationsValid, invalidCitations, route, routeReason, status, makerSubject, varianceAmount, currency, createdAt`.
 - ApprovalTaskResponse: `id, proposalId, breakItemId, requiredRole, status (OPEN|APPROVED|REJECTED), makerSubject, decidedBy, decisionComment, decidedAt, createdAt`.
 
@@ -50,7 +52,8 @@ Roles: ANY = RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN. All paths need 
 - Job status QUEUED, RUNNING, SUCCEEDED, FAILED (`dom/JobStatus.java`). Stage QUEUED, RETRIEVING, CALLING_MODEL, VERIFYING, ROUTING, COMPLETED, FAILED (`dom/JobStage.java`).
 - Break status (`dom/BreakStatus.java`): OPEN, EVIDENCE_PROCESSING, READY_TO_INVESTIGATE, INVESTIGATING, PROPOSAL_CREATED, PENDING_L1, PENDING_L2, AUTO_RESOLVED, RESOLVED, REJECTED, MANUAL_REVIEW_REQUIRED, FAILED_RETRYABLE.
 - Proposal status: PENDING_APPROVAL, MANUAL_REVIEW, APPROVED, REJECTED, AUTO_RESOLVED (`dom/ProposalStatus.java`).
-- Start preconditions (`InvestigationService.start`): mode enabled (else 400 INPUT_REJECTED); per-tenant rate limit (429); note passes injection scan; no QUEUED/RUNNING job for the break (409 INVESTIGATION_IN_PROGRESS); at least one READY evidence and none PROCESSING (409 EVIDENCE_NOT_READY); lifecycle allows it (409 ILLEGAL_BREAK_STATE). Executor queue full gives 503 + `Retry-After: 30`.
+- Start preconditions (`InvestigationService.start`): mode enabled (else 400 INPUT_REJECTED); per-tenant rate limit (429); note passes injection scan; no QUEUED/RUNNING job for the break (409 INVESTIGATION_IN_PROGRESS); the break's last job is not an unreconciled gateway unknown outcome (409 OUTCOME_UNRECONCILED, Q2.3); at least one READY evidence and none PROCESSING (409 EVIDENCE_NOT_READY); lifecycle allows it (409 ILLEGAL_BREAK_STATE). Executor queue full gives 503 + `Retry-After: 30`.
+- Gateway route (`GATEWAY_ENABLED=true`, `infra/gateway/`, `app/gateway/`): the SINGLE_CALL model call goes to ai-gateway `POST /api/v1/chat` with a client-credentials token (`scope=aud-ai-gateway`) and key `recon:<jobId>:investigate:1`; one transport retry only on not-sent codes. Each attempt is a `gateway_call` row (V13: outcome SUCCESS / REFUSED / UNKNOWN / NOT_SENT, http status, code, invocation id, tokens); a success also writes `llm_call` with model `ai-gateway`. Failure mapping (`app/gateway/GatewayFailure.java`): reason `GATEWAY_<code>`; `UNKNOWN_OUTCOME`, `IDEMPOTENCY_UNKNOWN_OUTCOME`, `TRANSPORT_UNKNOWN_OUTCOME`, `IDEMPOTENCY_IN_PROGRESS` flag the job `outcome_unknown`; `RISK_BLOCKED`, `SENSITIVITY_BLOCKED` move the break to MANUAL_REVIEW_REQUIRED (`dom/BreakItem.markPolicyBlocked`); everything else leaves it FAILED_RETRYABLE. System and user text are PII-masked before the request leaves (`infra/ai/InvestigationAiClient.viaGateway`). The advisor chain and the Resilience4j breaker are not on this route.
 - Evidence upload is refused (409) while the break is INVESTIGATING, PENDING_L1, PENDING_L2, RESOLVED, AUTO_RESOLVED (`dom/BreakItem.java:121`).
 - Idempotency: break create is unique on (tenant_id, break_reference), duplicate gives 409. Evidence is deduplicated by SHA-256. No `Idempotency-Key` header support found in code.
 
@@ -61,9 +64,9 @@ Roles: ANY = RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN. All paths need 
 | 400 | VALIDATION_FAILED, MALFORMED_REQUEST, INPUT_REJECTED, BAD_REQUEST |
 | 403 | INSUFFICIENT_APPROVAL_TIER, MAKER_CHECKER_VIOLATION (and plain Spring 403 when a role is missing) |
 | 404 | BREAK_NOT_FOUND, DIGEST_NOT_FOUND, other NotFoundException codes |
-| 409 | DUPLICATE_BREAK_REFERENCE, CONFLICT, CONCURRENT_MODIFICATION, ILLEGAL_BREAK_STATE, APPROVAL_ALREADY_DECIDED, INVESTIGATION_IN_PROGRESS, EVIDENCE_NOT_READY |
+| 409 | DUPLICATE_BREAK_REFERENCE, CONFLICT, CONCURRENT_MODIFICATION, ILLEGAL_BREAK_STATE, APPROVAL_ALREADY_DECIDED, INVESTIGATION_IN_PROGRESS, EVIDENCE_NOT_READY, OUTCOME_UNRECONCILED, RECONCILER_MUST_DIFFER, NOT_AWAITING_RECONCILIATION, INVOCATION_NOT_FOR_JOB, LEDGER_ENTRY_NOT_FOUND |
 | 429 | RATE_LIMITED + `Retry-After` |
-| 503 | CAPACITY_EXCEEDED + `Retry-After: 30` |
+| 503 | CAPACITY_EXCEEDED + `Retry-After: 30`; GATEWAY_LEDGER_UNAVAILABLE + `Retry-After: 30` (reconcile) |
 | 401 | missing or invalid JWT, or JWT without `tenant_id` (Spring default body, not ApiError) |
 
 **Policy gate** (`app/policy/PolicyGateService.java`). Input `PolicyInput(variance: Money, confidence, rootCause, citationsValid, reviewerChallenged)`. First match wins:
@@ -87,7 +90,7 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 - Claims: tenant `tenant_id`, user `sub` (principal), roles `roles` (string list; values RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN; unknown values ignored).
 - Token lifetime: demo token 3600 s (`DemoLoginController.java:76`); Keycloak realm `accessTokenLifespan` 1800 s; scripted tokens from `scripts/generate-local-jwt.ps1` UNVERIFIED.
 - Keycloak realm `reconcile`: one public client `reconcile-ui`, mappers for `tenant_id`, `roles`, audience `reconcile-api`. No confidential or service-account client.
-- **Service-to-service today:** no dedicated mechanism. A caller needs a bearer JWT with `tenant_id`, `sub`, `roles`, signed by the configured key or issued by the configured IdP. Kafka intake has no per-message auth; the topic ACL is the boundary (README §8; no ACL config in repo).
+- **Service-to-service today:** inbound, no dedicated mechanism. A caller needs a bearer JWT with `tenant_id`, `sub`, `roles`, signed by the configured key or issued by the configured IdP. Kafka intake has no per-message auth; the topic ACL is the boundary (README §8; no ACL config in repo). Outbound (Q2.1): `infra/gateway/ClientCredentialsTokenSource.java` gets a service token for ai-gateway with the client-credentials grant (`GATEWAY_TOKEN_URI`, `GATEWAY_CLIENT_ID`, `GATEWAY_CLIENT_SECRET`, `GATEWAY_TOKEN_SCOPE=aud-ai-gateway`), cached until 30 s before expiry. With `reconcile.gateway.tenants` empty (default) there is one client for the whole instance: the tenant the gateway bills is the one in that token, not the job's tenant. With the map set (bracket keys, for example `"[TENANT_A]": { client-id, client-secret-env }`, secret read from the named environment variable, never YAML) each job uses its tenant's client, the token's `tenant_id` claim must equal the job tenant exactly (`TOKEN_TENANT_MISMATCH`, or `TOKEN_TENANT_UNVERIFIED` when no claim is readable; signature not verified locally, the gateway verifies it), and a tenant with no entry fails with `TENANT_CREDENTIALS_MISSING` with no fallback to a shared client. These fail before sending: job reason `GATEWAY_<code>`, break FAILED_RETRYABLE, `gateway_call` outcome NOT_SENT, http 0. Startup fails fast on an incomplete entry, an unset secret variable, or two keys that collide after ignoring case and separators. Tested against a fake gateway and realm only; a real two-tenant run needs a second Keycloak client.
 - **A new internal caller would need:** a client-credentials client in the IdP with mappers that put `tenant_id`, `roles` (for example RECON_ANALYST) and audience `reconcile-api` into the token. Note: maker-checker uses `sub`, so a service subject would be the maker of any proposal it starts. Not built.
 
 ## 3. Tenant identifier
@@ -109,7 +112,14 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 | OPENAI_API_KEY | empty | embeddings always OpenAI text-embedding-3-small |
 | AGENT_ENABLED | false | allows mode AGENT |
 | SUPERVISED_ENABLED | false | allows SUPERVISED / SUPERVISED_PLANNED (also needs agent enabled); one shared budget of 12 tool calls, 24 model turns, 180 s, 6 delegations (`yml`, `infra/ai/agent/SupervisedProperties.java`) |
-| RATE_LIMIT_ENABLED | true | 20 burst, 20/min per tenant per JVM on POST investigations |
+| RATE_LIMIT_ENABLED | true | 20 burst, 20/min per tenant on POST investigations |
+| RATE_LIMIT_STORE (`reconcile.ratelimit.store`) | memory | `memory` = bucket per JVM; `redis` = one bucket per tenant shared by all replicas (atomic Lua script, Redis server clock, key `reconcile:ratelimit:investigations:{tenant}`, expires when the bucket would be full); Redis unreachable = local bucket, counted in `reconcile.ratelimit.redis.fallback` |
+| reconcile.gateway.tenants | empty map | per-tenant gateway clients (`client-id`, `client-secret-env`); empty = shared client |
+| GATEWAY_ENABLED | false | routes the SINGLE_CALL model call through ai-gateway (`infra/gateway/GatewayConfig.java`) |
+| GATEWAY_BASE_URL / GATEWAY_TOKEN_URI | http://localhost:8080 / http://localhost:8180/realms/ai-gateway/protocol/openid-connect/token | gateway and token endpoint; the platform spike stack uses 8280 and `http://localhost:8190/realms/platform/...` |
+| GATEWAY_CLIENT_ID / GATEWAY_CLIENT_SECRET / GATEWAY_TOKEN_SCOPE | reconcile-ai / empty / aud-ai-gateway | client-credentials grant; the realm adds `aud=ai-gateway` only for that scope |
+| reconcile.gateway.connect-timeout / request-timeout | 3 s / 60 s | per attempt; a timeout after sending is an unknown outcome, never retried |
+| spring.threads.virtual.enabled | true | Java 21 virtual threads for requests, `@Scheduled` and the default executor; the investigation executor stays a bounded platform pool (5A, `docs/adr/ADR-virtual-threads.md`) |
 | KAFKA_ENABLED / KAFKA_BOOTSTRAP | false / localhost:9092 | creates producer, intake consumer and outbox relay |
 | CACHE_ENABLED | false | Redis semantic cache of verified drafts (threshold 0.95, TTL 24 h, 500 per tenant) |
 | SSE_FANOUT | local | `redis` = cross-instance SSE |
@@ -137,6 +147,8 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 
 - Last green CI: run **#33**, workflow `ci`, `main`, commit 0393997, 2026-11-14 06:02 UTC: `https://github.com/<owner>/reconcile-ai/actions/runs/43564404616`
 - From that run's log: unit (surefire) **96**, integration (failsafe) **143**, UI (Karma) **15**; all passed. Excluded by default: groups `openai`, `ollama`, `bedrock` (live tests).
+- Local `mvn clean verify` on 2026-11-16, branch `feature/q2-gateway-governance` (Q2.3–Q2.7, uncommitted): unit **116**, integration **163**, 0 failures. Excluded groups now also `gateway`, `gateway-live`. No CI run yet for this state.
+- After the ledger read, per-tenant credentials and shared rate limit work: unit **123**, integration **179** (to be filled from the build). No CI run yet for this state.
 - Earlier: run #29 (9ee707d) had 96 / 140 / 15. The 3 new ITs are `EvalRunnerCitedFilesIT` (2) and one more case in `SupervisedInvestigationIT`.
 - Other CI jobs in run #29: Angular, mvn clean verify, alert rules, k8s + image, terraform checks, terraform on LocalStack, SBOM.
 
@@ -153,11 +165,17 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 | Kafka intake + outbox relay | Built, off by default | `infra/messaging/` |
 | OTel tracing bridge + OTLP exporter, Prometheus | Built, tracing off by default | `pom.xml`, `yml` |
 | Caffeine L1 cache | Not built | none in code |
-| Virtual threads | Not enabled | no `spring.threads.virtual` in `yml` |
+| Virtual threads | Enabled (5A, 2026-11-15); investigation executor still a bounded platform pool | `yml` `spring.threads.virtual.enabled`, `VirtualThreadsTenantIsolationIT`, `docs/adr/ADR-virtual-threads.md` |
+| ai-gateway route (Q2.1–Q2.6) | Built, off by default; proven end to end against a fake gateway validated on the v1 schemas; **not yet run against the real gateway** | `infra/gateway/`, `app/gateway/`, V12, V13; `GatewayUnknownOutcomeIT`, `GatewayLedgerIT`, `GatewaySensitiveDataIT`, `GatewayBudgetIT`, `GatewayOutcomeGuardIT` |
+| Real-gateway runs (Q2.7) | Built, opt-in, **not run**: `RealGatewayIT` (tag `gateway`, spike stack, stub provider, free) and `GatewayLiveProviderIT` (tag `gateway-live`, needs `GATEWAY_LIVE_APPROVED=yes`, paid) | `docs/proof/q2-7-gateway-live-runbook.md`, evidence template beside it |
+| Gateway ledger read (`GET /api/v1/invocations/{id}`) | Built: reconcile reads the ledger itself for a UUID reference before recording (409 `INVOCATION_NOT_FOR_JOB`, 409 `LEDGER_ENTRY_NOT_FOUND`, 503 `GATEWAY_LEDGER_UNAVAILABLE`); V14 stores `ledger_execution_certainty` and `ledger_status`; `GET /investigations/{jobId}/gateway-calls` shows `ledgerResult`. Proven against the fake gateway; not run against the real gateway | `app/investigation/InvestigationService.java`, V14, `GatewayReconcileLedgerIT` (6); real-gateway read in `AbstractRealGatewayIT.java` (opt-in) |
+| Per-tenant gateway credentials | Built (`reconcile.gateway.tenants`; empty map = shared client). Tested against a fake gateway and realm only; a real two-tenant run needs a second Keycloak client | `TenantGatewayTokensTest` (6), `GatewayPerTenantCredentialsIT` (4) |
+| Rate limit shared through Redis (`RATE_LIMIT_STORE=redis`) | Built, default is per JVM. Real Redis in tests: two replicas share a bucket, 40 concurrent requests allow exactly 10, TTL, fallback to the local bucket | `RedisTokenBucketRateLimiterIT` (4), `SharedRateLimitIT` (2) |
+| Executor gauges and KEDA overlay | Built: gauges `reconcile.investigations.executor.active`, `.queued`, `.capacity`; `k8s/overlays/keda` (ScaledObject 2 to 6, Prometheus trigger on active+queued at 3 per pod, CPU 70%, `RATE_LIMIT_STORE=redis`; base CPU HPA removed). Validated only: rendered and schema-checked with kubeconform (datreeio CRDs-catalog) in CI, not run on a cluster with KEDA | `InvestigationQueueMetricsTest` (1), `k8s/overlays/keda/`, CI job k8s |
 | Auto-commit on AUTO_RESOLVE | Not built (downgraded to L1) | `ProposalService.java` |
 | Idempotency-Key header | Not built | none in `api/` |
 | problem+json errors | Not built | `ApiError.java` |
-| Service-account client | Not built | realm json |
+| Service-account client (inbound to reconcile-ai) | Not built | realm json |
 | OpenAI chat | Run live (4B eval; 4G four-mode comparison, 40 cases, 2026-11-13) | `docs/proof/phase4-openai-eval.md`, `docs/proof/phase4g-supervised-eval.md` |
 | Bedrock | Built, run only against a fake endpoint; live not run | `BedrockFakeEvalIT`, `BedrockEvalIT` tagged `bedrock` |
 | AWS Terraform | Applied to LocalStack only; never to a real account | CI job `terraform apply + destroy against LocalStack` |

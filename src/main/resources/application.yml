@@ -124,7 +124,10 @@ reconcile:
   ratelimit:                        # per tenant, on POST /investigations (each one can start paid model calls)
     enabled: ${RATE_LIMIT_ENABLED:true}
     capacity: 20                    # burst size
-    refill-per-minute: 20           # sustained rate; per JVM (see TokenBucketRateLimiter)
+    refill-per-minute: 20           # sustained rate
+    # memory: one bucket per JVM (N replicas = up to N x the rate). redis: one bucket per tenant shared by all
+    # replicas (spring.data.redis.*); falls back to the local bucket while Redis is down.
+    store: ${RATE_LIMIT_STORE:memory}
   security:
     # Empty: tokens are verified with the local dev public key above (demo personas, tests).
     # Set to a real IdP issuer to switch to JWKS + issuer + audience validation, e.g. Keycloak:
@@ -158,8 +161,16 @@ reconcile:
     token-uri: ${GATEWAY_TOKEN_URI:http://localhost:8180/realms/ai-gateway/protocol/openid-connect/token}
     client-id: ${GATEWAY_CLIENT_ID:reconcile-ai}
     client-secret: ${GATEWAY_CLIENT_SECRET:}
+    token-scope: ${GATEWAY_TOKEN_SCOPE:aud-ai-gateway}   # the platform realm adds aud=ai-gateway only for this scope
     connect-timeout: 3s
     request-timeout: 60s            # per attempt; a timeout after sending is an unknown outcome and is never retried
+    # Per-tenant OAuth clients (empty = every tenant uses the shared client-id above, billed to its tenant).
+    # When set, each job uses its tenant's client, the token's tenant_id claim must equal the job's tenant, and a
+    # tenant with no entry fails before sending (GATEWAY_TENANT_CREDENTIALS_MISSING). Bracket keys keep the exact id;
+    # client-secret-env names the environment variable holding the secret (never the secret itself).
+    # tenants:
+    #   "[TENANT_A]": { client-id: reconcile-ai-tenant-a, client-secret-env: GATEWAY_SECRET_TENANT_A }
+    #   "[TENANT_B]": { client-id: reconcile-ai-tenant-b, client-secret-env: GATEWAY_SECRET_TENANT_B }
   ai:
     log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
     pricing:                        # list price per 1M tokens for the cost metric (ESTIMATED). Defaults: gpt-4o-mini

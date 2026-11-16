@@ -1,14 +1,20 @@
 package com.reconcileai.infrastructure.gateway;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.reconcileai.application.gateway.GatewayCallLog;
 import com.reconcileai.application.gateway.GatewayChatPort;
+import com.reconcileai.application.gateway.GatewayLedgerPort;
+import com.reconcileai.infrastructure.persistence.GatewayCallRepository;
+import com.reconcileai.infrastructure.persistence.LlmCallRepository;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.http.HttpClient;
 import java.time.Clock;
-import java.util.function.Supplier;
 
 /**
  * Builds the ai-gateway route only when {@code reconcile.gateway.enabled=true}. With the default
@@ -24,16 +30,46 @@ public class GatewayConfig {
         return HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build();
     }
 
+    /**
+     * Shared client (default) or one client per tenant ({@code reconcile.gateway.tenants}). Per-tenant secrets are
+     * resolved through the Spring environment from the variable each entry names, so they never sit in YAML.
+     */
     @Bean
-    Supplier<String> gatewayTokenSource(HttpClient gatewayHttpClient, ObjectMapper objectMapper,
-                                        GatewayProperties properties) {
-        return new ClientCredentialsTokenSource(gatewayHttpClient, objectMapper, properties, Clock.systemUTC());
+    GatewayTokenProvider gatewayTokenProvider(HttpClient gatewayHttpClient, ObjectMapper objectMapper,
+                                              GatewayProperties properties, Environment environment) {
+        if (properties.perTenantClients()) {
+            return new TenantGatewayTokens(gatewayHttpClient, objectMapper, properties, environment::getProperty,
+                    Clock.systemUTC());
+        }
+        return GatewayTokenProvider.shared(
+                new ClientCredentialsTokenSource(gatewayHttpClient, objectMapper, properties, Clock.systemUTC()));
+    }
+
+    /** Our side of the ledger (Q2.4). In a slice without JPA (config tests) it is a no-op. */
+    @Bean
+    GatewayCallLog gatewayCallLog(ObjectProvider<GatewayCallRepository> calls, ObjectProvider<LlmCallRepository> llmCalls,
+                                  ObjectProvider<TransactionTemplate> tx) {
+        GatewayCallRepository repo = calls.getIfAvailable();
+        LlmCallRepository llm = llmCalls.getIfAvailable();
+        TransactionTemplate template = tx.getIfAvailable();
+        if (repo == null || llm == null || template == null) {
+            return GatewayCallLog.NOOP;
+        }
+        return new JpaGatewayCallLog(repo, llm, template);
     }
 
     @Bean
     GatewayChatPort gatewayChatPort(HttpClient gatewayHttpClient, ObjectMapper objectMapper,
-                                    GatewayProperties properties, Supplier<String> gatewayTokenSource) {
-        return new HttpGatewayChatAdapter(gatewayHttpClient, objectMapper, properties, gatewayTokenSource,
-                Clock.systemUTC(), Thread::sleep);
+                                    GatewayProperties properties, GatewayTokenProvider gatewayTokenProvider,
+                                    GatewayCallLog gatewayCallLog) {
+        return new HttpGatewayChatAdapter(gatewayHttpClient, objectMapper, properties, gatewayTokenProvider,
+                Clock.systemUTC(), Thread::sleep, gatewayCallLog);
+    }
+
+    /** The gateway's ledger, read with the job tenant's token when an unknown outcome is reconciled. */
+    @Bean
+    GatewayLedgerPort gatewayLedgerPort(HttpClient gatewayHttpClient, ObjectMapper objectMapper,
+                                        GatewayProperties properties, GatewayTokenProvider gatewayTokenProvider) {
+        return new HttpGatewayLedgerAdapter(gatewayHttpClient, objectMapper, properties, gatewayTokenProvider);
     }
 }

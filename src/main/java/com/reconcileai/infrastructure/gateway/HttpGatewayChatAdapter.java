@@ -3,7 +3,11 @@ package com.reconcileai.infrastructure.gateway;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.reconcileai.application.gateway.GatewayCallException;
+import com.reconcileai.application.gateway.GatewayCallLog;
+import com.reconcileai.application.gateway.GatewayCallLog.Attempt;
+import com.reconcileai.application.gateway.GatewayCallLog.Outcome;
 import com.reconcileai.application.gateway.GatewayChatPort;
+import com.reconcileai.application.gateway.GatewayFailure;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -28,6 +32,9 @@ import java.util.function.Supplier;
  * where nothing reached the provider or the gateway asks for one, and only if the retry can finish before the
  * caller's deadline. Never on 504 UNKNOWN_OUTCOME, 409 IDEMPOTENCY_UNKNOWN_OUTCOME or 429 BUDGET_BLOCKED, and never
  * after a timeout once the request was sent: the gateway may have executed it.
+ * <p>
+ * Every attempt is written to the {@link GatewayCallLog} (platform Q2.4) so a job can be reconciled against the
+ * gateway's ledger: attempt 1 and, when the rule allows it, attempt 2 under the same key.
  */
 public class HttpGatewayChatAdapter implements GatewayChatPort {
 
@@ -44,25 +51,40 @@ public class HttpGatewayChatAdapter implements GatewayChatPort {
     private final HttpClient http;
     private final ObjectMapper json;
     private final GatewayProperties properties;
-    private final Supplier<String> tokens;
+    private final GatewayTokenProvider tokens;
     private final Clock clock;
     private final Sleeper sleeper;
+    private final GatewayCallLog callLog;
 
     public HttpGatewayChatAdapter(HttpClient http, ObjectMapper json, GatewayProperties properties,
                                   Supplier<String> tokens, Clock clock, Sleeper sleeper) {
+        this(http, json, properties, GatewayTokenProvider.shared(tokens), clock, sleeper, GatewayCallLog.NOOP);
+    }
+
+    @SuppressWarnings("java:S107")
+    public HttpGatewayChatAdapter(HttpClient http, ObjectMapper json, GatewayProperties properties,
+                                  Supplier<String> tokens, Clock clock, Sleeper sleeper, GatewayCallLog callLog) {
+        this(http, json, properties, GatewayTokenProvider.shared(tokens), clock, sleeper, callLog);
+    }
+
+    /** @param tokens the job's tenant picks the token (per-tenant clients), or one shared client for all */
+    @SuppressWarnings("java:S107")
+    public HttpGatewayChatAdapter(HttpClient http, ObjectMapper json, GatewayProperties properties,
+                                  GatewayTokenProvider tokens, Clock clock, Sleeper sleeper, GatewayCallLog callLog) {
         this.http = http;
         this.json = json;
         this.properties = properties;
         this.tokens = tokens;
         this.clock = clock;
         this.sleeper = sleeper;
+        this.callLog = callLog;
     }
 
     @Override
     public Reply chat(Request request) {
         String body = body(request);
         try {
-            return send(request, body);
+            return send(request, body, 1);
         } catch (Refusal first) {
             if (!RETRYABLE.contains(first.code()) || first.retryAfter == null) {
                 throw first;
@@ -76,14 +98,24 @@ public class HttpGatewayChatAdapter implements GatewayChatPort {
                 Thread.currentThread().interrupt();
                 throw first;
             }
-            return send(request, body);
+            return send(request, body, 2);
         }
     }
 
-    private Reply send(Request request, String body) {
+    private Reply send(Request request, String body, int attempt) {
+        long started = System.nanoTime();
+        String token;
+        try {
+            token = tokens.token(request.tenantId());
+        } catch (GatewayCallException refusedBeforeSending) {
+            // No client for this tenant, or the token belongs to another tenant: nothing left this process.
+            callLog.record(new Attempt(request.tenantId(), request.jobId(), request.idempotencyKey(), attempt,
+                    Outcome.NOT_SENT, 0, refusedBeforeSending.code(), null, null, 0, 0, millisSince(started)));
+            throw refusedBeforeSending;
+        }
         HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(properties.baseUrl() + "/api/v1/chat"))
                 .timeout(properties.requestTimeout())
-                .header("Authorization", "Bearer " + tokens.get())
+                .header("Authorization", "Bearer " + token)
                 .header("Idempotency-Key", request.idempotencyKey())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -92,24 +124,46 @@ public class HttpGatewayChatAdapter implements GatewayChatPort {
         try {
             response = http.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         } catch (ConnectException e) {
-            throw new Refusal(0, "TRANSPORT_NOT_SENT", null, Duration.ofSeconds(1));
+            Refusal r = new Refusal(0, "TRANSPORT_NOT_SENT", null, Duration.ofSeconds(1));
+            log(request, attempt, Outcome.NOT_SENT, r, null, started);
+            throw r;
         } catch (IOException e) {
             // Sent (or possibly sent) and no answer: the gateway may have run the call. Never retried.
-            throw new Refusal(0, "TRANSPORT_UNKNOWN_OUTCOME", null, null);
+            Refusal r = new Refusal(0, "TRANSPORT_UNKNOWN_OUTCOME", null, null);
+            log(request, attempt, Outcome.UNKNOWN, r, null, started);
+            throw r;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new Refusal(0, "TRANSPORT_UNKNOWN_OUTCOME", null, null);
+            Refusal r = new Refusal(0, "TRANSPORT_UNKNOWN_OUTCOME", null, null);
+            log(request, attempt, Outcome.UNKNOWN, r, null, started);
+            throw r;
         }
         JsonNode node = parse(response.body());
         if (response.statusCode() == 200) {
             JsonNode usage = node.path("usage");
-            return new Reply(uuid(node.path("invocationId")), node.path("status").asText(),
+            Reply reply = new Reply(uuid(node.path("invocationId")), node.path("status").asText(),
                     node.path("output").asText(""), usage.path("inputTokens").asInt(), usage.path("outputTokens").asInt());
+            callLog.record(new Attempt(request.tenantId(), request.jobId(), request.idempotencyKey(), attempt,
+                    Outcome.SUCCESS, 200, null, reply.invocationId(), reply.status(), reply.inputTokens(),
+                    reply.outputTokens(), millisSince(started)));
+            return reply;
         }
         Duration retryAfter = response.headers().firstValue("Retry-After").map(Long::parseLong).map(Duration::ofSeconds)
                 .orElse(Duration.ofSeconds(DEFAULT_RETRY_AFTER_SECONDS));
-        throw new Refusal(response.statusCode(), node.path("code").asText("UNKNOWN_ERROR"),
+        Refusal r = new Refusal(response.statusCode(), node.path("code").asText("UNKNOWN_ERROR"),
                 uuid(node.path("invocationId")), retryAfter);
+        log(request, attempt, GatewayFailure.outcomeUnknown(r) ? Outcome.UNKNOWN : Outcome.REFUSED, r,
+                node.path("status").isTextual() ? node.path("status").asText() : null, started);
+        throw r;
+    }
+
+    private void log(Request request, int attempt, Outcome outcome, Refusal r, String gatewayStatus, long started) {
+        callLog.record(new Attempt(request.tenantId(), request.jobId(), request.idempotencyKey(), attempt, outcome,
+                r.httpStatus(), r.code(), r.invocationId(), gatewayStatus, 0, 0, millisSince(started)));
+    }
+
+    private static long millisSince(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000;
     }
 
     private String body(Request request) {
@@ -137,7 +191,14 @@ public class HttpGatewayChatAdapter implements GatewayChatPort {
     }
 
     private static UUID uuid(JsonNode node) {
-        return node.isTextual() ? UUID.fromString(node.asText()) : null;
+        if (!node.isTextual()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(node.asText());
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
+        }
     }
 
     /** A refusal that remembers the server's Retry-After for the one permitted retry. */
