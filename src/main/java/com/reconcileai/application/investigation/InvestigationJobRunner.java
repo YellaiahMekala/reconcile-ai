@@ -299,14 +299,18 @@ public class InvestigationJobRunner {
 
     /** Marks a job FAILED and its break FAILED_RETRYABLE in one transaction. Idempotent for terminal jobs. */
     public void failJob(UUID jobId, String tenantId, String reason) {
-        failJob(jobId, tenantId, reason, null);
+        failJob(jobId, tenantId, reason, false, null);
+    }
+
+    public void failJob(UUID jobId, String tenantId, String reason, GatewayCallException gateway) {
+        failJob(jobId, tenantId, reason, GatewayFailure.outcomeUnknown(gateway), gateway.invocationId());
     }
 
     /**
-     * Same, for an ai-gateway refusal: the audit entry also carries the gateway's invocation id (when it sent one)
-     * and whether the outcome is unknown, so a person can reconcile before anything is re-run.
+     * Same, when the gateway call may have run: the job is flagged outcome-unknown, which blocks a re-run until a person
+     * reconciles it (platform Q2.3), and the audit entry carries the gateway's invocation id when it sent one.
      */
-    public void failJob(UUID jobId, String tenantId, String reason, GatewayCallException gateway) {
+    public void failJob(UUID jobId, String tenantId, String reason, boolean outcomeUnknown, UUID gatewayInvocationId) {
         InvestigationJob failed = tx.execute(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
             if (j.isTerminal()) {
@@ -323,11 +327,12 @@ public class InvestigationJobRunner {
             Map<String, Object> details = new java.util.LinkedHashMap<>();
             details.put("jobId", jobId.toString());
             details.put("reason", reason);
-            if (gateway != null) {
-                details.put("gatewayOutcomeUnknown", GatewayFailure.outcomeUnknown(gateway));
-                if (gateway.invocationId() != null) {
-                    details.put("gatewayInvocationId", gateway.invocationId().toString());
-                }
+            if (outcomeUnknown) {
+                j.markOutcomeUnknown();
+                details.put("gatewayOutcomeUnknown", true);
+            }
+            if (gatewayInvocationId != null) {
+                details.put("gatewayInvocationId", gatewayInvocationId.toString());
             }
             audit.record(new AuditEntry(tenantId, "INVESTIGATION_FAILED", "BREAK", j.getBreakItemId(), ACTOR, details));
             return jobs.save(j);

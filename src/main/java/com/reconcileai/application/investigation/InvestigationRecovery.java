@@ -36,11 +36,14 @@ public class InvestigationRecovery {
     private final InvestigationJobRepository jobs;
     private final InvestigationJobRunner runner;
     private final InvestigationProperties props;
+    private final org.springframework.beans.factory.ObjectProvider<com.reconcileai.application.gateway.GatewayChatPort> gateway;
 
-    public InvestigationRecovery(InvestigationJobRepository jobs, InvestigationJobRunner runner, InvestigationProperties props) {
+    public InvestigationRecovery(InvestigationJobRepository jobs, InvestigationJobRunner runner, InvestigationProperties props,
+                                 org.springframework.beans.factory.ObjectProvider<com.reconcileai.application.gateway.GatewayChatPort> gateway) {
         this.jobs = jobs;
         this.runner = runner;
         this.props = props;
+        this.gateway = gateway;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -65,7 +68,9 @@ public class InvestigationRecovery {
         for (InvestigationJob j : stale) {
             if (j.getStatus() == JobStatus.RUNNING) {
                 log.warn("Recovering orphaned RUNNING job {} (owner={}, heartbeat={})", j.getId(), j.getOwnerNode(), j.getHeartbeatAt());
-                runner.failJob(j.getId(), j.getTenantId(), "INTERRUPTED");
+                // On the gateway route, a node that died during the model call may have sent it: outcome unknown.
+                boolean midCall = j.getStage() == com.reconcileai.domain.JobStage.CALLING_MODEL && gateway.getIfAvailable() != null;
+                runner.failJob(j.getId(), j.getTenantId(), "INTERRUPTED", midCall, null);
             } else {
                 try {
                     log.info("Resubmitting stale QUEUED job {}", j.getId());

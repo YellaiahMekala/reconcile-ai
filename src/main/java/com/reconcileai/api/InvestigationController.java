@@ -64,6 +64,16 @@ public class InvestigationController {
             .body(InvestigationJobResponse.from(job));
     }
 
+    public record ReconcileRequest(@jakarta.validation.constraints.NotBlank @Size(max = 64) String reference) {}
+
+    /** Lifts the re-run block after a gateway call of unknown outcome; the reference is a gateway invocation or ticket id. */
+    @PostMapping("/api/v1/investigations/{jobId}/reconcile")
+    @PreAuthorize("hasAnyRole('APPROVER_L2','SRE_ADMIN')")
+    public InvestigationJobResponse reconcile(@PathVariable UUID jobId,
+                                              @RequestBody @jakarta.validation.Valid ReconcileRequest body) {
+        return InvestigationJobResponse.from(service.reconcile(jobId, body.reference()));
+    }
+
     @GetMapping("/api/v1/investigations/{jobId}")
     @PreAuthorize(ANY_APP_ROLE)
     public InvestigationJobResponse job(@PathVariable UUID jobId) {

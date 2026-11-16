@@ -139,6 +139,12 @@ public class InvestigationService {
                         EnumSet.of(JobStatus.QUEUED, JobStatus.RUNNING))) {
                     throw new ConflictException("INVESTIGATION_IN_PROGRESS", "An investigation is already running for this break");
                 }
+                if (jobs.existsByTenantIdAndBreakItemIdAndOutcomeUnknownTrueAndReconciledAtIsNull(user.tenantId(), breakId)) {
+                    // A new job gets a new idempotency key, so the gateway cannot replay the earlier call: re-running
+                    // could bill the same work twice. A person must check the gateway ledger first (platform Q2.3).
+                    throw new ConflictException("OUTCOME_UNRECONCILED",
+                        "An earlier gateway call for this break may have run; reconcile it before re-investigating");
+                }
                 long ready = evidence.countByTenantIdAndBreakItemIdAndStatus(user.tenantId(), breakId, EvidenceStatus.READY);
                 long processing = evidence.countByTenantIdAndBreakItemIdAndStatus(user.tenantId(), breakId, EvidenceStatus.PROCESSING);
                 if (ready == 0 || processing > 0) {
@@ -164,6 +170,34 @@ public class InvestigationService {
             throw new CapacityExceededException("Investigation capacity exceeded, retry later");
         }
         return job;
+    }
+
+    private static final java.util.regex.Pattern RECONCILE_REF = java.util.regex.Pattern.compile("[A-Za-z0-9._:-]{3,64}");
+
+    /**
+     * Records that someone checked the gateway ledger for a failed job whose outcome was unknown, which lifts the
+     * re-run block for its break. {@code reference} is the gateway invocation id or a ticket id, never free text.
+     * The person who started the job cannot clear it.
+     */
+    public InvestigationJob reconcile(UUID jobId, String reference) {
+        CurrentUser user = tenantContext.currentUser();
+        if (reference == null || !RECONCILE_REF.matcher(reference).matches()) {
+            throw new InputRejectedException("reference must be 3 to 64 characters of letters, digits and . _ : -");
+        }
+        return tx.execute(status -> {
+            InvestigationJob job = jobs.findByIdAndTenantId(jobId, user.tenantId())
+                .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
+            if (user.subject().equals(job.getInitiatedBy())) {
+                throw new ConflictException("RECONCILER_MUST_DIFFER", "The person who started the job cannot reconcile it");
+            }
+            if (job.getStatus() != JobStatus.FAILED || !job.isOutcomeUnknown() || job.getReconciledAt() != null) {
+                throw new ConflictException("NOT_AWAITING_RECONCILIATION", "This job has no unreconciled gateway outcome");
+            }
+            job.reconcile(user.subject(), reference, java.time.Instant.now());
+            audit.record(new AuditEntry(user.tenantId(), "INVESTIGATION_OUTCOME_RECONCILED", "BREAK", job.getBreakItemId(),
+                user.subject(), Map.of("jobId", jobId.toString(), "reference", reference)));
+            return jobs.save(job);
+        });
     }
 
     /** The tool calls an AGENT or supervised job made, in order. Empty for single-call jobs. 404 for another tenant's job. */

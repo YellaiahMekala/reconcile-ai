@@ -70,6 +70,20 @@ public class InvestigationJob {
     @Column(name = "failure_reason", length = 256)
     private String failureReason;
 
+    /** The gateway call may have run (and been billed) before the job failed; see V12 and platform Q2.3. */
+    @Column(name = "outcome_unknown", nullable = false)
+    private boolean outcomeUnknown;
+
+    @Column(name = "reconciled_at")
+    private Instant reconciledAt;
+
+    @Column(name = "reconciled_by", length = 128)
+    private String reconciledBy;
+
+    /** Gateway invocation id or ticket id recorded by whoever checked the gateway ledger. */
+    @Column(name = "reconcile_ref", length = 64)
+    private String reconcileRef;
+
     @Column(name = "proposal_id", columnDefinition = "uuid")
     private UUID proposalId;
 
@@ -137,6 +151,24 @@ public class InvestigationJob {
         this.failureReason = reason == null ? "UNKNOWN" : reason.substring(0, Math.min(256, reason.length()));
         this.finishedAt = Instant.now();
     }
+
+    public void markOutcomeUnknown() {
+        this.outcomeUnknown = true;
+    }
+
+    /** Clears the unknown outcome after someone checked the gateway ledger. Only a failed, unreconciled job qualifies. */
+    public void reconcile(String by, String reference, Instant at) {
+        if (status != JobStatus.FAILED || !outcomeUnknown || reconciledAt != null) {
+            throw new IllegalStateException("JOB_NOT_AWAITING_RECONCILIATION");
+        }
+        this.reconciledBy = by;
+        this.reconcileRef = reference;
+        this.reconciledAt = at;
+    }
+
+    public boolean isOutcomeUnknown() { return outcomeUnknown; }
+
+    public Instant getReconciledAt() { return reconciledAt; }
 
     public boolean isTerminal() {
         return status == JobStatus.SUCCEEDED || status == JobStatus.FAILED;

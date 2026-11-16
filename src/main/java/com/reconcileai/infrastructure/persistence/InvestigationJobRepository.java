@@ -25,6 +25,9 @@ public interface InvestigationJobRepository extends Repository<InvestigationJob,
 
     Optional<InvestigationJob> findByIdAndTenantId(UUID id, String tenantId);
 
+    /** True while a failed job for this break has an unknown gateway outcome nobody has reconciled (platform Q2.3). */
+    boolean existsByTenantIdAndBreakItemIdAndOutcomeUnknownTrueAndReconciledAtIsNull(String tenantId, UUID breakItemId);
+
     boolean existsByTenantIdAndBreakItemIdAndStatusIn(String tenantId, UUID breakItemId, Collection<JobStatus> statuses);
 
     /**
