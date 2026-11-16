@@ -18,4 +18,12 @@ Remove-Item cp.txt -ErrorAction SilentlyContinue
 $sep = [System.IO.Path]::PathSeparator
 $fullCp = "target\test-classes$sep$deps"
 
-java -cp $fullCp com.reconcileai.support.JwtTestSupport $Subject $Tenant $Role
+# The classpath is longer than the Windows command-line limit (32 K), so it goes through a Java @argfile.
+# Inside an argfile backslashes must be doubled, and the value is quoted because paths can contain spaces.
+$argFile = Join-Path $env:TEMP "reconcile-jwt-cp.txt"
+Set-Content -Path $argFile -Value ('-cp "' + ($fullCp -replace '\\', '\\\\') + '"') -Encoding ASCII
+try {
+    java "@$argFile" com.reconcileai.support.JwtTestSupport $Subject $Tenant $Role
+} finally {
+    Remove-Item $argFile -ErrorAction SilentlyContinue
+}
