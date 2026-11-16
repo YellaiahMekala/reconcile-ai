@@ -42,6 +42,7 @@ public class HttpGatewayChatAdapter implements GatewayChatPort {
     static final Set<String> RETRYABLE = Set.of("NOT_SENT", "RETRYABLE_FAILURE", "OVERLOADED", "MODEL_UNAVAILABLE",
             "GOVERNANCE_UNAVAILABLE", "TENANT_CONCURRENCY_LIMIT", "PROVIDER_CONTRACT_FAILURE", "TRANSPORT_NOT_SENT");
     private static final long DEFAULT_RETRY_AFTER_SECONDS = 5;
+    static final String TOKEN_UNAVAILABLE = "TOKEN_UNAVAILABLE";
 
     /** Waits between attempts; replaced in tests. */
     public interface Sleeper {
@@ -112,6 +113,12 @@ public class HttpGatewayChatAdapter implements GatewayChatPort {
             callLog.record(new Attempt(request.tenantId(), request.jobId(), request.idempotencyKey(), attempt,
                     Outcome.NOT_SENT, 0, refusedBeforeSending.code(), null, null, 0, 0, millisSince(started)));
             throw refusedBeforeSending;
+        } catch (RuntimeException tokenEndpoint) {
+            // Token endpoint down or answering garbage: still nothing sent, and the job reason must say so.
+            GatewayCallException e = new GatewayCallException(0, TOKEN_UNAVAILABLE, null);
+            callLog.record(new Attempt(request.tenantId(), request.jobId(), request.idempotencyKey(), attempt,
+                    Outcome.NOT_SENT, 0, TOKEN_UNAVAILABLE, null, null, 0, 0, millisSince(started)));
+            throw e;
         }
         HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(properties.baseUrl() + "/api/v1/chat"))
                 .timeout(properties.requestTimeout())

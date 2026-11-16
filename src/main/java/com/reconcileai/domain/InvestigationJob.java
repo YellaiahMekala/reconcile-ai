@@ -136,6 +136,9 @@ public class InvestigationJob {
     }
 
     public void advance(JobStage next) {
+        if (isTerminal()) {
+            return; // a late stage update from a stalled node must not reopen a failed or finished job
+        }
         this.stage = next;
         this.heartbeatAt = Instant.now();
     }

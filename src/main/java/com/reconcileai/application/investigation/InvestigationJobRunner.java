@@ -284,6 +284,13 @@ public class InvestigationJobRunner {
 
         InvestigationJob done = tx.execute(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            if (j.getStatus() != com.reconcileai.domain.JobStatus.RUNNING || !node.id().equals(j.getOwnerNode())) {
+                // This node stalled past the lease and recovery already failed the job (possibly flagging an unknown
+                // gateway outcome). Writing a proposal now would undo that and could race a newer job on the break.
+                log.warn("Job {} is {} (owner {}); discarding the late result from {}", jobId, j.getStatus(),
+                    j.getOwnerNode(), node.id());
+                return j;
+            }
             BreakItem b = breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).orElseThrow();
             ResolutionProposal p = proposalService.persistProposal(j, b, draft, citations.valid(),
                 citations.invalidIds(), decision);

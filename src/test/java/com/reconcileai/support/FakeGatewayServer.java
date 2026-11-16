@@ -84,6 +84,7 @@ public final class FakeGatewayServer {
     private final Map<String, String> tokenTenants = new ConcurrentHashMap<>();
     private final List<String> ledgerReads = Collections.synchronizedList(new ArrayList<>());
     private volatile boolean ledgerDown;
+    private volatile java.util.concurrent.CountDownLatch[] hold;
 
     private FakeGatewayServer() {
         try {
@@ -127,6 +128,7 @@ public final class FakeGatewayServer {
         calls.clear();
         ledgerReads.clear();
         ledgerDown = false;
+        hold = null;
     }
 
     /** Tokens for {@code clientId} carry {@code tenant_id=tenantId}; ledger rows they create are visible only to it. */
@@ -222,8 +224,26 @@ public final class FakeGatewayServer {
         return tokenTenants.get(authorization.substring("Bearer ".length()));
     }
 
+    /**
+     * The next chat request counts down {@code entered} and then waits for {@code release} before answering, so a
+     * test can act while the caller is mid-call (a stalled node). Cleared by {@link #reset()}.
+     */
+    public void holdNextChat(java.util.concurrent.CountDownLatch entered, java.util.concurrent.CountDownLatch release) {
+        hold = new java.util.concurrent.CountDownLatch[] {entered, release};
+    }
+
     private void chat(HttpExchange ex) throws IOException {
         String body = read(ex);
+        java.util.concurrent.CountDownLatch[] h = hold;
+        hold = null;
+        if (h != null) {
+            h[0].countDown();
+            try {
+                h[1].await(30, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         String key = ex.getRequestHeaders().getFirst("Idempotency-Key");
         String auth = ex.getRequestHeaders().getFirst("Authorization");
         Scripted next = script.pollFirst();

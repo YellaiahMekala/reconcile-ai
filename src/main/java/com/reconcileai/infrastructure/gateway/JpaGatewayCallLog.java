@@ -37,7 +37,7 @@ public class JpaGatewayCallLog implements GatewayCallLog {
         try {
             tx.executeWithoutResult(s -> {
                 calls.save(new GatewayCallRecord(a.tenantId(), a.jobId(), a.idempotencyKey(), a.attempt(),
-                    a.outcome().name(), a.httpStatus(), a.code(), a.invocationId(), a.gatewayStatus(),
+                    a.outcome().name(), a.httpStatus(), safe(a.code(), 48), a.invocationId(), safe(a.gatewayStatus(), 32),
                     a.inputTokens(), a.outputTokens(), a.latencyMs()));
                 if (a.outcome() == Outcome.SUCCESS) {
                     llmCalls.save(new LlmCallRecord(a.tenantId(), a.jobId(), MODEL, a.inputTokens(), a.outputTokens(),
@@ -47,5 +47,16 @@ public class JpaGatewayCallLog implements GatewayCallLog {
         } catch (RuntimeException e) {
             log.warn("gateway call log not written for job {} attempt {}: {}", a.jobId(), a.attempt(), e.toString());
         }
+    }
+
+    /**
+     * Codes and statuses come from the gateway's response body. Anything that is not a plain upper-case code, or is
+     * too long for the column, is stored as UNMAPPED, so the row (and with it the invocation id) is never lost.
+     */
+    static String safe(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= max && value.matches("[A-Z0-9_]+") ? value : "UNMAPPED";
     }
 }

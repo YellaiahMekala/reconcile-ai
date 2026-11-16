@@ -81,6 +81,13 @@ public class InvestigationService {
     private final AgentToolCallStore toolCallStore;
     private GatewayLedgerPort ledger;
     private GatewayCallRepository gatewayCalls;
+    private com.reconcileai.application.gateway.GatewayChatPort gatewayChat;
+
+    /** Present only when the gateway route is on; then only governed (SINGLE_CALL) jobs may start. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setGatewayChat(com.reconcileai.application.gateway.GatewayChatPort gatewayChat) {
+        this.gatewayChat = gatewayChat;
+    }
 
     /** Present only when the gateway route is on (GatewayConfig). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -126,6 +133,12 @@ public class InvestigationService {
     public InvestigationJob start(UUID breakId, String analystNote, String modeName) {
         CurrentUser user = tenantContext.currentUser();
         InvestigationMode mode = parseMode(modeName);
+        if (mode != InvestigationMode.SINGLE_CALL && gatewayChat != null) {
+            // Agent and supervised modes call the model directly, not through ai-gateway. With the gateway route on,
+            // allowing them would skip its budget, risk checks and ledger, so they are refused until they are routed.
+            throw new ConflictException("MODE_NOT_GOVERNED",
+                "Only SINGLE_CALL runs through ai-gateway; " + mode.name() + " is disabled while the gateway route is on");
+        }
         if (mode == InvestigationMode.AGENT && !agent.available()) {
             throw new InputRejectedException("Agent mode is not enabled on this server");
         }

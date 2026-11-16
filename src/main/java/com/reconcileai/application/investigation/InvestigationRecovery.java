@@ -69,7 +69,10 @@ public class InvestigationRecovery {
             if (j.getStatus() == JobStatus.RUNNING) {
                 log.warn("Recovering orphaned RUNNING job {} (owner={}, heartbeat={})", j.getId(), j.getOwnerNode(), j.getHeartbeatAt());
                 // On the gateway route, a node that died during the model call may have sent it: outcome unknown.
-                boolean midCall = j.getStage() == com.reconcileai.domain.JobStage.CALLING_MODEL && gateway.getIfAvailable() != null;
+                // Only SINGLE_CALL jobs use the gateway; other modes never reach it (and are refused while it is on).
+                boolean midCall = j.getStage() == com.reconcileai.domain.JobStage.CALLING_MODEL
+                    && j.getMode() == com.reconcileai.domain.InvestigationMode.SINGLE_CALL
+                    && gateway.getIfAvailable() != null;
                 runner.failJob(j.getId(), j.getTenantId(), "INTERRUPTED", midCall, null);
             } else {
                 try {
