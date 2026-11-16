@@ -15,18 +15,21 @@ public interface GatewayChatPort {
     Reply chat(Request request);
 
     /**
+     * @param tenantId       the job's tenant; only used to label our side of the ledger, never sent to the gateway
+     *                       (the gateway takes the tenant from the service token, and rejects any override)
+     * @param jobId          the investigation job, for the ledger link {@code jobId -> idempotencyKey -> invocationId}
      * @param idempotencyKey from {@link IdempotencyKeys#forStep}; never generated per attempt
      * @param deadline       the caller's own deadline; a retry is attempted only if it can finish before it
      */
-    record Request(String idempotencyKey, String system, String user, int maxOutputTokens, double temperature,
-                   Instant deadline) {
+    record Request(String tenantId, UUID jobId, String idempotencyKey, String system, String user,
+                   int maxOutputTokens, double temperature, Instant deadline) {
         public Request {
             IdempotencyKeys.requireValid(idempotencyKey);
         }
 
         @Override
         public String toString() {
-            return "Request[idempotencyKey=" + idempotencyKey + ", text=<redacted>]";
+            return "Request[jobId=" + jobId + ", idempotencyKey=" + idempotencyKey + ", text=<redacted>]";
         }
     }
 

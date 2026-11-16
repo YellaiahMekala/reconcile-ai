@@ -1,0 +1,39 @@
+# One pod runs at most max-pool-size (4) investigations and queues the rest. Target 3 in flight per pod: scale out
+# before the queue builds, well before queue-capacity (50) turns new requests into 503s.
+# Same bounds and scale-down damping as the base HPA (2-6 replicas, slow scale-down so SSE clients are not churned).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: reconcile-ai
+spec:
+  scaleTargetRef:
+    name: reconcile-ai
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  pollingInterval: 15
+  cooldownPeriod: 300
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies: [{ type: Pods, value: 2, periodSeconds: 30 }]
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
+  triggers:
+    - type: prometheus
+      metricType: AverageValue
+      metadata:
+        # Change to your in-cluster Prometheus service.
+        serverAddress: http://prometheus-server.monitoring.svc:80
+        query: >-
+          sum(reconcile_investigations_executor_active{namespace="reconcile"})
+          + sum(reconcile_investigations_executor_queued{namespace="reconcile"})
+        threshold: "3"
+        # Prometheus down: hold the current replica count rather than scaling to the minimum mid-burst.
+        ignoreNullValues: "false"
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"

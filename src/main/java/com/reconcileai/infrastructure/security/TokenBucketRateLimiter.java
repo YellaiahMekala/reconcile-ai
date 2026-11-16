@@ -10,13 +10,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * burst briefly but cannot sustain more than the refill rate. A request that finds the bucket empty is told how many
  * seconds to wait.
  *
- * <p>Limit: state is per JVM. With N replicas a tenant can get up to N times the configured rate. A shared limiter
- * (Redis) is the upgrade if that ever matters; the call site would not change.
+ * <p>Limit: state is per JVM. With N replicas a tenant can get up to N times the configured rate. Set
+ * {@code reconcile.ratelimit.store=redis} for one bucket shared by all replicas ({@link RedisTokenBucketRateLimiter});
+ * this class is then only its fallback while Redis is unreachable.
  */
-public class TokenBucketRateLimiter {
-
-    /** Result of {@link #tryAcquire}: allowed, or how long the caller should wait. */
-    public record Decision(boolean allowed, long retryAfterSeconds) {}
+public class TokenBucketRateLimiter implements RateLimiter {
 
     private static final class Bucket {
         double tokens;
@@ -42,6 +40,7 @@ public class TokenBucketRateLimiter {
         this.clock = clock;
     }
 
+    @Override
     public Decision tryAcquire(String key) {
         long now = nowNanos();
         Bucket b = buckets.computeIfAbsent(key, k -> new Bucket(capacity, now));

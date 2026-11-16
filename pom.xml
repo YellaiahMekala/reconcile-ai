@@ -34,7 +34,7 @@
         <java.version>21</java.version>
         <!-- Spring AI BOM manages every spring-ai-* artifact version below. -->
         <spring-ai.version>1.1.8</spring-ai.version>
-        <failsafe.excludedGroups>openai,ollama,bedrock</failsafe.excludedGroups>
+        <failsafe.excludedGroups>openai,ollama,bedrock,gateway,gateway-live</failsafe.excludedGroups>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!-- Core libraries only (no Spring Boot starter): beans are built by hand in AgentConfig. -->
         <langchain4j.version>1.18.1</langchain4j.version>
@@ -288,7 +288,10 @@
                     <!-- Tests tagged "openai" call the real OpenAI API (costs money, needs a key); "ollama" needs a local Ollama.
                          Run the Ollama smoke test with: mvn verify -Dfailsafe.excludedGroups=openai -Dit.test=OllamaSmokeIT
                          Run the OpenAI chat smoke test (needs OPENAI_API_KEY): mvn verify -Dfailsafe.excludedGroups=ollama -Dit.test=OpenAiChatSmokeIT
-                         Excluded by default; run with: mvn verify -Dfailsafe.excludedGroups= -Dit.test=EmbeddingSpikeOpenAiIT -->
+                         Excluded by default; run with: mvn verify -Dfailsafe.excludedGroups= -Dit.test=EmbeddingSpikeOpenAiIT
+                         "gateway" needs the platform spike stack (Keycloak 8190 + ai-gateway 8280, stub provider, no cost):
+                           mvn verify "-Dfailsafe.excludedGroups=openai,ollama,bedrock,gateway-live" -Dit.test=RealGatewayIT
+                         "gateway-live" is the one PAID run (platform Q2.7); see docs/proof/q2-7-gateway-live-runbook.md -->
                     <excludedGroups>${failsafe.excludedGroups}</excludedGroups>
                 </configuration>
                 <executions>

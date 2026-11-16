@@ -17,6 +17,12 @@ public final class GatewayFailure {
     /** Codes after which the call may have executed: never retry, reconcile via the gateway ledger first. */
     private static final Set<String> OUTCOME_UNKNOWN = Set.of(
         "UNKNOWN_OUTCOME", "IDEMPOTENCY_UNKNOWN_OUTCOME", "TRANSPORT_UNKNOWN_OUTCOME", "IDEMPOTENCY_IN_PROGRESS");
+    /**
+     * Codes where the gateway's policy refused the content or its data level (platform Q2.5). The call did not run,
+     * but the refusal is a business fact about this break, so it goes to a person (manual review), not to the retry
+     * sweeper: re-running the same input would be refused again.
+     */
+    private static final Set<String> POLICY_BLOCKED = Set.of("RISK_BLOCKED", "SENSITIVITY_BLOCKED");
     private static final Pattern SAFE_CODE = Pattern.compile("[A-Z_]{3,48}");
     static final String UNMAPPED = "GATEWAY_ERROR";
 
@@ -30,5 +36,10 @@ public final class GatewayFailure {
 
     public static boolean outcomeUnknown(GatewayCallException e) {
         return e.code() != null && OUTCOME_UNKNOWN.contains(e.code());
+    }
+
+    /** True for a content or data-level refusal: the break goes to manual review instead of FAILED_RETRYABLE. */
+    public static boolean policyBlocked(GatewayCallException e) {
+        return e.code() != null && POLICY_BLOCKED.contains(e.code());
     }
 }

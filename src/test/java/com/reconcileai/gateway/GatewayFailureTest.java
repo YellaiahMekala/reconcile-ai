@@ -9,7 +9,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Every code in ai-gateway CONSUMER_CONTRACT.md section 3 maps to a short reason; unknown outcomes are distinct. */
+/**
+ * Every code in ai-gateway CONSUMER_CONTRACT.md section 3 maps to a short reason; unknown outcomes and policy
+ * blocks are distinct, and the two sets never overlap.
+ */
 class GatewayFailureTest {
 
     private static final List<String> CONTRACT_CODES = List.of(
@@ -41,9 +44,23 @@ class GatewayFailureTest {
     }
 
     @Test
+    void onlyContentAndDataLevelRefusalsArePolicyBlocked() {
+        List<String> blocked = CONTRACT_CODES.stream().filter(c -> GatewayFailure.policyBlocked(failure(c))).toList();
+        assertThat(blocked).containsExactlyInAnyOrder("RISK_BLOCKED", "SENSITIVITY_BLOCKED");
+        // A policy block is a certain refusal: it can never also be an unknown outcome.
+        for (String code : blocked) {
+            assertThat(GatewayFailure.outcomeUnknown(failure(code))).as(code).isFalse();
+        }
+        // Budget and other technical refusals stay retryable, not manual review.
+        assertThat(GatewayFailure.policyBlocked(failure("BUDGET_BLOCKED"))).isFalse();
+        assertThat(GatewayFailure.policyBlocked(failure("RATE_LIMITED"))).isFalse();
+    }
+
+    @Test
     void anUnexpectedCodeNeverLeaksIntoTheJobRow() {
         assertThat(GatewayFailure.reason(failure("some free text, with detail 123"))).isEqualTo("GATEWAY_ERROR");
         assertThat(GatewayFailure.reason(failure(null))).isEqualTo("GATEWAY_ERROR");
         assertThat(GatewayFailure.outcomeUnknown(failure(null))).isFalse();
+        assertThat(GatewayFailure.policyBlocked(failure(null))).isFalse();
     }
 }

@@ -180,6 +180,17 @@ public class BreakItem {
         };
     }
 
+    /**
+     * The governance gateway refused the content or its data level (platform Q2.5). Not a technical failure: the
+     * same input would be refused again, so the break waits for a person instead of the retry sweeper. No proposal
+     * exists; the reason is on the job row and in the audit entry.
+     */
+    public void markPolicyBlocked() {
+        if (status == BreakStatus.INVESTIGATING) {
+            this.status = BreakStatus.MANUAL_REVIEW_REQUIRED;
+        }
+    }
+
     /** Technical failure (model down, parse error, restart): retryable, never silently resolved. */
     public void markInvestigationFailed() {
         if (status == BreakStatus.INVESTIGATING) {

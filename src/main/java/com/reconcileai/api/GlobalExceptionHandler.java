@@ -85,6 +85,13 @@ public class GlobalExceptionHandler {
             .body(ApiError.of("CAPACITY_EXCEEDED", e.getMessage()));
     }
 
+    /** A reconcile named a gateway invocation id and the gateway ledger could not be read: nothing was recorded. */
+    @ExceptionHandler(com.reconcileai.application.gateway.GatewayLedgerUnavailableException.class)
+    public ResponseEntity<ApiError> ledgerUnavailable(com.reconcileai.application.gateway.GatewayLedgerUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "30")
+            .body(ApiError.of("GATEWAY_LEDGER_UNAVAILABLE", e.getMessage()));
+    }
+
     /** Per-tenant throttle on model-triggering requests. */
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiError> rateLimited(RateLimitExceededException e) {

@@ -26,6 +26,8 @@ import java.util.UUID;
  * Investigation and proposal endpoints.
  * <pre>
  *  POST /api/v1/breaks/{breakId}/investigations   RECON_ANALYST   202 | 400 | 404 | 409 | 503
+ *  POST /api/v1/investigations/{jobId}/reconcile  APPROVER_L2, SRE_ADMIN  200 | 400 | 404 | 409 | 503
+ *  GET  /api/v1/investigations/{jobId}/gateway-calls APPROVER_L2, SRE_ADMIN 200 | 404
  *  GET  /api/v1/investigations/{jobId}            any app role    200 | 404
  *  GET  /api/v1/investigations/{jobId}/events     any app role    text/event-stream | 404 | 503
  *  GET  /api/v1/investigations/{jobId}/tool-calls any app role    200 | 404
@@ -72,6 +74,13 @@ public class InvestigationController {
     public InvestigationJobResponse reconcile(@PathVariable UUID jobId,
                                               @RequestBody @jakarta.validation.Valid ReconcileRequest body) {
         return InvestigationJobResponse.from(service.reconcile(jobId, body.reference()));
+    }
+
+    /** This job's gateway calls with the gateway ledger's view of each invocation: what a reconciler checks first. */
+    @GetMapping("/api/v1/investigations/{jobId}/gateway-calls")
+    @PreAuthorize("hasAnyRole('APPROVER_L2','SRE_ADMIN')")
+    public List<com.reconcileai.api.dto.GatewayCallResponse> gatewayCalls(@PathVariable UUID jobId) {
+        return service.gatewayCalls(jobId).stream().map(com.reconcileai.api.dto.GatewayCallResponse::from).toList();
     }
 
     @GetMapping("/api/v1/investigations/{jobId}")

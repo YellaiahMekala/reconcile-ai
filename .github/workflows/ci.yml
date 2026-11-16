@@ -103,8 +103,11 @@ jobs:
       - name: Render (kustomize) and validate (kubeconform, strict)
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
-          for overlay in k8s/base k8s/overlays/kind; do
-            kubectl kustomize "$overlay" | ./kubeconform -strict -summary -kubernetes-version 1.31.0 -
+          # The CRD catalog supplies the KEDA ScaledObject schema; built-in kinds still use the default schemas.
+          for overlay in k8s/base k8s/overlays/kind k8s/overlays/keda; do
+            kubectl kustomize "$overlay" | ./kubeconform -strict -summary -kubernetes-version 1.31.0 \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -
           done
 
       - name: Build container image

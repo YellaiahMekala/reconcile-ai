@@ -11,12 +11,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Supplier;
 
 /**
  * A service token for ai-gateway from the realm's client credentials grant, cached until 30 s before it expires.
- * The secret and the token are never logged.
+ * One instance per OAuth client. The secret and the token are never logged.
  */
 public class ClientCredentialsTokenSource implements Supplier<String> {
 
@@ -24,15 +25,36 @@ public class ClientCredentialsTokenSource implements Supplier<String> {
 
     private final HttpClient http;
     private final ObjectMapper json;
-    private final GatewayProperties properties;
+    private final String tokenUri;
+    private final String clientId;
+    private final Supplier<String> clientSecret;
+    private final String tokenScope;
+    private final Duration timeout;
     private final Clock clock;
     private String token;
     private Instant refreshAt = Instant.MIN;
 
+    /** The single shared client from {@code reconcile.gateway.client-id} / {@code client-secret}. */
     public ClientCredentialsTokenSource(HttpClient http, ObjectMapper json, GatewayProperties properties, Clock clock) {
+        this(http, json, properties.tokenUri(), properties.clientId(), properties::clientSecret,
+                properties.tokenScope(), properties.requestTimeout(), clock);
+    }
+
+    /**
+     * @param clientSecret read on each grant, so a rotated secret (environment or secret store) is picked up at the
+     *                     next refresh without a restart of this object
+     */
+    @SuppressWarnings("java:S107")
+    public ClientCredentialsTokenSource(HttpClient http, ObjectMapper json, String tokenUri, String clientId,
+                                        Supplier<String> clientSecret, String tokenScope, Duration timeout,
+                                        Clock clock) {
         this.http = http;
         this.json = json;
-        this.properties = properties;
+        this.tokenUri = tokenUri;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+        this.tokenScope = tokenScope;
+        this.timeout = timeout;
         this.clock = clock;
     }
 
@@ -41,10 +63,14 @@ public class ClientCredentialsTokenSource implements Supplier<String> {
         if (token != null && clock.instant().isBefore(refreshAt)) {
             return token;
         }
-        String form = "grant_type=client_credentials&client_id=" + encode(properties.clientId())
-                + "&client_secret=" + encode(properties.clientSecret());
-        HttpRequest request = HttpRequest.newBuilder(URI.create(properties.tokenUri()))
-                .timeout(properties.requestTimeout())
+        String form = "grant_type=client_credentials&client_id=" + encode(clientId)
+                + "&client_secret=" + encode(clientSecret.get());
+        if (tokenScope != null && !tokenScope.isBlank()) {
+            // The platform realm adds the gateway audience only for this scope (spike S-3); without it the gateway says 401.
+            form += "&scope=" + encode(tokenScope.strip());
+        }
+        HttpRequest request = HttpRequest.newBuilder(URI.create(tokenUri))
+                .timeout(timeout)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form))
                 .build();

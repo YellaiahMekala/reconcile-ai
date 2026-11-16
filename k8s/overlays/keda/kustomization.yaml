@@ -1,0 +1,24 @@
+# Scale on investigation back-log instead of CPU. Investigations are I/O-bound model calls: CPU stays low while the
+# queue fills, so the base CPU HPA reacts late or not at all. KEDA reads the per-pod back-log gauges
+# (reconcile.investigations.executor.active + .queued) from Prometheus and keeps CPU as a second trigger.
+# Needs KEDA (keda.sh/v1alpha1) and a Prometheus that scrapes the pods (the base deployment's prometheus.io/*
+# annotations). KEDA creates and owns its own HPA, so the base HPA is removed here.
+# Several replicas share one rate-limit bucket per tenant (RATE_LIMIT_STORE=redis).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - scaledobject.yaml
+patches:
+  - target: { kind: HorizontalPodAutoscaler, name: reconcile-ai }
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: reconcile-ai
+  - target: { kind: ConfigMap, name: reconcile-ai-config }
+    patch: |-
+      - op: add
+        path: /data/RATE_LIMIT_STORE
+        value: "redis"

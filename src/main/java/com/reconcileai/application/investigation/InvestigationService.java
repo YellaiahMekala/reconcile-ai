@@ -6,11 +6,15 @@ import com.reconcileai.application.ConflictException;
 import com.reconcileai.application.InputRejectedException;
 import com.reconcileai.application.RateLimitExceededException;
 import com.reconcileai.infrastructure.security.RateLimitProperties;
-import com.reconcileai.infrastructure.security.TokenBucketRateLimiter;
+import com.reconcileai.infrastructure.security.RateLimiter;
 import com.reconcileai.application.NotFoundException;
 import com.reconcileai.application.audit.AuditRecorder;
 import com.reconcileai.application.audit.AuditRecorder.AuditEntry;
+import com.reconcileai.application.gateway.GatewayLedgerPort;
+import com.reconcileai.application.gateway.GatewayLedgerUnavailableException;
 import com.reconcileai.domain.BreakItem;
+import com.reconcileai.domain.GatewayCallRecord;
+import com.reconcileai.infrastructure.persistence.GatewayCallRepository;
 import com.reconcileai.domain.EvidenceStatus;
 import com.reconcileai.domain.InvestigationJob;
 import com.reconcileai.domain.InvestigationMode;
@@ -65,7 +69,7 @@ public class InvestigationService {
     private final AuditRecorder audit;
     private final InvestigationProperties props;
     private final TransactionTemplate tx;
-    private final TokenBucketRateLimiter rateLimiter;
+    private final RateLimiter rateLimiter;
     private final RateLimitProperties rateLimit;
     private final InvestigationAgent agent;
     private SupervisedInvestigation supervised;
@@ -75,12 +79,25 @@ public class InvestigationService {
         this.supervised = supervised;
     }
     private final AgentToolCallStore toolCallStore;
+    private GatewayLedgerPort ledger;
+    private GatewayCallRepository gatewayCalls;
+
+    /** Present only when the gateway route is on (GatewayConfig). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setGatewayLedger(GatewayLedgerPort ledger) {
+        this.ledger = ledger;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setGatewayCallRepository(GatewayCallRepository gatewayCalls) {
+        this.gatewayCalls = gatewayCalls;
+    }
 
     public InvestigationService(TenantContext tenantContext, BreakItemRepository breaks, EvidenceRepository evidence,
                                 InvestigationJobRepository jobs, ResolutionProposalRepository proposals,
                                 InvestigationJobRunner runner, InjectionScanner scanner, AuditRecorder audit,
                                 InvestigationProperties props, TransactionTemplate tx,
-                                TokenBucketRateLimiter rateLimiter, RateLimitProperties rateLimit,
+                                RateLimiter rateLimiter, RateLimitProperties rateLimit,
                                 InvestigationAgent agent, AgentToolCallStore toolCallStore) {
         this.agent = agent;
         this.toolCallStore = toolCallStore;
@@ -117,7 +134,7 @@ public class InvestigationService {
         }
         if (rateLimit.enabled()) {
             // Before any DB or model work: a throttled request costs nothing.
-            TokenBucketRateLimiter.Decision d = rateLimiter.tryAcquire(user.tenantId());
+            RateLimiter.Decision d = rateLimiter.tryAcquire(user.tenantId());
             if (!d.allowed()) {
                 throw new RateLimitExceededException(d.retryAfterSeconds());
             }
@@ -178,27 +195,124 @@ public class InvestigationService {
      * Records that someone checked the gateway ledger for a failed job whose outcome was unknown, which lifts the
      * re-run block for its break. {@code reference} is the gateway invocation id or a ticket id, never free text.
      * The person who started the job cannot clear it.
+     * <p>
+     * When the reference is an invocation id and the gateway route is on, reconcile-ai reads the gateway ledger
+     * itself before recording anything: the id must be one this job's own calls received ({@code gateway_call}),
+     * the ledger must know it, and its {@code executionCertainty} and {@code status} are stored on the job and in
+     * the audit entry. The decision stays with the person: an EXECUTED call can still be reconciled (the re-run will
+     * bill again, knowingly). A ticket reference skips the read, as before.
      */
     public InvestigationJob reconcile(UUID jobId, String reference) {
         CurrentUser user = tenantContext.currentUser();
         if (reference == null || !RECONCILE_REF.matcher(reference).matches()) {
             throw new InputRejectedException("reference must be 3 to 64 characters of letters, digits and . _ : -");
         }
+        GatewayLedgerPort.Entry ledgerEntry = readLedger(user, jobId, reference);
         return tx.execute(status -> {
             InvestigationJob job = jobs.findByIdAndTenantId(jobId, user.tenantId())
                 .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
-            if (user.subject().equals(job.getInitiatedBy())) {
-                throw new ConflictException("RECONCILER_MUST_DIFFER", "The person who started the job cannot reconcile it");
+            requireReconcilable(job, user);
+            String certainty = ledgerEntry == null ? null : ledgerEntry.executionCertainty();
+            String ledgerStatus = ledgerEntry == null ? null : ledgerEntry.status();
+            job.reconcile(user.subject(), reference, java.time.Instant.now(), certainty, ledgerStatus);
+            Map<String, Object> details = new java.util.LinkedHashMap<>();
+            details.put("jobId", jobId.toString());
+            details.put("reference", reference);
+            details.put("ledgerChecked", ledgerEntry != null);
+            if (ledgerEntry != null) {
+                details.put("ledgerExecutionCertainty", String.valueOf(certainty));
+                details.put("ledgerStatus", String.valueOf(ledgerStatus));
+                details.put("ledgerInputTokens", ledgerEntry.inputTokens());
+                details.put("ledgerOutputTokens", ledgerEntry.outputTokens());
+                if (ledgerEntry.actualCostUsd() != null) {
+                    details.put("ledgerCostUsd", ledgerEntry.actualCostUsd().toPlainString());
+                }
             }
-            if (job.getStatus() != JobStatus.FAILED || !job.isOutcomeUnknown() || job.getReconciledAt() != null) {
-                throw new ConflictException("NOT_AWAITING_RECONCILIATION", "This job has no unreconciled gateway outcome");
-            }
-            job.reconcile(user.subject(), reference, java.time.Instant.now());
             audit.record(new AuditEntry(user.tenantId(), "INVESTIGATION_OUTCOME_RECONCILED", "BREAK", job.getBreakItemId(),
-                user.subject(), Map.of("jobId", jobId.toString(), "reference", reference)));
+                user.subject(), details));
             return jobs.save(job);
         });
     }
+
+    private static void requireReconcilable(InvestigationJob job, CurrentUser user) {
+        if (user.subject().equals(job.getInitiatedBy())) {
+            throw new ConflictException("RECONCILER_MUST_DIFFER", "The person who started the job cannot reconcile it");
+        }
+        if (job.getStatus() != JobStatus.FAILED || !job.isOutcomeUnknown() || job.getReconciledAt() != null) {
+            throw new ConflictException("NOT_AWAITING_RECONCILIATION", "This job has no unreconciled gateway outcome");
+        }
+    }
+
+    /**
+     * The gateway ledger row behind an invocation-id reference, or null when no read applies (a ticket reference, or
+     * the gateway route is off). The checks run before the HTTP call, outside the write transaction, which repeats
+     * them.
+     */
+    private GatewayLedgerPort.Entry readLedger(CurrentUser user, UUID jobId, String reference) {
+        UUID invocationId = parseUuid(reference);
+        if (invocationId == null || ledger == null) {
+            return null;
+        }
+        List<UUID> ours = tx.execute(status -> {
+            InvestigationJob job = jobs.findByIdAndTenantId(jobId, user.tenantId())
+                .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
+            requireReconcilable(job, user);
+            return gatewayCalls.findByTenantIdAndJobIdOrderByAttempt(user.tenantId(), jobId).stream()
+                .map(GatewayCallRecord::getInvocationId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        });
+        if (ours == null || !ours.contains(invocationId)) {
+            throw new ConflictException("INVOCATION_NOT_FOR_JOB",
+                "That invocation id was not returned to any gateway call of this job");
+        }
+        GatewayLedgerPort.Lookup lookup = ledger.lookup(user.tenantId(), invocationId);
+        return switch (lookup.result()) {
+            case FOUND -> lookup.entry();
+            case NOT_FOUND -> throw new ConflictException("LEDGER_ENTRY_NOT_FOUND",
+                "The gateway ledger has no entry for that invocation id");
+            case UNAVAILABLE -> throw new GatewayLedgerUnavailableException(
+                "The gateway ledger could not be read; retry later or reconcile with a ticket reference");
+        };
+    }
+
+    private static UUID parseUuid(String reference) {
+        try {
+            UUID id = UUID.fromString(reference);
+            // UUID.fromString accepts short forms such as "1-2-3-4-5"; only the canonical 36-character form counts.
+            return id.toString().equalsIgnoreCase(reference) ? id : null;
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
+        }
+    }
+
+    /**
+     * This job's gateway calls (our {@code gateway_call} rows), each with the gateway ledger's view of its
+     * invocation when the route is on. What an approver looks at before reconciling. Read-only; 404 for another
+     * tenant's job. The rows are read in a short transaction; the ledger HTTP reads happen after it, so no database
+     * connection is held across a network call.
+     */
+    public List<GatewayCallView> gatewayCalls(UUID jobId) {
+        CurrentUser user = tenantContext.currentUser();
+        List<GatewayCallRecord> rows = tx.execute(status -> {
+            jobs.findByIdAndTenantId(jobId, user.tenantId())
+                .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
+            return gatewayCalls.findByTenantIdAndJobIdOrderByAttempt(user.tenantId(), jobId);
+        });
+        return (rows == null ? List.<GatewayCallRecord>of() : rows).stream()
+            .map(c -> new GatewayCallView(c, ledgerFor(user.tenantId(), c.getInvocationId())))
+            .toList();
+    }
+
+    private GatewayLedgerPort.Lookup ledgerFor(String tenantId, UUID invocationId) {
+        if (invocationId == null || ledger == null) {
+            return null;
+        }
+        return ledger.lookup(tenantId, invocationId);
+    }
+
+    /** One {@code gateway_call} row plus the ledger lookup; {@code ledger} is null when there was nothing to look up. */
+    public record GatewayCallView(GatewayCallRecord call, GatewayLedgerPort.Lookup ledger) { }
 
     /** The tool calls an AGENT or supervised job made, in order. Empty for single-call jobs. 404 for another tenant's job. */
     @Transactional(readOnly = true)
