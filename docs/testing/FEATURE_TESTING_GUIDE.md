@@ -34,6 +34,9 @@ Secrets are always environment variables, listed here by name only.
 | [F15](#f15-real-gateway-and-per-tenant-realm-clients-pq111-pq112) | Real gateway and per-tenant realm clients (PQ1.1.1, PQ1.1.2) | E-20, E-34 | opt-in, free |
 | [F16](#f16-golden-path-and-eka-down-in-ci-pq116) | Golden path and EKA-down in CI (PQ1.1.6) | E-35 | default build |
 | [F17](#f17-relevance-filter-re-measure-pq124) | Relevance filter re-measure (PQ1.2.4) | E-36 | opt-in, paid, approved |
+| [F18](#f18-l1-cache-in-front-of-redis-d121) | L1 cache in front of Redis (D1.2.1) | none yet | default build |
+| [F19](#f19-read-only-mcp-server-d122) | Read-only MCP server (D1.2.2) | none yet | default build |
+| [F20](#f20-break-specific-knowledge-query-d1212) | Break-specific knowledge query (D1.2.12) | none yet | default build; paid re-measure approved and run |
 
 ## F1 Knowledge pre-step, Q1.1 to Q1.5
 
@@ -451,3 +454,73 @@ finds no category when the evidence uses other words. Per-case filter counts wer
 
 **Interview question.** *Did the fix work?* Partly: it recovered 2 of 5 cases and is not significant at n = 28. I report
 that, and name the next step (wider category detection, non-fee procedures in the corpus) rather than claim a fix.
+
+## F18 L1 cache in front of Redis, D1.2.1
+
+**What and why.** Repeated investigations hit the Redis cache; each hit costs three Redis round trips. A small
+Caffeine tier in the JVM answers repeats without Redis. Off by default (`CACHE_L1_ENABLED`, needs `CACHE_ENABLED`).
+
+**Tests.** `TieredSemanticCacheIT` (real Redis 7 in Testcontainers): the app bean is tiered when on; an L1 hit after
+`FLUSHALL` (so Redis cannot have served it, and the L2 miss counter does not move); other tenant, other evidence
+snapshot and a suspect note all miss; an L2 hit is copied into L1; TTL with a fake ticker, capped at the L2 TTL; size
+bound; a namespace bump misses. Plus a latency sample.
+
+**Result (2026-11-18).** 8/8. L1 p50 159.5 us, p95 323.9 us; Redis exact hit p50 6185.8 us, p95 17497.3 us (500
+lookups, one laptop). `docs/proof/d1-2-1-l1-cache-latency-2026-11-18.md`.
+
+**Honest limits.** Redis runs in the Docker Desktop VM, which inflates L2 times; the ratio is the claim. L1 is per
+replica: after a Redis flush a replica may serve an entry for up to the L1 TTL (5 minutes). It saves Redis calls, not
+model calls.
+
+**Interview question.** *How do you keep two cache tiers consistent?* Entries are immutable (exact prompt plus evidence
+set), L2 has no delete path, and L1 follows the same end-of-life rules: namespace in the key, TTL never longer than L2.
+
+## F19 Read-only MCP server, D1.2.2
+
+**What and why.** MCP clients can read breaks, evidence lists and similar resolved cases with the same tenant and role
+rules as the REST API. Off by default (`MCP_SERVER_ENABLED`). Design first: `docs/adr/ADR-mcp-read-only-server.md`.
+
+**Tests.** `McpReadOnlyServerIT` (real app, real Postgres, real JWT validation, Spring AI MCP server, WebMVC,
+stateless): no token 401; `SRE_ADMIN` 403; `Origin: http://evil.example` 403; `tools/list` is exactly the four read
+tools; tenant A asking for tenant B's break id gets `NOT_FOUND` and B's break is not in A's list; each call adds one
+`MCP_TOOL_CALLED` audit row for the caller's tenant, actor = JWT subject, with no break id or result text in the
+details; the per-tenant rate limit refuses with a tool error and audits `RATE_LIMITED`, and another tenant is not
+affected. `McpDisabledByDefaultIT`: no server or tool bean, `/mcp` is 404.
+
+**Result (2026-11-18).** 6/6 and 1/1.
+
+**Honest limits.** CVE-2026-35568 (mcp-core 0.18.3) is live when the server is on; it is mitigated, not fixed (ADR
+section 3). The rate limit is per JVM. Results are plain text. Tested with raw JSON-RPC, not with a third-party MCP
+client.
+
+**Interview question.** *How does an MCP tool know the tenant?* From the JWT of the HTTP request that carries the call.
+The stateless protocol runs the tool on that request thread; the session modes are refused at startup for that reason.
+
+## F20 Break-specific knowledge query, D1.2.12
+
+**What and why.** F17 showed the score floor cannot separate breaks because every break sent the same EKA query. The
+query is now built from the break: category hints (from note and evidence), variance band and direction, intake source,
+up to three evidence file names, the note. PII-masked, at most 400 characters, no amount or break reference. Default on
+(`KNOWLEDGE_BREAK_SPECIFIC_QUERY=true`) because every existing test and the golden path stayed green; `false` restores
+the generic query. The audit row records `queryKind`.
+
+**Tests.** `BreakKnowledgeQueryTest` (fields, masking, cap, file limit, different breaks give different queries);
+`BreakSpecificKnowledgeQueryIT` (the fake EKA receives the break-specific query; audit says `BREAK_SPECIFIC`);
+`GenericKnowledgeQuerySwitchIT` (switch off sends the old query; audit says `GENERIC`).
+
+**Result (2026-11-18).** 6/6 unit, 1/1 and 1/1 IT; the earlier knowledge ITs and the golden path stay green.
+
+**Paid re-measure (2026-11-18, approved, cap 0.02 USD).** `IntegratedPlatformEvalIT`, two runs, same corpus and harness
+as F17. `min-score` was re-probed free before any paid call: highest unrelated-query cosine 0.569, lowest per-break
+cosine 0.657, midpoint rule gives 0.61. Route 23/28 (82.1%) and 22/28 (78.6%) against 21/28 (PQ1.2.4), 24/28 baseline,
+19/28 unfiltered; Wilson 95% 64.4% to 92.1% and 60.5% to 89.8%. TIM-004 recovered in both runs and TIM-002 in one; MIS-001
+to MIS-003 still lost. Per-case kept/dropped: 42 kept and 33 dropped per run, all drops from the category match. Ledger
+spend 0.00943470 USD for 49 calls. `docs/proof/d1-2-12-break-query-remeasure-2026-11-18.md`.
+
+**Honest limits.** No gain the sample can show (intervals contain the baseline; the run-to-run gap equals the gain). The
+score floor dropped nothing because every per-break score is above 0.61. MIS cases give no category word, so the query
+falls back to generic words and the fee procedures are kept. One run-1 job was refused by the gateway (`422
+SENSITIVITY_BLOCKED`), not investigated.
+
+**Interview question.** *Why not send the amount?* EKA holds procedures, not breaks. The size band and direction carry
+the useful signal; the figure would only leak data to another service.

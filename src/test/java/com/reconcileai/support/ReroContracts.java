@@ -2,11 +2,11 @@ package com.reconcileai.support;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SchemaValidatorsConfig;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SchemaRegistryConfig;
+import com.networknt.schema.SpecificationVersion;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,16 +22,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ReroContracts {
 
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final Map<String, JsonSchema> SCHEMAS = new ConcurrentHashMap<>();
+    private static final Map<String, Schema> SCHEMAS = new ConcurrentHashMap<>();
 
     private ReroContracts() {}
 
     /** @param name schema file without extension, e.g. {@code run.v1} */
-    public static Set<ValidationMessage> validate(String name, JsonNode body) {
+    public static java.util.List<Error> validate(String name, JsonNode body) {
         return SCHEMAS.computeIfAbsent(name, ReroContracts::load).validate(body);
     }
 
-    public static Set<ValidationMessage> validate(String name, String body) {
+    public static java.util.List<Error> validate(String name, String body) {
         try {
             return validate(name, JSON.readTree(body));
         } catch (IOException e) {
@@ -50,11 +50,12 @@ public final class ReroContracts {
         }
     }
 
-    private static JsonSchema load(String name) {
+    private static Schema load(String name) {
         try {
-            SchemaValidatorsConfig config = SchemaValidatorsConfig.builder().formatAssertionsEnabled(true).build();
-            return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
-                .getSchema(JSON.readTree(resource(name + ".json")), config);
+            SchemaRegistryConfig config = SchemaRegistryConfig.builder().formatAssertionsEnabled(true).build();
+            return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12,
+                    b -> b.schemaRegistryConfig(config))
+                .getSchema(JSON.readTree(resource(name + ".json")));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

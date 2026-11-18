@@ -29,13 +29,16 @@ import java.util.Map;
  *                       negative or missing scores: cosine scale depends on EKA's embedding model, tune per corpus)
  * @param categoryMatch  keep a hit only if it mentions a category term found in the break's note or evidence;
  *                       default true. No category signal in the break means the hit is kept
+ * @param breakSpecificQuery D1.2.12: build the EKA query from the break's own fields (category hints, variance band,
+ *                       sources, masked note; capped) instead of one generic query; default true, false = old query
  */
 @ConfigurationProperties("reconcile.knowledge")
 public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenUri, String tokenScope,
                                   Duration connectTimeout, Duration requestTimeout, int topK, int maxSnippetChars,
                                   int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
                                   Duration breakerOpenFor, Map<String, TenantClient> tenants,
-                                  Boolean relevanceFilterEnabled, Double minScore, Boolean categoryMatch) {
+                                  Boolean relevanceFilterEnabled, Double minScore, Boolean categoryMatch,
+                                  Boolean breakSpecificQuery) {
 
     /** {@code clientSecretEnv} names the variable that holds the secret; the secret never sits in configuration. */
     public record TenantClient(String clientId, String clientSecretEnv) { }
@@ -54,6 +57,7 @@ public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenU
         relevanceFilterEnabled = relevanceFilterEnabled == null ? Boolean.TRUE : relevanceFilterEnabled;
         minScore = minScore == null ? 0.0 : minScore;
         categoryMatch = categoryMatch == null ? Boolean.TRUE : categoryMatch;
+        breakSpecificQuery = breakSpecificQuery == null ? Boolean.TRUE : breakSpecificQuery;
     }
 
     /** Constructor without the D1.1.1 relevance settings: the safe defaults apply. */
@@ -62,6 +66,6 @@ public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenU
                                int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
                                Duration breakerOpenFor, Map<String, TenantClient> tenants) {
         this(enabled, baseUrl, tokenUri, tokenScope, connectTimeout, requestTimeout, topK, maxSnippetChars,
-                maxTotalChars, failClosed, breakerFailureRate, breakerWindow, breakerOpenFor, tenants, null, null, null);
+                maxTotalChars, failClosed, breakerFailureRate, breakerWindow, breakerOpenFor, tenants, null, null, null, null);
     }
 }

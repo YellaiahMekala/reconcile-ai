@@ -51,6 +51,11 @@ deployment runs 2 to 6 replicas. Redis is already present for SSE fan-out. Seman
 (newest N, default bounded by `max-entries-per-tenant`) rather than RediSearch: no Redis Stack module to operate,
 and N × 1536 floats is sub-millisecond arithmetic at this scale. A RediSearch KNN index is the upgrade path.
 
+Update (D1.2.1, 2026-11-18): Caffeine is now added as an optional L1 **in front of** Redis, not instead of it
+(`TieredSemanticCache`, `CACHE_L1_ENABLED`, off by default). Redis stays the shared tier; L1 keys carry tenant,
+namespace and evidence snapshot, and the L1 TTL never exceeds the Redis TTL. Proof:
+`docs/proof/d1-2-1-l1-cache-latency-2026-11-18.md`.
+
 ## 4. Off by default
 
 Like auto-resolve (ADR-9) and Kafka, new infrastructure is opt-in: `CACHE_ENABLED=true` plus Redis from the

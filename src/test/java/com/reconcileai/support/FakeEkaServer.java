@@ -4,10 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -70,8 +70,8 @@ public final class FakeEkaServer {
     private static volatile FakeEkaServer shared;
 
     private final HttpServer server;
-    private final JsonSchema requestSchema = schema("/contracts/eka/search-request.json");
-    private final JsonSchema responseSchema = schema("/contracts/eka/search-response.json");
+    private final Schema requestSchema = schema("/contracts/eka/search-request.json");
+    private final Schema responseSchema = schema("/contracts/eka/search-response.json");
     private final Map<String, String> clientTenants = new ConcurrentHashMap<>();
     private final Map<String, List<Doc>> docs = new ConcurrentHashMap<>();
     private final ConcurrentLinkedDeque<Scripted> script = new ConcurrentLinkedDeque<>();
@@ -178,7 +178,7 @@ public final class FakeEkaServer {
             return;
         }
         JsonNode request = JSON.readTree(body);
-        Set<ValidationMessage> errors = requestSchema.validate(request);
+        java.util.List<Error> errors = requestSchema.validate(request);
         if (!errors.isEmpty()) {
             send(ex, 422, "{\"detail\":[{\"msg\":\"invalid\"}]}");
             return;
@@ -206,7 +206,7 @@ public final class FakeEkaServer {
             r.putObject("locator").put("page", 1);
             r.putObject("scores").put("fused", 0.5).put("cosine", 0.8).putNull("rerank");
         }
-        Set<ValidationMessage> responseErrors = responseSchema.validate(response);
+        java.util.List<Error> responseErrors = responseSchema.validate(response);
         if (!responseErrors.isEmpty()) {
             throw new IllegalStateException("fake EKA reply breaks the contract: " + responseErrors);
         }
@@ -241,9 +241,9 @@ public final class FakeEkaServer {
         ex.close();
     }
 
-    private static JsonSchema schema(String resource) {
+    private static Schema schema(String resource) {
         try (InputStream in = FakeEkaServer.class.getResourceAsStream(resource)) {
-            return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012).getSchema(JSON.readTree(in));
+            return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12).getSchema(JSON.readTree(in));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

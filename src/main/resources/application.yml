@@ -47,6 +47,18 @@ spring:
   # Spring AI (Phase 2)
   # -------------------------------------------------------------------------
   ai:
+    mcp:
+      server:                       # D1.2.2 read-only MCP server (ADR-mcp-read-only-server); off by default
+        enabled: ${MCP_SERVER_ENABLED:false}
+        protocol: STATELESS         # required: tools run on the request thread, tenant from that request's JWT
+        type: SYNC
+        name: reconcile-ai-read
+        version: 1.0.0
+        capabilities:
+          tool: true
+          resource: false
+          prompt: false
+          completion: false
     retry:
       # Spring AI's own RetryTemplate defaults to 10 attempts. Chat retries are owned by LlmResilience
       # (reconcile.ai.resilience.*), so the built-in layer is reduced to avoid 3 x 10 nested paid attempts.
@@ -189,11 +201,17 @@ reconcile:
     relevance-filter-enabled: ${KNOWLEDGE_RELEVANCE_FILTER:true}   # off-switch
     min-score: ${KNOWLEDGE_MIN_SCORE:0.0}          # EKA scores.cosine floor; 0.0 = only missing/negative scores drop
     category-match: ${KNOWLEDGE_CATEGORY_MATCH:true}  # hit must mention a category term found in note/evidence
+    break-specific-query: ${KNOWLEDGE_BREAK_SPECIFIC_QUERY:true}  # D1.2.12: query from the break's fields; false = generic
     # One platform-realm client per tenant is required (EKA isolates by caller identity, spike S-2); no shared client.
     # The token's tenant_id claim must equal the tenant id exactly. client-secret-env names the variable, never the secret.
     # tenants:
     #   "[tenant-a]": { client-id: svc-reconcile-tenant-a, client-secret-env: KC_SVC_TENANT_A_SECRET }
     #   "[tenant-b]": { client-id: svc-reconcile-tenant-b, client-secret-env: KC_SVC_TENANT_B_SECRET }
+  mcp:                              # D1.2.2 limits for the read-only MCP tools (server switch: spring.ai.mcp.server)
+    capacity: ${MCP_RATE_CAPACITY:30}             # per tenant burst of tool calls
+    refill-per-minute: ${MCP_RATE_PER_MINUTE:30}
+    max-result-chars: 4000
+    allowed-origins: []             # browser Origins allowed on /mcp; empty = refuse any request with an Origin
   idempotency:                      # D1.1.4: optional Idempotency-Key header on POSTs that create things
     enabled: ${IDEMPOTENCY_ENABLED:true}
     ttl: 24h                        # key remembered for 24h; purged afterwards
@@ -232,6 +250,10 @@ reconcile:
       ttl-hours: 24
       max-entries-per-tenant: 500
       namespace: v1                 # bump to invalidate everything after a prompt or model change
+      l1:                           # D1.2.1: in-heap Caffeine tier in front of Redis; needs the cache on
+        enabled: ${CACHE_L1_ENABLED:false}
+        max-entries: 500            # per JVM, all tenants; keys are tenant-scoped
+        ttl: 5m                     # capped at ttl-hours; namespace bump invalidates L1 too
     pii-masking:
       enabled: true                 # mask account numbers, IBANs, cards, emails, phones before the model call
       ner:                          # optional Presidio sidecar: also mask person names and locations

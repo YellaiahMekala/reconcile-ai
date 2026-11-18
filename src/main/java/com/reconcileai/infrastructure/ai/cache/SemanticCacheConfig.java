@@ -15,7 +15,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 public class SemanticCacheConfig {
 
     @Bean
-    SemanticCache semanticCache(SemanticCacheProperties props, ObjectProvider<RedisConnectionFactory> redis,
+    SemanticCache semanticCache(SemanticCacheProperties props, SemanticCacheL1Properties l1,
+                                ObjectProvider<RedisConnectionFactory> redis,
                                 ObjectProvider<EmbeddingModel> embeddings, InjectionScanner scanner,
                                 MeterRegistry meters, ObjectMapper json) {
         if (!props.enabled()) {
@@ -26,6 +27,10 @@ public class SemanticCacheConfig {
         if (factory == null || model == null) {
             throw new IllegalStateException("reconcile.ai.cache.enabled=true needs Redis and an EmbeddingModel");
         }
-        return new RedisSemanticCache(new StringRedisTemplate(factory), model, scanner, props, meters, json);
+        SemanticCache redisCache = new RedisSemanticCache(new StringRedisTemplate(factory), model, scanner, props, meters, json);
+        // D1.2.1: optional in-heap L1 in front of Redis (off by default).
+        return l1.enabled()
+            ? new TieredSemanticCache(redisCache, scanner, props, l1, meters, com.github.benmanes.caffeine.cache.Ticker.systemTicker())
+            : redisCache;
     }
 }

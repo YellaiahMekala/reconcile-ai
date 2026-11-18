@@ -74,9 +74,7 @@ public class ReconTools {
             if (b == null) {
                 return "NOT_FOUND: no such break";
             }
-            return "reference=" + b.getBreakReference() + "\nledgerAmount=" + plain(b.getLedgerAmount())
-                + "\nexternalAmount=" + plain(b.getExternalAmount()) + "\nvariance=" + plain(b.variance().amount())
-                + "\ncurrency=" + b.getCurrencyCode() + "\nstatus=" + b.getStatus();
+            return breakSummaryText(b);
         });
     }
 
@@ -84,15 +82,7 @@ public class ReconTools {
     public String listEvidence() {
         return guarded("listEvidence", "", () -> {
             List<Evidence> files = evidence.findByBreakItemIdAndTenantIdOrderByCreatedAtAsc(ctx.breakId(), ctx.tenantId());
-            if (files.isEmpty()) {
-                return "No evidence has been uploaded for this break.";
-            }
-            StringBuilder out = new StringBuilder();
-            for (Evidence e : files) {
-                out.append(e.getFileName()).append(" status=").append(e.getStatus())
-                    .append(" chunks=").append(e.getChunkCount() == null ? 0 : e.getChunkCount()).append('\n');
-            }
-            return out.toString();
+            return evidenceListText(files);
         });
     }
 
@@ -145,17 +135,42 @@ public class ReconTools {
             }
             List<ResolutionProposal> found = proposals.findSimilarResolved(ctx.tenantId(), ProposalStatus.APPROVED,
                 category, ctx.breakId(), PageRequest.of(0, SIMILAR_LIMIT));
-            if (found.isEmpty()) {
-                return "No earlier approved breaks with root cause " + category + ".";
-            }
-            StringBuilder out = new StringBuilder();
-            for (ResolutionProposal p : found) {
-                out.append("rootCause=").append(p.getRootCause()).append(" varianceBand=").append(band(p.getVarianceAmount()))
-                    .append(" currency=").append(p.getCurrencyCode()).append(" action=")
-                    .append(p.getRecommendedAction()).append('\n');
-            }
-            return out.toString();
+            return similarResolvedText(category, found);
         });
+    }
+
+    // ------------------------------------------------------------------ shared read-only formatting
+    // Also used by the D1.2.2 MCP read tools, so an agent and an MCP client see the same text for the same data.
+
+    public static String breakSummaryText(BreakItem b) {
+        return "reference=" + b.getBreakReference() + "\nledgerAmount=" + plain(b.getLedgerAmount())
+            + "\nexternalAmount=" + plain(b.getExternalAmount()) + "\nvariance=" + plain(b.variance().amount())
+            + "\ncurrency=" + b.getCurrencyCode() + "\nstatus=" + b.getStatus();
+    }
+
+    public static String evidenceListText(List<Evidence> files) {
+        if (files.isEmpty()) {
+            return "No evidence has been uploaded for this break.";
+        }
+        StringBuilder out = new StringBuilder();
+        for (Evidence e : files) {
+            out.append(e.getFileName()).append(" status=").append(e.getStatus())
+                .append(" chunks=").append(e.getChunkCount() == null ? 0 : e.getChunkCount()).append('\n');
+        }
+        return out.toString();
+    }
+
+    public static String similarResolvedText(RootCauseCategory category, List<ResolutionProposal> found) {
+        if (found.isEmpty()) {
+            return "No earlier approved breaks with root cause " + category + ".";
+        }
+        StringBuilder out = new StringBuilder();
+        for (ResolutionProposal p : found) {
+            out.append("rootCause=").append(p.getRootCause()).append(" varianceBand=").append(band(p.getVarianceAmount()))
+                .append(" currency=").append(p.getCurrencyCode()).append(" action=")
+                .append(p.getRecommendedAction()).append('\n');
+        }
+        return out.toString();
     }
 
     // ------------------------------------------------------------------ guard
@@ -215,7 +230,7 @@ public class ReconTools {
         }
     }
 
-    private static String band(BigDecimal variance) {
+    public static String band(BigDecimal variance) {
         BigDecimal v = variance.abs();
         if (v.compareTo(BigDecimal.valueOf(1_000)) < 0) {
             return "under 1,000";

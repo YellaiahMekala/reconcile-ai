@@ -2,10 +2,10 @@ package com.reconcileai.support;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import com.reconcileai.infrastructure.ai.llm.MockLlmChatModel;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -73,8 +73,8 @@ public final class FakeGatewayServer {
     private static volatile FakeGatewayServer instance;
 
     private final HttpServer server;
-    private final JsonSchema responseSchema = schema("/contracts/ai-gateway/chat-response.v1.json");
-    private final JsonSchema errorSchema = schema("/contracts/ai-gateway/error.v1.json");
+    private final Schema responseSchema = schema("/contracts/ai-gateway/chat-response.v1.json");
+    private final Schema errorSchema = schema("/contracts/ai-gateway/error.v1.json");
     private final ConcurrentLinkedDeque<Scripted> script = new ConcurrentLinkedDeque<>();
     private final List<Call> calls = Collections.synchronizedList(new ArrayList<>());
     private final List<String> tokenForms = Collections.synchronizedList(new ArrayList<>());
@@ -340,8 +340,8 @@ public final class FakeGatewayServer {
 
     private void send(HttpExchange ex, int status, String body, String retryAfter) throws IOException {
         if (ex.getRequestURI().getPath().endsWith("/chat")) {
-            JsonSchema expected = status == 200 ? responseSchema : errorSchema;
-            Set<ValidationMessage> violations = expected.validate(JSON.readTree(body));
+            Schema expected = status == 200 ? responseSchema : errorSchema;
+            java.util.List<Error> violations = expected.validate(JSON.readTree(body));
             if (!violations.isEmpty()) {
                 throw new IllegalStateException("fake gateway reply violates the contract: " + violations + " " + body);
             }
@@ -356,8 +356,8 @@ public final class FakeGatewayServer {
         ex.close();
     }
 
-    private static JsonSchema schema(String path) {
-        return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+    private static Schema schema(String path) {
+        return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
             .getSchema(FakeGatewayServer.class.getResourceAsStream(path));
     }
 }

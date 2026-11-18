@@ -296,6 +296,7 @@ cannot be cited. The outcome (`OK`, `EMPTY`, `UNAVAILABLE`, `REJECTED`) is store
 | `KNOWLEDGE_RELEVANCE_FILTER` (`reconcile.knowledge.relevance-filter-enabled`) | Default `true`. D1.1.1 relevance filter on hits before they reach the prompt; `false` is the off-switch |
 | `KNOWLEDGE_MIN_SCORE` (`reconcile.knowledge.min-score`) | Default `0.0`. Keep a hit only if EKA's `scores.cosine` is at least this. `0.0` drops only hits with a missing or negative score; the cosine scale depends on EKA's embedding model, so tune per corpus |
 | `KNOWLEDGE_CATEGORY_MATCH` (`reconcile.knowledge.category-match`) | Default `true`. Keep a hit only if it mentions a term of a break category found in the analyst note or the retrieved evidence (deterministic keyword match). No category signal in the break: the hit is kept |
+| `KNOWLEDGE_BREAK_SPECIFIC_QUERY` (`reconcile.knowledge.break-specific-query`) | Default `true`. D1.2.12: the EKA query is built from this break (category hints from note and evidence, variance size band and direction, intake source, up to three evidence file names, the note), PII-masked and cut to 400 characters; no amount or break reference. `false` sends the old generic query. Effect on route accuracy **not yet measured** |
 
 If the filter drops every hit, the outcome is `EMPTY` with reason `FILTERED_LOW_RELEVANCE`, no procedure reaches the
 prompt and no `kb:` ref is stored; the `KNOWLEDGE_CONSULTED` audit entry carries `relevanceKept` / `relevanceDropped`
@@ -424,6 +425,20 @@ Measured on the running app (three repeats avoided three model calls; changed ev
 `docs/proof/5d-semantic-cache-savings-2026-11-15.md`. ADRs: `docs/adr/ADR-semantic-cache.md`,
 `ADR-llm-circuit-breaker.md`, `ADR-outbox-kafka.md`.
 
+**L1 cache in front of Redis (D1.2.1).** With the cache on, `CACHE_L1_ENABLED=true` adds a small in-heap Caffeine tier
+(`reconcile.ai.cache.l1.*`: 500 entries, 5 minutes, never longer than the Redis TTL). Keys hold the tenant, namespace,
+prompt and evidence snapshot, so the Redis rules hold for L1 too; L2 hits are copied into L1, stores write through.
+Metric `reconcile_llm_cache_tier_total{outcome=l1_hit|l2_hit|miss|bypass}`. An L1 hit saves a Redis round trip (p50
+0.16 ms vs 6.2 ms on one laptop, [proof](docs/proof/d1-2-1-l1-cache-latency-2026-11-18.md)), not a model call. L1 is
+per replica, so after a Redis flush a replica can serve an entry for up to the L1 TTL. Test: `TieredSemanticCacheIT`.
+
+**Read-only MCP server (D1.2.2).** Off by default (`MCP_SERVER_ENABLED`). When on, `POST /mcp` (Spring AI MCP, WebMVC,
+stateless) offers four read tools: `get_break_summary`, `list_evidence`, `list_recent_breaks`,
+`find_similar_resolved_breaks`. Tenant only from the caller's JWT; roles `RECON_ANALYST`, `APPROVER_L1`, `APPROVER_L2`
+(others 403); per-tenant rate limit; every call audited without its arguments. Turning it on makes CVE-2026-35568
+(mcp-core 0.18.3, no Origin check, fix only in 1.0.0) relevant; it is mitigated by mandatory bearer tokens and an Origin
+allow-list, not fixed. ADR: `docs/adr/ADR-mcp-read-only-server.md`. Tests: `McpReadOnlyServerIT`, `McpDisabledByDefaultIT`.
+
 **Kafka outbox + intake.** `docker compose -f docker/docker-compose.yml --profile kafka up -d`, run with
 `KAFKA_ENABLED=true`. Break creation (REST or Kafka), proposal routing and resolution write an `outbox_event` row in the
 same transaction; `OutboxRelay` publishes them to `reconcile.break.events` (key = break id, headers `event-id`,
@@ -510,6 +525,9 @@ repo (`evidence/EVIDENCE_REGISTER.md`). "Paid, approved" means a real model call
 | Per-tenant credentials on a real realm (PQ1.1.2) | `RealGatewayPerTenantIT`, realm clients A and B, secrets from env (free) | Passed; each invocation visible only under its own tenant's token | E-34, [proof](docs/proof/pq1-1-2-per-tenant-realm-clients-2026-11-18.md), [F15](docs/testing/FEATURE_TESTING_GUIDE.md#f15-real-gateway-and-per-tenant-realm-clients-pq111-pq112) |
 | Golden path and EKA-down in CI (PQ1.1.6) | `PlatformGoldenPathIT`, `PlatformEkaDownIT`: mock-llm, fake gateway, fake or absent EKA; no key, no spend | Both RESOLVED, audit chain valid; run in the default build | E-35, [F16](docs/testing/FEATURE_TESTING_GUIDE.md#f16-golden-path-and-eka-down-in-ci-pq116) |
 | Relevance filter re-measure (PQ1.2.4) | 28 cases x 3 runs, EKA + gateway, `min-score` 0.60; paid, approved | Route 21/28 (75.0%) each run vs 19/28 unfiltered, 24/28 baseline; 95% interval 56.7% to 87.3%; $0.0145 | E-36, [proof](docs/proof/pq1-2-4-relevance-filter-remeasure-2026-11-18.md), [F17](docs/testing/FEATURE_TESTING_GUIDE.md#f17-relevance-filter-re-measure-pq124) |
+| L1 cache in front of Redis (D1.2.1) | `TieredSemanticCacheIT` on real Redis: L1 hit after Redis flush, tenant and evidence isolation, TTL capped at L2, size bound, namespace bump; latency sample (free) | 8/8; L1 p50 0.16 ms vs Redis 6.2 ms, one laptop | [proof](docs/proof/d1-2-1-l1-cache-latency-2026-11-18.md), [F18](docs/testing/FEATURE_TESTING_GUIDE.md#f18-l1-cache-in-front-of-redis-d121) |
+| Read-only MCP server (D1.2.2) | `McpReadOnlyServerIT`, `McpDisabledByDefaultIT`: real app, real Postgres, real JWT checks | No token 401, SRE_ADMIN 403, foreign Origin 403, cross-tenant id NOT_FOUND, exactly 4 tools, every call audited without arguments, per-tenant rate limit | [ADR](docs/adr/ADR-mcp-read-only-server.md), [F19](docs/testing/FEATURE_TESTING_GUIDE.md#f19-read-only-mcp-server-d122) |
+| Break-specific knowledge query (D1.2.12) | `BreakKnowledgeQueryTest`, `BreakSpecificKnowledgeQueryIT`, `GenericKnowledgeQuerySwitchIT` with the fake EKA | Query carries category, variance words, file name; no amount or reference; switch restores the old query. Paid re-measure (2 runs, 28 cases, `min-score` 0.61 re-probed): route 23/28 and 22/28 vs 21/28 (PQ1.2.4) and 24/28 baseline, all within noise (n = 28, Wilson 95% 60.5% to 92.1%); floor inert, MIS-001 to 003 still lost; $0.0094 | [proof](docs/proof/d1-2-12-break-query-remeasure-2026-11-18.md), [F20](docs/testing/FEATURE_TESTING_GUIDE.md#f20-break-specific-knowledge-query-d1212) |
 
 | Repo | CI run | Commit |
 |---|---|---|
