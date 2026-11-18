@@ -34,7 +34,7 @@
         <java.version>21</java.version>
         <!-- Spring AI BOM manages every spring-ai-* artifact version below. -->
         <spring-ai.version>1.1.8</spring-ai.version>
-        <failsafe.excludedGroups>openai,ollama,bedrock,gateway,gateway-live,eka</failsafe.excludedGroups>
+        <failsafe.excludedGroups>openai,ollama,bedrock,gateway,gateway-live,eka,platform-live</failsafe.excludedGroups>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!-- Core libraries only (no Spring Boot starter): beans are built by hand in AgentConfig. -->
         <langchain4j.version>1.18.1</langchain4j.version>

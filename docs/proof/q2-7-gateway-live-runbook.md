@@ -1,6 +1,6 @@
 # Q2.7 runbook: one approved live run through ai-gateway to a real provider
 
-Status: **not run**. This page is the procedure and the evidence format. Nothing here runs in CI, and
+Status: **run 2026-11-18, passed** (evidence: `q2-7-gateway-live-2026-11-18.md`). This page is the procedure and the evidence format. Nothing here runs in CI, and
 `GatewayLiveProviderIT` refuses to start unless two environment variables say so (section 3). The run costs money:
 one chat completion plus at most one transport retry under the same idempotency key.
 
@@ -66,6 +66,12 @@ to the ledger, not on the answer. Copy the evidence block into `docs/proof/` and
    and provider model from the gateway's own log, and redact nothing except secrets (there are none in the block).
 7. **Register row.** Add `E-xx` to `platform/evidence/EVIDENCE_REGISTER.md` with status **local live run, not in CI**
    and the cost from the ledger row.
+
+## Results
+
+| Date | Result | Job | Invocation | Tokens in / out | Ledger | Evidence |
+|---|---|---|---|---|---|---|
+| 2026-11-18 | passed, attempt 1, http 200, gateway status OK, 3919 ms | `223e09d3-2cd8-44e0-ac60-a1ec307167fe` | `1f47fbb6-1ee0-4ba3-8ddd-d9fbc2fd6bbb` | 719 / 111 (`llm_call` row model `ai-gateway`, same counts) | 200 OK EXECUTED, 0.00017445 USD | `q2-7-gateway-live-2026-11-18.md` |
 
 ## 4. If it fails
 

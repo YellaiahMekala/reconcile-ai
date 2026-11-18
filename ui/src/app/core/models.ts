@@ -75,6 +75,47 @@ export interface InvestigationJob {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  reviewVerdict: string | null;
+  riskFlags: string[] | null;
+  /** True when a gateway call's result was never confirmed; re-runs stay blocked until it is reconciled. */
+  outcomeUnknown: boolean;
+  reconciledAt: string | null;
+  reconciledBy: string | null;
+  reconcileRef: string | null;
+  ledgerExecutionCertainty: string | null;
+  ledgerStatus: string | null;
+  /** EKA procedure lookup: null when knowledge is off. */
+  knowledgeOutcome: KnowledgeOutcome | null;
+  knowledgeReason: string | null;
+  /** "kb:<uuid>" procedure ids: consulted for reference, never evidence. */
+  knowledgeRefs: string[] | null;
+}
+
+export type KnowledgeOutcome = 'OK' | 'EMPTY' | 'UNAVAILABLE' | 'REJECTED';
+
+/** One gateway call of a job plus the gateway ledger's view of it. No prompt or completion text. */
+export interface GatewayCall {
+  attempt: number;
+  idempotencyKey: string;
+  outcome: string;
+  httpStatus: number;
+  gatewayCode: string | null;
+  invocationId: string | null;
+  gatewayStatus: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  latencyMs: number;
+  createdAt: string;
+  /** FOUND, NOT_FOUND, UNAVAILABLE or NOT_CHECKED. */
+  ledgerResult: string;
+  ledgerStatus: string | null;
+  ledgerExecutionCertainty: string | null;
+  ledgerModelKey: string | null;
+  ledgerProvider: string | null;
+  ledgerInputTokens: number | null;
+  ledgerOutputTokens: number | null;
+  ledgerUsageSource: string | null;
+  ledgerCostUsd: Amount | null;
 }
 
 /** One tool call an agent made. Arguments are never exposed, only the tool, outcome and size. */

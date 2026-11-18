@@ -40,4 +40,31 @@ describe('ApiService investigations', () => {
     ]);
     expect(calls.length).toBe(1);
   });
+
+  it('posts the reconcile reference and returns the refreshed job', () => {
+    let ref = '';
+    api.reconcileJob('j1', 'inv-42').subscribe((j) => (ref = j.reconcileRef ?? ''));
+    const req = ctrl.expectOne('/api/v1/investigations/j1/reconcile');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ reference: 'inv-42' });
+    req.flush({ id: 'j1', outcomeUnknown: false, reconcileRef: 'inv-42' });
+    expect(ref).toBe('inv-42');
+  });
+
+  it('surfaces a 409 from reconcile as an error', () => {
+    let status = 0;
+    api.reconcileJob('j1', 'x').subscribe({ error: (e) => (status = e.status) });
+    ctrl.expectOne('/api/v1/investigations/j1/reconcile')
+      .flush({ code: 'CONFLICT', message: 'not blocked' }, { status: 409, statusText: 'Conflict' });
+    expect(status).toBe(409);
+  });
+
+  it('reads the gateway calls of a job', () => {
+    let calls: unknown[] = [];
+    api.gatewayCalls('j1').subscribe((c) => (calls = c));
+    const req = ctrl.expectOne('/api/v1/investigations/j1/gateway-calls');
+    expect(req.request.method).toBe('GET');
+    req.flush([{ attempt: 1, outcome: 'TIMEOUT', ledgerResult: 'NOT_CHECKED' }]);
+    expect(calls.length).toBe(1);
+  });
 });

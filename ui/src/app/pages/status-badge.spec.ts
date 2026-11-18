@@ -19,5 +19,8 @@ describe('StatusBadge', () => {
     expect(render('OK').className).toContain('ok');
     expect(render('DENIED').className).toContain('bad');
     expect(render('INJECTION_FILTERED').className).toContain('warn');
+    // knowledge outcomes
+    expect(render('UNAVAILABLE').className).toContain('warn');
+    expect(render('EMPTY').className).toContain('neutral');
   });
 });

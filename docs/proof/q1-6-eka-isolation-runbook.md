@@ -1,6 +1,6 @@
 # Q1.6 and Q1.7 runbook: tenant isolation and concurrent lookups against the real EKA
 
-Status: **not run**. This page is the procedure and the result table. `RealEkaIsolationIT` (tag `eka`) is excluded from
+Status: **run 2026-11-18, 3/3 passed** (local, one run). This page is the procedure and the result table. `RealEkaIsolationIT` (tag `eka`) is excluded from
 the default build and from CI, and skips itself unless `EKA_LIVE_BASE_URL` is set. No model is called and nothing is
 billed: the test uses reconcile-ai's own token and search code against a local EKA and the platform realm.
 
@@ -61,6 +61,6 @@ A skipped run (no `EKA_LIVE_BASE_URL`) is not a pass.
 
 | Date | reconcile-ai commit | EKA commit | Q1.6 (A finds, B empty, B 404) | Q1.7 printed line | Notes |
 |---|---|---|---|---|---|
-| | | | | | |
+| 2026-11-18 | uncommitted | `3ae3100` (edge profile) | Pass: tenant-a found its procedure (`OK`); tenant-b searching the exact marker text got `EMPTY`; GET on tenant-a's document id as tenant-b was 404; the listing did not contain it | `OK` x10; latencies 199, 322, 330, 343, 356, 367, 375, 365, 374, 380 ms | 3/3 tests passed. Platform Keycloak 26.3 on 8190, reconcile-ai's own `TenantServiceTokens` and `EkaKnowledgeClient`. One run on one laptop, not a capacity claim. No model calls, no cost |
 
 After a run, update `platform/docs/STATUS_TRACKER.md` (Q1.6, Q1.7) and add a row to `platform/evidence/EVIDENCE_REGISTER.md`.

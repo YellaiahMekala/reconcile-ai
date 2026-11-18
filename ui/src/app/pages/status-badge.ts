@@ -11,7 +11,7 @@ export class StatusBadge {
     const v = this.value();
     if (/FAIL|REJECT|QUARANTIN|BLOCK|INVALID|DENIED|ERROR/.test(v)) return 'bad';
     if (/RESOLVED|SUCCEEDED|APPROVED|READY|VALID|^OK$/.test(v)) return 'ok';
-    if (/PENDING|RUNNING|QUEUED|PROCESSING|MANUAL|INVESTIGAT|LIMIT|FILTERED/.test(v)) return 'warn';
+    if (/PENDING|RUNNING|QUEUED|PROCESSING|MANUAL|INVESTIGAT|LIMIT|FILTERED|UNAVAILABLE|UNKNOWN/.test(v)) return 'warn';
     return 'neutral';
   });
 }

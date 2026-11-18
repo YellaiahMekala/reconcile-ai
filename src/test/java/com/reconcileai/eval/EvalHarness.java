@@ -31,8 +31,13 @@ final class EvalHarness {
 
     /** Runs the given cases in one mode and writes the usual report under target/eval. */
     static Outcome runAndReport(JdbcTemplate admin, String label, String notes, String mode, List<EvalCase> cases) {
-        String bearer = JwtTestSupport.bearer("eval-analyst", "TENANT_EVAL_" + UUID.randomUUID().toString().substring(0, 8),
-            List.of("RECON_ANALYST"));
+        return runAndReport(admin, label, notes, mode, cases, "TENANT_EVAL_" + UUID.randomUUID().toString().substring(0, 8));
+    }
+
+    /** Same, for a fixed tenant (the integrated platform run needs the tenant that has gateway and EKA clients). */
+    static Outcome runAndReport(JdbcTemplate admin, String label, String notes, String mode, List<EvalCase> cases,
+                                String tenant) {
+        String bearer = JwtTestSupport.bearer("eval-analyst", tenant, List.of("RECON_ANALYST"));
 
         List<EvalCaseResult> results = new EvalRunner(bearer, admin, mode).runAll(cases);
         EvalSummary summary = EvalSummary.of(results, pricing());

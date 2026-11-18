@@ -1,9 +1,20 @@
-import { Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, interval, switchMap, takeWhile } from 'rxjs';
 import { ApiService, errorText } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
-import { AuditEvent, BreakItem, Evidence, ProgressEvent, Proposal, SearchHit, ToolCall } from '../core/models';
+import { isReconciled, knowledgeView, RECONCILER_ROLES, validReference } from '../core/knowledge';
+import {
+  AuditEvent,
+  BreakItem,
+  Evidence,
+  GatewayCall,
+  InvestigationJob,
+  ProgressEvent,
+  Proposal,
+  SearchHit,
+  ToolCall,
+} from '../core/models';
 import { StatusBadge } from './status-badge';
 
 const STAGES = ['QUEUED', 'RETRIEVING', 'CALLING_MODEL', 'VERIFYING', 'ROUTING', 'COMPLETED'];
@@ -88,6 +99,61 @@ const STAGES = ['QUEUED', 'RETRIEVING', 'CALLING_MODEL', 'VERIFYING', 'ROUTING',
           </p>
         }
 
+        @if (job(); as j) {
+          @if (knowledge(); as k) {
+            <p class="knowledge">
+              <strong>Knowledge</strong> <app-status [value]="k.outcome" />
+              @if (k.degraded) { <span class="warn-text">ran with degraded context</span> }
+              @if (k.reason) { <span class="muted">{{ k.reason }}</span> }
+              @if (k.consultedText) { <br /><span class="muted">{{ k.consultedText }}</span> }
+            </p>
+          }
+          @if (j.outcomeUnknown) {
+            <p class="warn-text">
+              The gateway outcome for this investigation is unknown. A re-run is blocked until it is reconciled.
+            </p>
+          }
+          @if (canReconcile() && j.outcomeUnknown) {
+            <form class="row" (ngSubmit)="reconcile()">
+              <input name="reconcileRef" [(ngModel)]="reconcileRef" maxlength="64"
+                placeholder="Gateway invocation id or ticket reference" />
+              <button type="submit" [disabled]="!validRef() || reconciling()">Reconcile</button>
+            </form>
+            @if (reconcileError()) { <p class="error">{{ reconcileError() }}</p> }
+          }
+          @if (reconciled()) {
+            <p class="muted">
+              Reconciled by {{ j.reconciledBy }} at {{ j.reconciledAt }} · ref {{ j.reconcileRef }}
+              @if (j.ledgerStatus || j.ledgerExecutionCertainty) {
+                · ledger {{ j.ledgerStatus ?? '–' }} / {{ j.ledgerExecutionCertainty ?? '–' }}
+              }
+            </p>
+          }
+          @if (canReconcile()) {
+            <details class="gateway-calls" (toggle)="toggleCalls($event)">
+              <summary>Gateway calls</summary>
+              @if (callsError()) { <p class="error">{{ callsError() }}</p> }
+              <table>
+                <thead><tr><th>#</th><th>Outcome</th><th>HTTP</th><th>Invocation</th><th>Latency</th>
+                  <th>Tokens in/out</th><th>Ledger</th><th>Certainty</th><th>Cost USD</th></tr></thead>
+                <tbody>
+                  @for (c of gatewayCalls(); track c.attempt) {
+                    <tr>
+                      <td>{{ c.attempt }}</td><td><app-status [value]="c.outcome" /></td><td>{{ c.httpStatus }}</td>
+                      <td class="mono">{{ c.invocationId ?? '–' }}</td><td>{{ c.latencyMs }} ms</td>
+                      <td>{{ c.inputTokens }} / {{ c.outputTokens }}</td>
+                      <td><app-status [value]="c.ledgerResult" /> {{ c.ledgerStatus ?? '' }}</td>
+                      <td>{{ c.ledgerExecutionCertainty ?? '–' }}</td><td>{{ c.ledgerCostUsd ?? '–' }}</td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="9" class="muted">No gateway calls.</td></tr>
+                  }
+                </tbody>
+              </table>
+            </details>
+          }
+        }
+
         @if (toolCalls().length > 0) {
           <h3>What the agent looked at</h3>
           <ol class="toolcalls">
@@ -152,9 +218,23 @@ export class BreakDetailPage implements OnInit, OnDestroy {
   readonly audit = signal<AuditEvent[]>([]);
   readonly progress = signal<ProgressEvent | null>(null);
   readonly toolCalls = signal<ToolCall[]>([]);
+  readonly job = signal<InvestigationJob | null>(null);
+  readonly gatewayCalls = signal<GatewayCall[]>([]);
+  readonly reconciling = signal(false);
+  readonly reconcileError = signal<string | null>(null);
+  readonly callsError = signal<string | null>(null);
+  readonly knowledge = computed(() => {
+    const j = this.job();
+    return j ? knowledgeView(j) : null;
+  });
+  readonly reconciled = computed(() => {
+    const j = this.job();
+    return !!j && isReconciled(j);
+  });
   readonly running = signal(false);
   readonly error = signal<string | null>(null);
   query = '';
+  reconcileRef = '';
   note = '';
   agentMode = false;
   private subs = new Subscription();
@@ -165,6 +245,52 @@ export class BreakDetailPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
+  }
+
+  canReconcile(): boolean {
+    return this.auth.hasRole(...RECONCILER_ROLES);
+  }
+
+  validRef(): string | null {
+    return validReference(this.reconcileRef);
+  }
+
+  private loadJob(jobId: string): void {
+    this.api.getJob(jobId).subscribe({ next: (j) => this.job.set(j), error: () => undefined });
+  }
+
+  reconcile(): void {
+    const j = this.job();
+    const ref = this.validRef();
+    if (!j || !ref) return;
+    this.reconcileError.set(null);
+    this.reconciling.set(true);
+    this.api.reconcileJob(j.id, ref).subscribe({
+      next: (updated) => {
+        this.reconciling.set(false);
+        this.reconcileRef = '';
+        this.job.set(updated);
+        this.loadJob(updated.id);
+        this.loadGatewayCalls(updated.id);
+      },
+      error: (e) => {
+        this.reconciling.set(false);
+        this.reconcileError.set(errorText(e));
+      },
+    });
+  }
+
+  toggleCalls(ev: Event): void {
+    const j = this.job();
+    if (j && (ev.target as HTMLDetailsElement).open) this.loadGatewayCalls(j.id);
+  }
+
+  private loadGatewayCalls(jobId: string): void {
+    this.callsError.set(null);
+    this.api.gatewayCalls(jobId).subscribe({
+      next: (c) => this.gatewayCalls.set(c),
+      error: (e) => this.callsError.set(errorText(e)),
+    });
   }
 
   stageIndex(stage: string): number {
@@ -220,8 +346,10 @@ export class BreakDetailPage implements OnInit, OnDestroy {
     this.error.set(null);
     this.running.set(true);
     this.toolCalls.set([]);
+    this.job.set(null);
     this.api.startInvestigation(this.id(), this.note || undefined, this.agentMode ? 'AGENT' : undefined).subscribe({
       next: (job) => {
+        this.job.set(job);
         this.progress.set({ jobId: job.id, breakItemId: job.breakItemId, status: job.status, stage: job.stage,
           proposalId: null, failureReason: null, terminal: false, at: job.createdAt });
         this.subs.add(
@@ -231,12 +359,14 @@ export class BreakDetailPage implements OnInit, OnDestroy {
               if (p.terminal) {
                 this.running.set(false);
                 this.refresh();
+                this.loadJob(job.id);
                 if (this.agentMode) this.loadToolCalls(job.id);
               }
             },
             // Stream dropped (proxy, timeout): fall back to one REST read of the job.
             error: () => this.api.getJob(job.id).subscribe((j) => {
               this.running.set(j.status === 'QUEUED' || j.status === 'RUNNING');
+              this.job.set(j);
               this.refresh();
             }),
           }),
