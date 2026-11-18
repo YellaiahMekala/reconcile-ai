@@ -14,13 +14,17 @@ import java.util.regex.Pattern;
  *  IBAN            GB29NWBK60161331926819                   -> [IBAN]
  *  PHONE           +country code followed by 7-14 digits     -> [PHONE]
  *  CARD_NUMBER     13-19 digits, optional space/dash, Luhn  -> [CARD_NUMBER]
+ *                  also a contiguous Luhn-valid 13-19 digit run inside a reference (ai-gateway alignment)
  *  ACCOUNT_NUMBER  a standalone run of 8-18 digits           -> [ACCOUNT_NUMBER]
  * </pre>
  *
  * <h2>What it deliberately does NOT touch</h2>
- * Amounts (separators, fewer digits), dates, business references such as PO-88410, and chunk ids (UUIDs): every
- * digit pattern requires that the match is not glued to a letter, digit or dash, so a UUID segment never matches
- * and citations still line up with the retrieval snapshot.
+ * Amounts (separators, fewer digits), dates, business references such as PO-88410, and chunk ids (UUIDs): the
+ * digit patterns require that the match is not glued to a letter, digit or dash, so a UUID segment never matches
+ * and citations still line up with the retrieval snapshot. The one exception is a Luhn-valid run of 13-19
+ * contiguous digits, which is masked even inside a reference because ai-gateway would treat it as a card.
+ * Known gap versus the gateway: a card split by dots, or digits split across UUID-like dash groups, is not masked
+ * here; the gateway still refuses such a request (fail-safe, not a leak).
  *
  * <h2>Honest scope</h2>
  * Masking of structured identifiers, not DLP. Names and free-form disclosures pass through. Masking is one-way:
@@ -42,6 +46,13 @@ public final class PiiMasker {
         Pattern.compile("(?<![A-Za-z0-9])[A-Z]{2}\\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])");
     private static final Pattern PHONE = Pattern.compile("(?<![\\w+])\\+\\d{1,3}[ -]?\\(?\\d{1,4}\\)?(?:[ -]?\\d){6,12}(?!\\w)");
     private static final Pattern CARD = Pattern.compile("(?<![\\w-])(?:\\d[ -]?){12,18}\\d(?![\\w-])");
+    /**
+     * A contiguous 13-19 digit run glued to a letter or dash ({@code BRK-20261118090525}). ai-gateway's card detector
+     * only requires "not next to a digit", so a Luhn-valid run like this is a card to the gateway and the request is
+     * refused as RESTRICTED (found on the platform golden path, 2026-11-18). Masking it here keeps the two services
+     * aligned. A UUID cannot match: its longest segment is 12 characters, so chunk ids and citations are untouched.
+     */
+    private static final Pattern EMBEDDED_CARD = Pattern.compile("(?<!\\d)\\d{13,19}(?!\\d)");
     private static final Pattern ACCOUNT = Pattern.compile("(?<![\\w.,-])\\d{8,18}(?![\\w-]|[.,]\\d)");
 
     private PiiMasker() {}
@@ -55,6 +66,7 @@ public final class PiiMasker {
         s = replace(s, IBAN, PiiType.IBAN, counts, false);
         s = replace(s, PHONE, PiiType.PHONE, counts, false);
         s = replace(s, CARD, PiiType.CARD_NUMBER, counts, true);
+        s = replace(s, EMBEDDED_CARD, PiiType.CARD_NUMBER, counts, true);
         s = replace(s, ACCOUNT, PiiType.ACCOUNT_NUMBER, counts, false);
         return new MaskResult(s, counts);
     }

@@ -50,6 +50,25 @@ class PiiMaskerTest {
         assertThat(r.text()).isEqualTo("ref [ACCOUNT_NUMBER]");
     }
 
+    /**
+     * Found on the platform golden path (2026-11-18): ai-gateway saw a Luhn-valid timestamp inside a break reference
+     * as a payment card and refused the call as RESTRICTED. The sender now masks what the gateway would flag.
+     */
+    @Test
+    void luhnValidDigitRunInsideAReferenceIsMaskedLikeTheGatewayWouldFlagIt() {
+        PiiMasker.MaskResult r = PiiMasker.mask("reference: BRK-GOLD-20261118090525 status open");
+
+        assertThat(r.text()).isEqualTo("reference: BRK-GOLD-[CARD_NUMBER] status open");
+        assertThat(r.counts()).containsEntry(PiiMasker.PiiType.CARD_NUMBER, 1);
+    }
+
+    @Test
+    void nonLuhnDigitRunInsideAReferenceAndUuidsStayAsTheyAre() {
+        String text = "reference: BRK-GOLD-20261118090524 chunk_id=12345678-1234-4234-9234-123456789012";
+
+        assertThat(PiiMasker.mask(text).text()).isEqualTo(text);
+    }
+
     @Test
     void advisorMasksWhatTheModelReceives() {
         AtomicReference<String> seen = new AtomicReference<>();

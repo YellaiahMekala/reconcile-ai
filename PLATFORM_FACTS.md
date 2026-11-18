@@ -150,6 +150,7 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 - Local `mvn clean verify` on 2026-11-16, branch `feature/q2-gateway-governance` (Q2.3–Q2.7, uncommitted): unit **116**, integration **163**, 0 failures. Excluded groups now also `gateway`, `gateway-live`. No CI run yet for this state.
 - After the ledger read, per-tenant credentials and shared rate limit work: unit **123**, integration **179** (to be filled from the build). No CI run yet for this state.
 - Local `mvn clean verify` on 2026-11-18 with platform Q1.1 to Q1.5 (EKA knowledge pre-step, uncommitted): unit **166**, integration **193**, 0 failures. `RealEkaIsolationIT` (tag `eka`) is excluded and has not been run. No CI run yet for this state.
+- Local `mvn clean verify` on 2026-11-18 after the `PiiMasker` card-in-reference fix (uncommitted): unit **168**, integration **193**, UI (Karma) **24**, 0 failures. Real-EKA isolation (`RealEkaIsolationIT`, tag `eka`) and the live gateway run (`GatewayLiveProviderIT`) were run separately and passed. No CI run yet for this state.
 - Earlier: run #29 (9ee707d) had 96 / 140 / 15. The 3 new ITs are `EvalRunnerCitedFilesIT` (2) and one more case in `SupervisedInvestigationIT`.
 - Other CI jobs in run #29: Angular, mvn clean verify, alert rules, k8s + image, terraform checks, terraform on LocalStack, SBOM.
 

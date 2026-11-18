@@ -91,7 +91,7 @@ agent mode (off by default), Prometheus alert rules, rate limiting and stored ev
 | Item | Status |
 |---|---|
 | Expose the read-only tools over MCP for other services | Not started; needs a token-based tenant design |
-| Platform integration (shared token issuer, knowledge search, recommendation intake) | Knowledge search built (Q1.1 to Q1.5, off by default); the rest planned |
+| Platform integration (shared token issuer, knowledge search, recommendation intake) | Knowledge search and gateway route built and measured locally (see Platform integration below); the rest planned |
 | Trivy scan that fails the build | Listed under Known limitations |
 
 ---
@@ -187,6 +187,27 @@ evidence (READY) ─► POST /investigations ─► job QUEUED
       └─ AUTO_RESOLVE (config off by default)
 ```
 
+### Platform integration (measured 2026-11-18)
+
+Run locally on one laptop, uncommitted at the time of writing: tenant isolation against the real EKA edge (3/3 passed, 10 concurrent lookups all OK), one approved live call through ai-gateway to OpenAI `gpt-4o-mini`, the two-demo golden path (a happy path and a deliberate EKA outage, both resolved by a second person with a valid audit chain), and a 28-case integrated evaluation (root cause 27/28 in both runs; route 19/28 against 24/28 for the direct baseline, all five differences in the cautious direction, not statistically significant, cause not separated). The golden path also found and fixed a card-masking gap. Details: [golden path](docs/proof/q4-platform-golden-path-2026-11-18.md), [integrated evaluation](docs/proof/q4-3-integrated-eval-2026-11-18.md), [EKA isolation](docs/proof/q1-6-eka-isolation-runbook.md). The live gateway call is in [q2-7-gateway-live-2026-11-18.md](docs/proof/q2-7-gateway-live-2026-11-18.md).
+
+```mermaid
+flowchart LR
+  KC[Keycloak platform realm]
+  RA[reconcile-ai]
+  EKA[EKA edge]
+  GW[ai-gateway]
+  OAI[OpenAI]
+  P[Approver, a different person]
+  KC -- "per-tenant service token, aud eka-api" --> RA
+  KC -- "per-tenant service token, aud ai-gateway" --> RA
+  RA -- "search only" --> EKA
+  EKA -. "hits: procedure consulted, never evidence" .-> RA
+  RA -- "one governed chat call" --> GW
+  GW --> OAI
+  P -- "approve or reject (maker-checker)" --> RA
+```
+
 ---
 
 ## 5. Run locally (Windows 11)
@@ -274,7 +295,7 @@ cannot be cited. The outcome (`OK`, `EMPTY`, `UNAVAILABLE`, `REJECTED`) is store
 | `reconcile.knowledge.tenants` | One platform-realm client per tenant; its secret is read from a named environment variable. No shared client |
 
 Proven against a schema-checked EKA stub (`EkaKnowledgeClientTest`, `KnowledgeOutcomeIT`, `KnowledgeFailClosedIT`).
-Isolation against the real EKA is the opt-in `RealEkaIsolationIT` (tag `eka`) and has not been run yet.
+Isolation against the real EKA is the opt-in `RealEkaIsolationIT` (tag `eka`); it passed 3/3 on 2026-11-18 ([runbook](docs/proof/q1-6-eka-isolation-runbook.md)).
 
 ### Deploy to AWS (Terraform)
 
@@ -444,8 +465,8 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts in the default build: **166 unit tests** (surefire), **193 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
-Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too. `eka` needs the real EKA edge and the platform realm (free, no model call; `docs/proof/q1-6-eka-isolation-runbook.md`) and is excluded as well.
+Current counts in the default build: **168 unit tests** (surefire), **193 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **24 UI specs** (Karma).
+Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too. `eka` needs the real EKA edge and the platform realm (free, no model call; `docs/proof/q1-6-eka-isolation-runbook.md`) and is excluded as well. `platform-live` is the paid integrated evaluation (`IntegratedPlatformEvalIT`: real EKA edge plus the real-provider gateway; `docs/proof/q4-3-integrated-eval-2026-11-18.md`) and is excluded too.
 
 | Class | Type | Proves |
 |---|---|---|

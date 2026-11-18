@@ -8,6 +8,7 @@ import {
   BreakItem,
   ChainVerification,
   Evidence,
+  GatewayCall,
   InvestigationJob,
   ProgressEvent,
   Proposal,
@@ -66,6 +67,15 @@ export class ApiService {
 
   getJob(jobId: string): Observable<InvestigationJob> {
     return this.http.get<InvestigationJob>(`/api/v1/investigations/${jobId}`);
+  }
+
+  /** Lifts the re-run block after a gateway call of unknown outcome. APPROVER_L2 and SRE_ADMIN only. */
+  reconcileJob(jobId: string, reference: string): Observable<InvestigationJob> {
+    return this.http.post<InvestigationJob>(`/api/v1/investigations/${jobId}/reconcile`, { reference });
+  }
+
+  gatewayCalls(jobId: string): Observable<GatewayCall[]> {
+    return this.http.get<GatewayCall[]>(`/api/v1/investigations/${jobId}/gateway-calls`);
   }
 
   jobEvents(jobId: string): Observable<ProgressEvent> {
