@@ -1,9 +1,9 @@
 # reconcile-ai: feature testing guide
 
-Scope: features tested between 2026-11-16 and 2026-11-18 (platform stages Q1, Q2, Q3.1 to Q3.6, Q4). Every number below
-comes from a register row in `platform/evidence/EVIDENCE_REGISTER.md` (E-ids) or from a proof document in
-`docs/proof/`. Features from Phase 1 to Phase 5 that were tested earlier are not covered yet (see the final-phase task
-in `platform/docs/STATUS_TRACKER.md`).
+Scope: F1 to F20 cover features tested between 2026-11-16 and 2026-11-18 (platform stages Q1, Q2, Q3, Q4 and the D1
+items). F21 to F31 cover the Phase 1 to Phase 5 features built earlier, and the last section is an evidence map for
+them. Every number below comes from a register row in `platform/evidence/EVIDENCE_REGISTER.md` (E-ids), from a proof
+document in `docs/proof/`, or from a log in `docs/proof/`.
 
 Run types used below:
 
@@ -37,6 +37,17 @@ Secrets are always environment variables, listed here by name only.
 | [F18](#f18-l1-cache-in-front-of-redis-d121) | L1 cache in front of Redis (D1.2.1) | none yet | default build |
 | [F19](#f19-read-only-mcp-server-d122) | Read-only MCP server (D1.2.2) | none yet | default build |
 | [F20](#f20-break-specific-knowledge-query-d1212) | Break-specific knowledge query (D1.2.12) | none yet | default build; paid re-measure approved and run |
+| [F21](#f21-foundation-security-tenant-isolation-breaks-and-evidence-tier-0-to-1) | Foundation: security, tenant isolation (Tier 0 to 1) | E-01, E-02, E-13 | default build |
+| [F22](#f22-investigation-pipeline-tier-2) | Investigation pipeline (Tier 2) | E-03, E-04 | default build |
+| [F23](#f23-production-hardening-resilience-pii-outbox-digest-rate-limit-api-hygiene) | Production hardening | E-16 | default build |
+| [F24](#f24-audit-anchoring-signed-chain-heads-in-s3-object-lock) | Audit anchoring | none yet | default build; real S3 deferred |
+| [F25](#f25-evaluation-harness-phase-4a) | Evaluation harness (4A) | E-10 | gate in build; live paid |
+| [F26](#f26-investigation-agent-4b-and-supervisor-agents-4g) | Agent (4B) and supervisor agents (4G) | E-10 | default build; live paid |
+| [F27](#f27-alert-delivery-phase-4c) | Alert delivery (4C) | none yet | promtool; real SMTP deferred |
+| [F28](#f28-amazon-bedrock-adapter-phase-4d) | Amazon Bedrock adapter (4D) | none yet | fake in build; live deferred |
+| [F29](#f29-aws-deployment-with-terraform-phase-4e) | AWS deployment with Terraform (4E) | none yet | LocalStack; real apply deferred |
+| [F30](#f30-observability-dashboard-and-semantic-cache-savings-phase-5c-and-5d) | Dashboard and cache savings (5C, 5D) | E-14, E-15 | local run |
+| [F31](#f31-console-ui-and-kubernetes-manifests) | Console UI and Kubernetes manifests | E-33, E-21 | CI |
 
 ## F1 Knowledge pre-step, Q1.1 to Q1.5
 
@@ -524,3 +535,256 @@ SENSITIVITY_BLOCKED`), not investigated.
 
 **Interview question.** *Why not send the amount?* EKA holds procedures, not breaks. The size band and direction carry
 the useful signal; the figure would only leak data to another service.
+
+---
+
+# Phase 1 to 5 features (added for PQ1.2.11)
+
+The entries below cover the features built before the platform work (Foundation, Tier 2, production hardening,
+evaluation, agents, alerts, Bedrock, AWS, supervisor agents, observability and cache proof). Rules for these entries:
+
+- A test count is given only when it is printed in a log under `docs/proof/` or in a register row. Otherwise the entry
+  lists the test classes without a count.
+- "Deferred to the final phase" means the feature needs real AWS credentials, a real SMTP account or paid keys that were
+  not available. The local or fake-service proof is listed, and the real run is not claimed.
+- The 2026-11-10 and 2026-11-15 proof documents are one-off local runs, not CI runs.
+- Suite-level numbers: E-01 (96 unit / 143 IT / 15 UI, CI run #33), E-16 (115 / 144 / 15, all 7 CI jobs green), E-33
+  (UI 29/29), and the platform rows above for later counts.
+
+## F21 Foundation: security, tenant isolation, breaks and evidence (Tier 0 to 1)
+
+**What and why.** JWT resource server with a mandatory `tenant_id`, closed role set, 404 for another tenant's data,
+Postgres Row-Level Security, exact money, evidence upload with hash dedup and the original file kept.
+
+**Tests.** `SecurityAndTenantIsolationIT` (release-blocking), `RowLevelSecurityIT`, `BreakAndEvidenceIT`,
+`EvidenceContentIT`, `RoleTest`, `MoneyAndVarianceTest`, `DemoLoginIT`, `KeycloakIT`, `VirtualThreadsTenantIsolationIT`,
+`TenantScopeVirtualThreadTest`, `Day0SpikeIT`.
+
+**Run.** `mvn clean verify` (Docker needed; free). One class: `mvn verify -Dit.test=SecurityAndTenantIsolationIT`.
+
+**Expected.** 401 without a token, 403 for a wrong role, 404 for another tenant's id, a client-supplied tenant is
+ignored; duplicate break reference 409; duplicate evidence returns 200 with one stored copy; an unscoped DB connection
+sees no rows.
+
+**Evidence.** E-01, E-02 (issuer and audience checks, `KeycloakIT`), E-13 (virtual threads keep tenant identity), E-16.
+README sections "Features" and "Test suite".
+
+**Limits.** Demo-key mode checks neither issuer nor audience (E-02). No external penetration test.
+
+## F22 Investigation pipeline, Tier 2
+
+**What and why.** Evidence ingestion (Tika, chunks, pgvector), hybrid retrieval (dense plus `tsvector`, fused with RRF),
+cited proposals, deterministic policy gate, maker-checker approvals, hash-chained audit, SSE progress, recovery of
+orphaned jobs.
+
+**Tests.** `InvestigationFlowIT`, `GoldenPathIT`, `EvidenceIngestionIT`, `HybridRetrievalIT`, `RrfFusionTest`,
+`CitationVerifierTest`, `PolicyGateServiceTest`, `InvestigationPromptBuilderTest`, `InvestigationRecoveryIT`,
+`InvestigationStreamingIT`, `SseProgressBroadcasterTest`, `SseFanoutIT`, `AuditChainIT`, `AuditHashingTest`,
+`ResolutionPathArchitectureTest`.
+
+**Run.** `mvn clean verify`. Key-free: the default profile is `mock-llm`.
+
+**Expected.** Evidence, then a cited proposal, then a route, then approval by a different person, then `RESOLVED`; an
+injection note is quarantined; the audit chain verifies and the append-only trigger rejects updates; a reviewer
+challenge always routes to manual review (E-04); only `ResolutionCommitService` resolves a break (E-03).
+
+**Evidence.** E-01, E-03, E-04, E-16; the phase 2 logs `docs/proof/phase2a-unit-test.log`,
+`docs/proof/phase2a-failsafe.log`, `docs/proof/phase2b-verify.log`, `docs/proof/phase2c-verify.log` (each ends in
+BUILD SUCCESS; they are UTF-16 files, open with an editor that detects it).
+
+**Limits.** The model proposes, Java decides; model quality is measured separately (F25, F26).
+
+## F23 Production hardening: resilience, PII, outbox, digest, rate limit, API hygiene
+
+**What and why.** Retry plus circuit breaker around the model, PII masking (identifiers, optional Presidio names),
+transactional outbox to Kafka, daily digest, per-tenant rate limit on investigations, optional Swagger, idempotency
+keys and `problem+json` errors.
+
+**Tests.** `LlmResilienceTest`, `LlmResilienceIT`, `PiiMaskerTest`, `NerMaskingTest`, `PresidioNerIT`,
+`InjectionScannerTest`, `KafkaOutboxIT`, `DailyDigestIT`, `TokenBucketRateLimiterTest`, `RateLimitIT`,
+`SwaggerEnabledIT`, `SwaggerDisabledByDefaultIT`, `IdempotencyIT`, `ProblemJsonIT`.
+
+**Run.** `mvn clean verify` (Kafka, Redis and Presidio run in Testcontainers).
+
+**Expected.** Breaker opens and fails fast on an outage and the break goes to `FAILED_RETRYABLE`
+(`docs/adr/ADR-llm-circuit-breaker.md`); IBAN and card masked before the call; one break despite Kafka redelivery,
+malformed messages to the dead-letter topic; third request of a burst gets 429 with `Retry-After`; default config
+exposes no Swagger paths.
+
+**Evidence.** E-01, E-16; ADRs `ADR-llm-circuit-breaker.md`, `ADR-outbox-kafka.md`; README "Test suite" table.
+
+**Limits.** The rate limit is per JVM unless `RATE_LIMIT_STORE=redis` (F6).
+
+## F24 Audit anchoring (signed chain heads in S3 Object Lock)
+
+**What and why.** Ed25519-signed chain heads written once to an Object Lock bucket, so a consistent rewrite of the
+audit table is detectable.
+
+**Tests.** `AuditAnchorIT` (real MinIO with Object Lock).
+
+**Run.** `mvn verify -Dit.test=AuditAnchorIT`.
+
+**Expected.** Anchor written once; the locked object cannot be deleted; a consistent chain rewrite is detected; only
+`SRE_ADMIN` and the right tenant can verify; signatures cannot be forged.
+
+**Evidence.** README features table (Audit row) and "Test suite" row for `AuditAnchorIT`. No separate proof file.
+
+**Deferred to the final phase.** Anchoring to real S3 (PQ1.2.8). MinIO and the LocalStack Object Lock check in CI
+(`terraform-localstack` job) are the local proof.
+
+## F25 Evaluation harness, Phase 4A
+
+**What and why.** 28 labelled synthetic breaks through the real pipeline; root cause, route, citation and retrieval
+numbers; the mock-llm run is a regression gate in the build.
+
+**Tests.** `EvalCaseLoaderTest`, `InvestigationEvalIT`, `RetrievalEvalIT`, `EvalRunnerCitedFilesIT`.
+Paid and opt-in: `OpenAiInvestigationEvalIT` (tag `openai`, needs `OPENAI_API_KEY`).
+
+**Run.** Gate: `mvn clean verify`. Live: set `OPENAI_API_KEY`, then
+`mvn verify "-Dfailsafe.excludedGroups=ollama,bedrock,gateway,gateway-live,eka,platform-live,rero-live" -Dit.test=OpenAiInvestigationEvalIT`.
+Compare reports with `scripts/eval-compare.ps1`.
+
+**Expected.** Mock gate: metrics at or above the floor in `thresholds-mock.json`, nothing routes to `AUTO_RESOLVE`.
+Live single call (2026-11-09, `gpt-4o-mini`): root cause 96.4% (27/28), $0.00015 per case.
+
+**Evidence.** E-10; `docs/proof/phase4-openai-eval.md`; `eval/human-scores.csv`.
+
+**Limits.** Synthetic, author-written cases, n = 28, one run; not a benchmark. Live run is local, not in CI.
+
+## F26 Investigation agent (4B) and supervisor agents (4G)
+
+**What and why.** Optional `AGENT` mode (LangChain4j, four read-only audited tools, tenant bound from the job) and
+`SUPERVISED` / `SUPERVISED_PLANNED` modes (analyst, risk checker, reviewer, one shared budget). Both off by default.
+
+**Tests.** `AgentInvestigationIT`, `AgentSecurityIT`, `AgentAuditIT`, `AgentSearchQueryIT`,
+`AgentDisabledByDefaultIT`, `SupervisedInvestigationIT`, `SupervisedDisabledByDefaultIT`, `ReconToolsTest`,
+`ReviewerVerdictTest`, `AgentEvalIT`. Paid: `OpenAiAgentEvalIT`, `OpenAiModeComparisonIT`, `SupervisedEvalIT`.
+
+**Run.** `mvn clean verify` for the free tests. Live comparison needs `OPENAI_API_KEY` (see F25).
+
+**Expected (free).** A tool never accepts a tenant argument; denied and successful calls are audited; modes are off
+unless configured; a reviewer challenge routes to manual review.
+**Expected (live, E-10).** Agent: root cause 100% at about $0.0012 per case (about 8x single call), route accuracy
+57.1% against 89.3%. Supervised on 40 cases: 7.9x and 12.3x cost against a 5x limit, so the rule written in advance
+was not met; single call stays the default.
+
+**Evidence.** E-04, E-10, `docs/proof/phase4-openai-eval.md`, `docs/proof/phase4g-supervised-eval.md`, raw reports in
+`docs/proof/4g-live-run3-2026-11-13/` (the partial first attempt is `4g-live-run1-2026-11-13/`),
+`docs/adr/ADR-supervisor-agents.md`.
+
+**Limits.** One run, one model, synthetic cases. Live runs are local and paid, never in CI.
+
+## F27 Alert delivery, Phase 4C
+
+**What and why.** Prometheus alert rules routed by Alertmanager to e-mail (breaker open, LLM error rate, spend burn,
+NER down, outbox, failed investigations, tool denials).
+
+**Tests.** `docker/observability/alerts.test.yml` (`promtool test rules`, 14 named cases in the file; README text
+mentions 14 and 16, the file is the source), CI job `alert rules + alertmanager config`, `ObservabilityIT` (series
+names the rules query exist).
+
+**Run.** `promtool test rules docker/observability/alerts.test.yml` (or the CI job). Outage drill: follow
+`docs/proof/4c-outage-drill-2026-11-10.md`.
+
+**Expected.** Rule tests pass; in the drill a real 503 outage and a closed NER port produced alerts that reached a
+local Mailpit inbox (`docs/proof/4c-alert-email.txt`).
+
+**Evidence.** `docs/proof/4c-outage-drill-2026-11-10.md`, `docs/proof/4c-alert-email.txt`, CI `ci` (alerts job).
+
+**Deferred to the final phase.** Real SMTP delivery (PQ1.2.7, D1.2.11): needs real credentials in `alertmanager.yml`
+(kept out of git). Only the Mailpit sink is proven.
+
+## F28 Amazon Bedrock adapter, Phase 4D
+
+**What and why.** `bedrock` chat profile beside `openai` and `ollama`; embeddings stay on OpenAI.
+
+**Tests.** `BedrockAdapterIT` (parsing, usage and cost, output cap, throttle retry, no retry on bad input, breaker
+opens), `BedrockFakeEvalIT` (28 cases through the adapter against a fake Converse endpoint). Live, tag `bedrock`:
+`BedrockEvalIT`, `BedrockChatSmokeIT`.
+
+**Run.** Fake: `mvn clean verify`. Live (deferred): AWS credentials and model access, `BEDROCK_LIVE=true`, then run the
+two `bedrock` tests with `-Dfailsafe.excludedGroups=` set to exclude the other tags.
+
+**Expected (fake).** Scores equal the mock-llm floor (adapter fidelity, not model quality).
+
+**Evidence.** `docs/proof/4d-bedrock-fake-eval-2026-11-10.md`, `docs/proof/eval/report-bedrock-fake-2026-11-10.md`.
+
+**Deferred to the final phase.** Live Bedrock runs and the OpenAI versus Bedrock comparison (PQ1.2.6). Cost and quality
+on Bedrock are not claimed.
+
+## F29 AWS deployment with Terraform, Phase 4E
+
+**What and why.** Terraform for ECS Fargate, RDS pgvector, S3 Object Lock, Secrets Manager, GitHub OIDC, budget;
+deploy, record, destroy.
+
+**Tests.** `infra/terraform/**/tests/*.tftest.hcl` (38 `run` blocks across 8 files, mock AWS provider), CI jobs
+`terraform fmt, validate, test, tflint, checkov` and `terraform apply + destroy against LocalStack` (apply, no drift,
+Object Lock refuses a delete, destroy). `deploy-aws.yml` is the real-account workflow.
+
+**Run.** `terraform -chdir=infra/terraform/modules/network test` (and each module); LocalStack apply:
+`docs/proof/4e-localstack-apply-2026-11-10.md`.
+
+**Expected.** All module tests pass; the LocalStack apply and destroy leave no resources and no drift.
+
+**Evidence.** `docs/proof/4e-localstack-apply-2026-11-10.md`, CI `ci` job `terraform-localstack` (`ci` #56 per the
+status tracker), `infra/README.md`.
+
+**Deferred to the final phase.** Real apply, record and destroy in an AWS account (Q4.6, D1.2.8, PQ1.2.8); needs
+credentials and cost approval. LocalStack proves the plan shape, not real-AWS behaviour or cost.
+
+## F30 Observability dashboard and semantic cache savings, Phase 5C and 5D
+
+**What and why.** One real run fills the Grafana dashboard, Prometheus series and Jaeger traces. The Redis semantic
+cache serves repeat investigations without a model call.
+
+**Tests.** `ObservabilityIT`, `SemanticCacheIT`, `SemanticCacheMathTest`, `TieredSemanticCacheIT` (F18).
+
+**Run.** Mechanism: `mvn clean verify`. Dashboard run: `docker compose -f docker/docker-compose.yml --profile
+observability up -d`, start the app with `TRACING_ENABLED=true`, run `scripts/demo-golden-path.ps1`. Cache run:
+`--profile cache` and `CACHE_ENABLED=true`. Both runs use real OpenAI embeddings (`OPENAI_API_KEY`, under one cent).
+
+**Expected.** Dashboard panels and traces fill; metrics carry no tenant label by design. Cache: 3 repeats served without
+a model call (2 exact, 1 semantic), 3 misses called the model, route unchanged; added evidence forces a fresh call.
+
+**Evidence.** E-14, E-15, `docs/proof/5c-observability-dashboard-2026-11-15.md`,
+`docs/proof/5d-semantic-cache-savings-2026-11-15.md`, `docs/adr/ADR-semantic-cache.md`.
+
+**Limits.** The dashboard screenshot named in E-14 (`docs/media/5c-grafana-dashboard-2026-11-15.png`) is not in the
+repo: `docs/media/` is empty. Savings are one local measurement with list-price estimates, not a production hit rate.
+
+## F31 Console UI and Kubernetes manifests
+
+**Tests.** UI: `ui/src/app/**/*.spec.ts` (Karma). Kubernetes: CI step `kubeconform` on `k8s/base`,
+`k8s/overlays/kind`, `k8s/overlays/keda`.
+
+**Run.** `cd ui && npx ng test --watch=false --browsers=ChromeHeadless`; render and validate with `kubectl kustomize`
+and kubeconform as in `k8s/README.md`.
+
+**Expected.** UI 29 of 29 passed (E-33). Manifests pass strict schema validation.
+
+**Evidence.** E-33, E-21. README says the manifests and HPA were validated on kind, but no proof file for that run is in
+`docs/proof/`, so treat it as unrecorded. KEDA scaling and browser end-to-end runs are not tested.
+
+---
+
+## Phase 1 to 5 evidence map
+
+Every path below was checked to exist on 2026-11-19. "CI" means the run is recorded in a register row; otherwise the
+result is a local run or a log.
+
+| Feature | Guide | Test classes | Proof files | Register | Status |
+|---|---|---|---|---|---|
+| Foundation, security, tenant isolation | F21 | `SecurityAndTenantIsolationIT`, `RowLevelSecurityIT`, `KeycloakIT`, `BreakAndEvidenceIT`, `EvidenceContentIT` | none beyond CI | E-01, E-02, E-13, E-16 | CI green |
+| Investigation pipeline | F22 | `InvestigationFlowIT`, `GoldenPathIT`, `HybridRetrievalIT`, `AuditChainIT`, `PolicyGateServiceTest` | `docs/proof/phase2a-*.log`, `phase2b-verify.log`, `phase2c-verify.log` | E-03, E-04 | CI green |
+| Hardening (breaker, PII, outbox, digest, rate limit) | F23 | `LlmResilienceIT`, `PiiMaskerTest`, `PresidioNerIT`, `KafkaOutboxIT`, `DailyDigestIT`, `RateLimitIT` | ADRs only | E-16 | CI green |
+| Audit anchoring | F24 | `AuditAnchorIT` | none | none | CI (suite); real S3 deferred |
+| Evaluation harness | F25 | `InvestigationEvalIT`, `RetrievalEvalIT`, `EvalCaseLoaderTest`, `OpenAiInvestigationEvalIT` | `docs/proof/phase4-openai-eval.md` | E-10 | gate CI; live local, paid |
+| Agent and supervisor modes | F26 | `AgentInvestigationIT`, `SupervisedInvestigationIT`, `SupervisedEvalIT`, `OpenAiAgentEvalIT` | `docs/proof/phase4g-supervised-eval.md`, `4g-live-run3-2026-11-13/` | E-04, E-10 | free ITs CI; live local, paid; rule not met |
+| Alert delivery | F27 | `alerts.test.yml`, `ObservabilityIT` | `docs/proof/4c-outage-drill-2026-11-10.md`, `4c-alert-email.txt` | none | local drill; real SMTP deferred |
+| Bedrock adapter | F28 | `BedrockAdapterIT`, `BedrockFakeEvalIT`, `BedrockEvalIT` (live) | `docs/proof/4d-bedrock-fake-eval-2026-11-10.md`, `docs/proof/eval/report-bedrock-fake-2026-11-10.md` | none | fake CI; live deferred |
+| AWS Terraform | F29 | `*.tftest.hcl` (8 files) | `docs/proof/4e-localstack-apply-2026-11-10.md` | none | LocalStack CI; real apply deferred |
+| Dashboard and cache savings | F30 | `ObservabilityIT`, `SemanticCacheIT`, `TieredSemanticCacheIT` | `docs/proof/5c-observability-dashboard-2026-11-15.md`, `5d-semantic-cache-savings-2026-11-15.md` | E-14, E-15 | mechanism CI; figures local |
+| UI and Kubernetes | F31 | `ui/src/app/**/*.spec.ts`, kubeconform step | none | E-33, E-21 | CI (schema and specs only) |
+
+Items with no register row (F24, F27, F28, F29, F31 manifests on kind) are candidates for new rows in the platform
+register; this change does not edit the register.

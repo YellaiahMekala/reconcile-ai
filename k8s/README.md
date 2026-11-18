@@ -63,7 +63,7 @@ stays low while the queue fills and the base HPA reacts late.
 | What scales | the `reconcile-ai` Deployment |
 | Trigger 1 (Prometheus) | `sum(reconcile_investigations_executor_active) + sum(reconcile_investigations_executor_queued)` in namespace `reconcile`, `AverageValue` target 3 per pod (a pod runs at most 4 and queues the rest) |
 | Trigger 2 (CPU) | `Utilization` 70% |
-| Replicas | min 2, max 6; polling every 15 s, cooldown 300 s |
+| Replicas | min 2, max 6. `pollingInterval: 15` / `cooldownPeriod: 300` are kept, but KEDA 2.21 warns they only matter with `minReplicaCount: 0`; the real damping is the HPA `behavior` below |
 | Behaviour | scale up 2 pods per 30 s; scale down 1 pod per 60 s after a 300 s window |
 | Prometheus down | `ignoreNullValues: "false"`, so KEDA reports an error and holds the current replica count |
 | Other changes | deletes the base HPA (KEDA creates its own) and sets `RATE_LIMIT_STORE=redis` so replicas share one rate-limit bucket per tenant |
@@ -76,7 +76,7 @@ Apply it instead of the base or kind overlay. It builds on `base/` only, so supp
 kubectl apply -k k8s/overlays/keda
 ```
 
-CI renders this overlay and checks it with kubeconform (schema only). Scaling behaviour has not been run on a cluster.
+CI renders this overlay and checks it with kubeconform (schema only). Scaling was also run on a kind cluster with KEDA 2.21.1 (PQ1.2.1, 2026-11-19): the ScaledObject became Ready and scaled the Deployment 2 to 4 to 6 as a stubbed Prometheus value rose, held its count while Prometheus was down, and scaled down one pod at a time after the 300 s window. That run used a busybox stand-in for the app and a static stub Prometheus (`overlays/keda-kind-proof/`, test harness only), not the real image or real metrics; it surfaced and fixed a missing `namespace` on the ScaledObject. Proof: `docs/proof/pq1-2-1-keda-kind-2026-11-19.md`.
 
 ## Production notes (not in this repo)
 

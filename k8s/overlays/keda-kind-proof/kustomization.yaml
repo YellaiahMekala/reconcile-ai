@@ -1,0 +1,12 @@
+# TEST HARNESS ONLY (PQ1.2.1): proves the KEDA overlay on a kind cluster without the real app image or a real Prometheus.
+#  - the app container is swapped for a busybox httpd that answers the actuator probes (stand-in workload)
+#  - a stub "prometheus-server" in namespace monitoring answers /api/v1/query with a value you control (see stub-prometheus.yaml)
+# The ScaledObject, the base HPA removal and the ConfigMap patch come unmodified from ../keda.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../keda
+  - dev-secret.yaml
+  - stub-prometheus.yaml
+patches:
+  - path: stub-app.yaml

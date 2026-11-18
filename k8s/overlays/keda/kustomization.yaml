@@ -6,6 +6,9 @@
 # Several replicas share one rate-limit bucket per tenant (RATE_LIMIT_STORE=redis).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# The ScaledObject must live in the same namespace as the Deployment it scales; the base sets this for its own
+# resources only, so without it the ScaledObject lands in the current/default namespace (found on kind, PQ1.2.1).
+namespace: reconcile
 resources:
   - ../../base
   - scaledobject.yaml
