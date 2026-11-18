@@ -24,16 +24,23 @@ import java.util.Map;
  * @param tenants        one OAuth client per reconcile-ai tenant, required. EKA isolates by caller identity (spike
  *                       S-2), so there is no shared client: a tenant without an entry gets UNAVAILABLE
  *                       ({@code TENANT_CREDENTIALS_MISSING}) and nothing is sent
+ * @param relevanceFilterEnabled D1.1.1 relevance filter on hits before they reach the prompt; default true
+ * @param minScore       keep a hit only if EKA's {@code scores.cosine} is at least this; default 0.0 (only drops
+ *                       negative or missing scores: cosine scale depends on EKA's embedding model, tune per corpus)
+ * @param categoryMatch  keep a hit only if it mentions a category term found in the break's note or evidence;
+ *                       default true. No category signal in the break means the hit is kept
  */
 @ConfigurationProperties("reconcile.knowledge")
 public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenUri, String tokenScope,
                                   Duration connectTimeout, Duration requestTimeout, int topK, int maxSnippetChars,
                                   int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
-                                  Duration breakerOpenFor, Map<String, TenantClient> tenants) {
+                                  Duration breakerOpenFor, Map<String, TenantClient> tenants,
+                                  Boolean relevanceFilterEnabled, Double minScore, Boolean categoryMatch) {
 
     /** {@code clientSecretEnv} names the variable that holds the secret; the secret never sits in configuration. */
     public record TenantClient(String clientId, String clientSecretEnv) { }
 
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public KnowledgeProperties {
         tenants = tenants == null ? Map.of() : Map.copyOf(tenants);
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(2) : connectTimeout;
@@ -44,5 +51,17 @@ public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenU
         maxTotalChars = maxTotalChars <= 0 ? 2400 : maxTotalChars;
         breakerFailureRate = breakerFailureRate <= 0 ? 50 : breakerFailureRate;
         breakerWindow = breakerWindow <= 0 ? 10 : breakerWindow;
+        relevanceFilterEnabled = relevanceFilterEnabled == null ? Boolean.TRUE : relevanceFilterEnabled;
+        minScore = minScore == null ? 0.0 : minScore;
+        categoryMatch = categoryMatch == null ? Boolean.TRUE : categoryMatch;
+    }
+
+    /** Constructor without the D1.1.1 relevance settings: the safe defaults apply. */
+    public KnowledgeProperties(boolean enabled, String baseUrl, String tokenUri, String tokenScope,
+                               Duration connectTimeout, Duration requestTimeout, int topK, int maxSnippetChars,
+                               int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
+                               Duration breakerOpenFor, Map<String, TenantClient> tenants) {
+        this(enabled, baseUrl, tokenUri, tokenScope, connectTimeout, requestTimeout, topK, maxSnippetChars,
+                maxTotalChars, failClosed, breakerFailureRate, breakerWindow, breakerOpenFor, tenants, null, null, null);
     }
 }

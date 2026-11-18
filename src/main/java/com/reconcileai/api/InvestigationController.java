@@ -28,6 +28,7 @@ import java.util.UUID;
  *  POST /api/v1/breaks/{breakId}/investigations   RECON_ANALYST   202 | 400 | 404 | 409 | 503
  *  POST /api/v1/investigations/{jobId}/reconcile  APPROVER_L2, SRE_ADMIN  200 | 400 | 404 | 409 | 503
  *  GET  /api/v1/investigations/{jobId}/gateway-calls APPROVER_L2, SRE_ADMIN 200 | 404
+ *  GET  /api/v1/breaks/{breakId}/investigations/latest any app role 200 | 404
  *  GET  /api/v1/investigations/{jobId}            any app role    200 | 404
  *  GET  /api/v1/investigations/{jobId}/events     any app role    text/event-stream | 404 | 503
  *  GET  /api/v1/investigations/{jobId}/tool-calls any app role    200 | 404
@@ -87,6 +88,13 @@ public class InvestigationController {
     @PreAuthorize(ANY_APP_ROLE)
     public InvestigationJobResponse job(@PathVariable UUID jobId) {
         return InvestigationJobResponse.from(service.getJob(jobId));
+    }
+
+    /** The break's most recent job, so the console can show its knowledge and gateway panels after a page reload. */
+    @GetMapping("/api/v1/breaks/{breakId}/investigations/latest")
+    @PreAuthorize(ANY_APP_ROLE)
+    public InvestigationJobResponse latestJob(@PathVariable UUID breakId) {
+        return InvestigationJobResponse.from(service.latestJobForBreak(breakId));
     }
 
     /** Lifecycle events only (status/stage/proposalId). Needs the Authorization header: use fetch(), not EventSource. */

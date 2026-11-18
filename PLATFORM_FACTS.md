@@ -18,6 +18,7 @@ Roles: ANY = RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN. All paths need 
 | GET | /api/v1/breaks/{breakId}/evidence/{evidenceId}/content | ANY | – | 200 octet-stream, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` | same |
 | GET | /api/v1/breaks/{breakId}/evidence/search?q= | RECON_ANALYST, APPROVER_L1, APPROVER_L2 (not SRE_ADMIN) | `q` not blank, max 500 | 200 array SearchHit | `api/EvidenceSearchController.java` |
 | POST | /api/v1/breaks/{breakId}/investigations | RECON_ANALYST | optional JSON `analystNote` (max 1000), `mode` (max 16: SINGLE_CALL default, AGENT, SUPERVISED, SUPERVISED_PLANNED) | **202**, `Location: /api/v1/investigations/{id}`, InvestigationJobResponse | `api/InvestigationController.java`, `app/investigation/InvestigationService.java` |
+| GET | /api/v1/breaks/{breakId}/investigations/latest | ANY | – | 200 InvestigationJobResponse of the break's newest job (so the console shows knowledge and gateway panels after a reload); 404 `JOB_NOT_FOUND` when the break has no job or belongs to another tenant | `api/InvestigationController.java`; `LatestInvestigationIT` |
 | GET | /api/v1/investigations/{jobId} | ANY | – | 200 InvestigationJobResponse (polling path) | `api/InvestigationController.java` |
 | GET | /api/v1/investigations/{jobId}/events | ANY | `Authorization` header (use fetch, not EventSource) | `text/event-stream`, event name `progress`, JSON data; keep-alive comments; DB snapshot on subscribe; stream expires after 120 s | `api/InvestigationController.java`, `infra/streaming/SseProgressBroadcaster.java`, `yml` emitter-timeout-ms |
 | GET | /api/v1/investigations/{jobId}/tool-calls | ANY | – | 200 array `{seq, tool, outcome, resultChars, latencyMs, agentName}`; no arguments | `infra/ai/agent/AgentToolCallStore.java` |
@@ -55,9 +56,9 @@ Roles: ANY = RECON_ANALYST, APPROVER_L1, APPROVER_L2, SRE_ADMIN. All paths need 
 - Start preconditions (`InvestigationService.start`): mode enabled (else 400 INPUT_REJECTED); per-tenant rate limit (429); note passes injection scan; no QUEUED/RUNNING job for the break (409 INVESTIGATION_IN_PROGRESS); the break's last job is not an unreconciled gateway unknown outcome (409 OUTCOME_UNRECONCILED, Q2.3); at least one READY evidence and none PROCESSING (409 EVIDENCE_NOT_READY); lifecycle allows it (409 ILLEGAL_BREAK_STATE). Executor queue full gives 503 + `Retry-After: 30`.
 - Gateway route (`GATEWAY_ENABLED=true`, `infra/gateway/`, `app/gateway/`): the SINGLE_CALL model call goes to ai-gateway `POST /api/v1/chat` with a client-credentials token (`scope=aud-ai-gateway`) and key `recon:<jobId>:investigate:1`; one transport retry only on not-sent codes. Each attempt is a `gateway_call` row (V13: outcome SUCCESS / REFUSED / UNKNOWN / NOT_SENT, http status, code, invocation id, tokens); a success also writes `llm_call` with model `ai-gateway`. Failure mapping (`app/gateway/GatewayFailure.java`): reason `GATEWAY_<code>`; `UNKNOWN_OUTCOME`, `IDEMPOTENCY_UNKNOWN_OUTCOME`, `TRANSPORT_UNKNOWN_OUTCOME`, `IDEMPOTENCY_IN_PROGRESS` flag the job `outcome_unknown`; `RISK_BLOCKED`, `SENSITIVITY_BLOCKED` move the break to MANUAL_REVIEW_REQUIRED (`dom/BreakItem.markPolicyBlocked`); everything else leaves it FAILED_RETRYABLE. System and user text are PII-masked before the request leaves (`infra/ai/InvestigationAiClient.viaGateway`). The advisor chain and the Resilience4j breaker are not on this route.
 - Evidence upload is refused (409) while the break is INVESTIGATING, PENDING_L1, PENDING_L2, RESOLVED, AUTO_RESOLVED (`dom/BreakItem.java:121`).
-- Idempotency: break create is unique on (tenant_id, break_reference), duplicate gives 409. Evidence is deduplicated by SHA-256. No `Idempotency-Key` header support found in code.
+- Idempotency: break create is unique on (tenant_id, break_reference), duplicate gives 409. Evidence is deduplicated by SHA-256. Optional `Idempotency-Key` header (D1.1.4, `infra/web/IdempotencyFilter.java`, V17 `idempotency_record`) on POST breaks, evidence and investigations: replay of the stored 2xx response, `422 IDEMPOTENCY_KEY_REUSED` on a different payload, scoped per tenant + user + endpoint, 24 h TTL with an hourly purge (`IdempotencyIT`).
 
-**Errors** (`api/GlobalExceptionHandler.java`, `api/dto/ApiError.java`). Body is `{code, message, timestamp}` with `application/json`. **Not** problem+json (RFC 7807).
+**Errors** (`api/GlobalExceptionHandler.java`, `infra/web/Problems.java`). RFC 7807 `application/problem+json` (D1.1.4): `type`, `title`, `status`, `detail`, `instance` plus the extensions `code`, `message`, `timestamp`. Codes and statuses below unchanged. 401/403 from the security filters use the same shape (`infra/security/ProblemSecurityHandlers.java`, `ProblemJsonIT`).
 
 | HTTP | code |
 |---|---|
@@ -176,8 +177,8 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 | Rate limit shared through Redis (`RATE_LIMIT_STORE=redis`) | Built, default is per JVM. Real Redis in tests: two replicas share a bucket, 40 concurrent requests allow exactly 10, TTL, fallback to the local bucket | `RedisTokenBucketRateLimiterIT` (4), `SharedRateLimitIT` (2) |
 | Executor gauges and KEDA overlay | Built: gauges `reconcile.investigations.executor.active`, `.queued`, `.capacity`; `k8s/overlays/keda` (ScaledObject 2 to 6, Prometheus trigger on active+queued at 3 per pod, CPU 70%, `RATE_LIMIT_STORE=redis`; base CPU HPA removed). Validated only: rendered and schema-checked with kubeconform (datreeio CRDs-catalog) in CI, not run on a cluster with KEDA | `InvestigationQueueMetricsTest` (1), `k8s/overlays/keda/`, CI job k8s |
 | Auto-commit on AUTO_RESOLVE | Not built (downgraded to L1) | `ProposalService.java` |
-| Idempotency-Key header | Not built | none in `api/` |
-| problem+json errors | Not built | `ApiError.java` |
+| Idempotency-Key header | Built (D1.1.4) | `IdempotencyFilter.java`, V17; `IdempotencyIT` |
+| problem+json errors | Built (D1.1.4) | `GlobalExceptionHandler.java`, `Problems.java`; `ProblemJsonIT` |
 | Service-account client (inbound to reconcile-ai) | Not built | realm json |
 | OpenAI chat | Run live (4B eval; 4G four-mode comparison, 40 cases, 2026-11-13) | `docs/proof/phase4-openai-eval.md`, `docs/proof/phase4g-supervised-eval.md` |
 | Bedrock | Built, run only against a fake endpoint; live not run | `BedrockFakeEvalIT`, `BedrockEvalIT` tagged `bedrock` |
@@ -202,7 +203,7 @@ Status as of 2026-11-14 (Q0.3). "Annotated" means the private BRD/TDD keep the d
 | 10 | BRD §4.2 says Kubernetes manifests are untested → CI renders them with kustomize and schema-checks them with kubeconform (no cluster in CI) | BRD §4.2 and TDD §9 reworded |
 | 11 | BRD/TDD describe "Repo A/Repo B" → only this repo exists | BRD header and TDD header annotated |
 | 12 | Local JWT mode checks neither issuer nor audience | README security row fixed |
-| 13 | TDD §9 "Idempotency keys on every mutating request" → no `Idempotency-Key` header; only unique break reference, evidence SHA-256 dedup and the one-running-job 409 | TDD §9 annotated (found in Q0.3) |
+| 13 | TDD §9 "Idempotency keys on every mutating request" → no `Idempotency-Key` header; only unique break reference, evidence SHA-256 dedup and the one-running-job 409 | TDD §9 annotated (found in Q0.3). Since D1.1.4 an optional `Idempotency-Key` exists on the three creating POSTs (not every mutating request) |
 | 14 | TDD §4 API table (sync `/investigate`, `/approve`, `/reject`, `/breaks/{id}/audit`) → async jobs, one `/decision` endpoint, `/audit/aggregates/{id}` | TDD §4 annotated, points to §1 here (found in Q0.3) |
 
 ## 9. External recommender and EKA

@@ -304,6 +304,18 @@ export class BreakDetailPage implements OnInit, OnDestroy {
     this.api.listEvidence(id).subscribe({ next: (e) => this.evidence.set(e), error: fail });
     this.api.proposalsForBreak(id).subscribe({ next: (p) => this.proposals.set(p), error: fail });
     this.api.auditFor(id).subscribe({ next: (a) => this.audit.set(a), error: () => this.audit.set([]) });
+    this.loadLatestJob(id);
+  }
+
+  /** Restores the knowledge and gateway panels after a reload. 404 (no job yet) is expected and silent. */
+  private loadLatestJob(breakId: string): void {
+    this.api.latestJob(breakId).subscribe({
+      // Never overwrite a job started or loaded in this session, which may be newer than this read.
+      next: (j) => {
+        if (!this.job() && !this.running()) this.job.set(j);
+      },
+      error: () => undefined,
+    });
   }
 
   upload(ev: Event): void {

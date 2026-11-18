@@ -40,6 +40,23 @@ on the governed path without changing the gateway.
 | 401/403 = `UNAVAILABLE AUTH`, not counted by the breaker (configuration fault, EKA is up) | `EkaKnowledgeClient` |
 | Only `/api/v1/search` exists in main code; never EKA chat or conversations | `KnowledgeArchitectureTest` |
 
+## Relevance filter (D1.1.1, 2026-11-18)
+
+Context: the Q4.3 ablation (`docs/proof/q4-3-knowledge-ablation-2026-11-18.md`) dropped route accuracy 85.7% to 67.9%
+with knowledge on; the gateway alone was neutral. Fee procedures reached missing-entry and timing prompts.
+
+Decision: `KnowledgeRelevanceFilter` (application layer, pure) runs on an `OK` result before the prompt is built. A hit
+is kept only if (a) EKA's `scores.cosine` (a required field of EKA's `SearchResultOut.scores`, now carried on
+`KnowledgeHit.score`) is at least `reconcile.knowledge.min-score`, and (b) with `reconcile.knowledge.category-match`,
+its file name or text mentions a term of a candidate category. Candidate categories come from the analyst note and the
+retrieved break evidence by a fixed keyword table, never from the generic knowledge query and never from a model.
+Defaults: filter on, min score `0.0` (cosine scale depends on EKA's embedding model; a higher floor needs a measured
+corpus), category match on, and no category signal in the break means the hit is kept (no removal without a signal).
+All dropped: `EMPTY` with reason `FILTERED_LOW_RELEVANCE` in the existing `knowledge_reason` column (no migration), no
+PROCEDURE block, no `kb:` refs. Audit adds `relevanceKept` / `relevanceDropped` counts. Fail-open/fail-closed is
+unchanged. Off-switch: `KNOWLEDGE_RELEVANCE_FILTER=false`. Tests: `KnowledgeRelevanceFilterTest`,
+`KnowledgeRelevanceIT`. Effect on route accuracy is not yet measured (PQ1.2.4, paid run, needs approval).
+
 ## Consequences
 
 - Q1 works with the gateway route on or off, and adds no new path around the gateway.

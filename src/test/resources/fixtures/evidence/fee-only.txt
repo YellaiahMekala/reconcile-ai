@@ -1,0 +1,3 @@
+BANK CHARGES ADVICE - CONTOSO SUPPLIES
+Payment ref PO-77311, currency USD.
+The intermediary bank deducted a wire fee of 500.00 USD before crediting the beneficiary.

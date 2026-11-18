@@ -7,7 +7,8 @@ import java.util.List;
  *
  * @param outcome one of the four outcomes
  * @param reason  short non-sensitive code ({@code TIMEOUT}, {@code HTTP_503}, {@code AUTH}, {@code CIRCUIT_OPEN},
- *                {@code ALL_HITS_SCREENED}, ...); null for {@code OK} and {@code EMPTY}. Never contains document text
+ *                {@code ALL_HITS_SCREENED}, ...); null for {@code OK}, null for {@code EMPTY} unless the relevance filter
+ *                dropped every hit ({@code FILTERED_LOW_RELEVANCE}). Never contains document text
  * @param hits    accepted hits, best first; empty unless {@code OK}
  */
 public record KnowledgeResult(KnowledgeOutcome outcome, String reason, List<KnowledgeHit> hits) {
@@ -28,6 +29,11 @@ public record KnowledgeResult(KnowledgeOutcome outcome, String reason, List<Know
 
     public static KnowledgeResult empty() {
         return new KnowledgeResult(KnowledgeOutcome.EMPTY, null, List.of());
+    }
+
+    /** Every hit EKA returned was dropped by the relevance filter (D1.1.1): EMPTY with a reason. */
+    public static KnowledgeResult filteredOut() {
+        return new KnowledgeResult(KnowledgeOutcome.EMPTY, KnowledgeRelevanceFilter.FILTERED_LOW_RELEVANCE, List.of());
     }
 
     public static KnowledgeResult unavailable(String reason) {

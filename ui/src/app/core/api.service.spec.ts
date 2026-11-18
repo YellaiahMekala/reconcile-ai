@@ -67,4 +67,21 @@ describe('ApiService investigations', () => {
     req.flush([{ attempt: 1, outcome: 'TIMEOUT', ledgerResult: 'NOT_CHECKED' }]);
     expect(calls.length).toBe(1);
   });
+
+  it('reads the latest job of a break', () => {
+    let id = '';
+    api.latestJob('b1').subscribe((j) => (id = j.id));
+    const req = ctrl.expectOne('/api/v1/breaks/b1/investigations/latest');
+    expect(req.request.method).toBe('GET');
+    req.flush({ id: 'j9' });
+    expect(id).toBe('j9');
+  });
+
+  it('surfaces a 404 from the latest-job read as an error the caller can ignore', () => {
+    let status = 0;
+    api.latestJob('b1').subscribe({ error: (e) => (status = e.status) });
+    ctrl.expectOne('/api/v1/breaks/b1/investigations/latest')
+      .flush({ code: 'JOB_NOT_FOUND', message: 'none' }, { status: 404, statusText: 'Not Found' });
+    expect(status).toBe(404);
+  });
 });

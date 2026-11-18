@@ -65,8 +65,13 @@ public class SecurityConfig {
     private boolean swaggerEnabled;
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           com.fasterxml.jackson.databind.ObjectMapper objectMapper) throws Exception {
+        // D1.1.4: 401/403 carry an application/problem+json body; WWW-Authenticate is unchanged.
+        var unauthorized = ProblemSecurityHandlers.entryPoint(objectMapper);
+        var denied = ProblemSecurityHandlers.accessDenied(objectMapper);
         http
+            .exceptionHandling(e -> e.authenticationEntryPoint(unauthorized).accessDeniedHandler(denied))
             // Stateless bearer-token API: no cookies, no browser session, so CSRF does not apply.
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -94,6 +99,8 @@ public class SecurityConfig {
                 .anyRequest().authenticated();
             })
             .oauth2ResourceServer(oauth -> oauth
+                .authenticationEntryPoint(unauthorized)
+                .accessDeniedHandler(denied)
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
         return http.build();
     }
