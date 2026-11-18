@@ -91,7 +91,11 @@ agent mode (off by default), Prometheus alert rules, rate limiting and stored ev
 | Item | Status |
 |---|---|
 | Expose the read-only tools over MCP for other services | Not started; needs a token-based tenant design |
+<<<<<<< HEAD
 | Platform integration (shared token issuer, knowledge search, recommendation intake) | Knowledge search built (Q1.1 to Q1.5, off by default); the rest planned |
+=======
+| Platform integration (shared token issuer, knowledge search, recommendation intake) | Planned |
+>>>>>>> origin/main
 | Trivy scan that fails the build | Listed under Known limitations |
 
 ---
@@ -377,6 +381,9 @@ citation check and the policy gate still run. Hits need the same tenant AND the 
 evidence always forces a fresh call; a suspect analyst note bypasses the cache. Redis errors are misses, never
 failures. Metrics: `reconcile_llm_cache_total{result=hit_exact|hit_semantic|miss|store|error}`; hits are recorded in
 `llm_call` as `CACHE_HIT` with 0 tokens. Tests: `SemanticCacheIT` (real Redis), `SemanticCacheMathTest`.
+Measured on the running app (three repeats avoided three model calls; changed evidence forced a fresh one):
+`docs/proof/5d-semantic-cache-savings-2026-11-15.md`. ADRs: `docs/adr/ADR-semantic-cache.md`,
+`ADR-llm-circuit-breaker.md`, `ADR-outbox-kafka.md`.
 
 **Kafka outbox + intake.** `docker compose -f docker/docker-compose.yml --profile kafka up -d`, run with
 `KAFKA_ENABLED=true`. Break creation (REST or Kafka), proposal routing and resolution write an `outbox_event` row in the
@@ -408,6 +415,9 @@ curl.exe -s http://localhost:8080/actuator/prometheus | Select-String reconcile_
 - Jaeger: http://localhost:16686, service `reconcile-ai`. Each investigation job is one span (`investigation-job`)
   with the Spring AI chat-client and model spans nested under it, linked to the `POST /investigations` request.
 - Cost prices: `LLM_PROMPT_USD_PER_MILLION`, `LLM_COMPLETION_USD_PER_MILLION` (defaults: gpt-4o-mini list price).
+- Proof that the dashboard, series, traces and per-tenant `llm_call` rows fill from one golden-path run:
+  `docs/proof/5c-observability-dashboard-2026-11-15.md`. Metrics carry no tenant label on purpose (cardinality and
+  tenant data leaving through `/actuator/prometheus`); per-tenant spend comes from the `llm_call` table.
 
 **Alerts by e-mail.** Prometheus evaluates `docker/observability/alerts.yml` and hands firing alerts to Alertmanager,
 which e-mails them. Locally the mail goes to Mailpit, a catch-all inbox at http://localhost:8025, so nothing real is
@@ -438,8 +448,13 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
+<<<<<<< HEAD
 Current counts in the default build: **166 unit tests** (surefire), **193 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too. `eka` needs the real EKA edge and the platform realm (free, no model call; `docs/proof/q1-6-eka-isolation-runbook.md`) and is excluded as well.
+=======
+Current counts in the default build: **123 unit tests** (surefire), **179 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
+Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too.
+>>>>>>> origin/main
 
 | Class | Type | Proves |
 |---|---|---|
