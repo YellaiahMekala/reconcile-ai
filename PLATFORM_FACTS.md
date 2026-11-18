@@ -149,6 +149,7 @@ Source: `infra/security/SecurityConfig.java`, `TenantContext.java`, `yml`, `dock
 - From that run's log: unit (surefire) **96**, integration (failsafe) **143**, UI (Karma) **15**; all passed. Excluded by default: groups `openai`, `ollama`, `bedrock` (live tests).
 - Local `mvn clean verify` on 2026-11-16, branch `feature/q2-gateway-governance` (Q2.3–Q2.7, uncommitted): unit **116**, integration **163**, 0 failures. Excluded groups now also `gateway`, `gateway-live`. No CI run yet for this state.
 - After the ledger read, per-tenant credentials and shared rate limit work: unit **123**, integration **179** (to be filled from the build). No CI run yet for this state.
+- Local `mvn clean verify` on 2026-11-18 with platform Q1.1 to Q1.5 (EKA knowledge pre-step, uncommitted): unit **166**, integration **193**, 0 failures. `RealEkaIsolationIT` (tag `eka`) is excluded and has not been run. No CI run yet for this state.
 - Earlier: run #29 (9ee707d) had 96 / 140 / 15. The 3 new ITs are `EvalRunnerCitedFilesIT` (2) and one more case in `SupervisedInvestigationIT`.
 - Other CI jobs in run #29: Angular, mvn clean verify, alert rules, k8s + image, terraform checks, terraform on LocalStack, SBOM.
 

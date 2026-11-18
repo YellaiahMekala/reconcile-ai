@@ -307,4 +307,23 @@ class HttpGatewayChatAdapterTest {
         ex.getResponseBody().write(bytes);
         ex.close();
     }
+
+    @Test
+    void aFailingTokenEndpointIsATypedNotSentRefusal() {
+        HttpClient http = HttpClient.newBuilder().build();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        GatewayChatPort port = new HttpGatewayChatAdapter(http, json, properties,
+            () -> { throw new IllegalStateException("GATEWAY_TOKEN_UNAVAILABLE: token endpoint returned 503"); },
+            clock, sleeps::add, logged::add);
+
+        assertThatThrownBy(() -> port.chat(request(NOW.plusSeconds(60))))
+            .isInstanceOf(com.reconcileai.application.gateway.GatewayCallException.class)
+            .satisfies(e -> assertThat(((com.reconcileai.application.gateway.GatewayCallException) e).code())
+                .isEqualTo("TOKEN_UNAVAILABLE"));
+        assertThat(seen).as("nothing reached the gateway").isEmpty();
+        assertThat(logged).singleElement().satisfies(a -> {
+            assertThat(a.outcome()).isEqualTo(Outcome.NOT_SENT);
+            assertThat(a.code()).isEqualTo("TOKEN_UNAVAILABLE");
+        });
+    }
 }

@@ -171,6 +171,25 @@ reconcile:
     # tenants:
     #   "[TENANT_A]": { client-id: reconcile-ai-tenant-a, client-secret-env: GATEWAY_SECRET_TENANT_A }
     #   "[TENANT_B]": { client-id: reconcile-ai-tenant-b, client-secret-env: GATEWAY_SECRET_TENANT_B }
+  knowledge:                        # platform Q1: EKA procedure knowledge as a pre-step of the single-call mode; off by default
+    enabled: ${KNOWLEDGE_ENABLED:false}
+    base-url: ${EKA_BASE_URL:http://localhost:8080}          # EKA edge; only POST /api/v1/search is called
+    token-uri: ${KNOWLEDGE_TOKEN_URI:http://localhost:8190/realms/platform/protocol/openid-connect/token}
+    token-scope: ${KNOWLEDGE_TOKEN_SCOPE:aud-eka-api}        # the platform realm adds aud=eka-api only for this scope
+    connect-timeout: 2s
+    request-timeout: 5s             # advisory context: a slow EKA must not hold the investigation
+    top-k: 3
+    max-snippet-chars: 800
+    max-total-chars: 2400           # all procedure text in one prompt; separate from the evidence token budget
+    fail-closed: ${KNOWLEDGE_FAIL_CLOSED:false}   # false: continue and record UNAVAILABLE; true: fail the job retryably
+    breaker-failure-rate: 50
+    breaker-window: 10
+    breaker-open-for: 30s
+    # One platform-realm client per tenant is required (EKA isolates by caller identity, spike S-2); no shared client.
+    # The token's tenant_id claim must equal the tenant id exactly. client-secret-env names the variable, never the secret.
+    # tenants:
+    #   "[tenant-a]": { client-id: svc-reconcile-tenant-a, client-secret-env: KC_SVC_TENANT_A_SECRET }
+    #   "[tenant-b]": { client-id: svc-reconcile-tenant-b, client-secret-env: KC_SVC_TENANT_B_SECRET }
   ai:
     log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
     pricing:                        # list price per 1M tokens for the cost metric (ESTIMATED). Defaults: gpt-4o-mini

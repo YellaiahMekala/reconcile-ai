@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.reconcile-ai.local/eka/search-request.json",
+  "$comment": "Copied from EKA docs/openapi.json (commit 3ae3100). Re-copy when EKA changes its search contract.",
+  "properties": {
+    "filters": {
+      "$ref": "#/$defs/SearchFiltersIn"
+    },
+    "query": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Query",
+      "type": "string"
+    },
+    "top_k": {
+      "default": 5,
+      "maximum": 20.0,
+      "minimum": 1.0,
+      "title": "Top K",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "SearchRequest",
+  "type": "object",
+  "$defs": {
+    "SearchFiltersIn": {
+      "properties": {
+        "content_types": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Content Types",
+          "type": "array"
+        },
+        "document_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Document Ids",
+          "type": "array"
+        },
+        "uploaded_after": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Uploaded After"
+        },
+        "uploaded_before": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Uploaded Before"
+        }
+      },
+      "title": "SearchFiltersIn",
+      "type": "object"
+    },
+    "SearchResultOut": {
+      "properties": {
+        "chunk_id": {
+          "format": "uuid",
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "format": "uuid",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "locator": {
+          "additionalProperties": true,
+          "title": "Locator",
+          "type": "object"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "scores": {
+          "$ref": "#/$defs/ScoresOut"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rank",
+        "chunk_id",
+        "document_id",
+        "filename",
+        "locator",
+        "text",
+        "scores"
+      ],
+      "title": "SearchResultOut",
+      "type": "object"
+    },
+    "ScoresOut": {
+      "properties": {
+        "cosine": {
+          "title": "Cosine",
+          "type": "number"
+        },
+        "fused": {
+          "title": "Fused",
+          "type": "number"
+        },
+        "rerank": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rerank"
+        }
+      },
+      "required": [
+        "fused",
+        "cosine"
+      ],
+      "title": "ScoresOut",
+      "type": "object"
+    }
+  }
+}

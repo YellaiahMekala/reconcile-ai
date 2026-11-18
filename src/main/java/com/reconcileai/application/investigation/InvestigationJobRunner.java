@@ -21,6 +21,9 @@ import com.reconcileai.infrastructure.ai.agent.ReviewerVerdict;
 import com.reconcileai.infrastructure.ai.agent.SupervisedInvestigation;
 import com.reconcileai.application.gateway.GatewayCallException;
 import com.reconcileai.application.gateway.GatewayFailure;
+import com.reconcileai.application.knowledge.KnowledgeHit;
+import com.reconcileai.application.knowledge.KnowledgeOutcome;
+import com.reconcileai.application.knowledge.KnowledgeResult;
 import com.reconcileai.infrastructure.ai.advisor.InputGuardAdvisor.PromptBlockedException;
 import com.reconcileai.infrastructure.ai.cache.SemanticCache;
 import com.reconcileai.infrastructure.ai.prompt.ProposalDraft;
@@ -89,6 +92,20 @@ public class InvestigationJobRunner {
     private SemanticCache cache = SemanticCache.DISABLED;
     private io.micrometer.core.instrument.MeterRegistry meters;
     private SupervisedInvestigation supervised;
+    private com.reconcileai.application.knowledge.KnowledgeSearchPort knowledge;
+    private boolean knowledgeFailClosed;
+
+    /**
+     * Optional: EKA procedure knowledge (platform Q1), present only with {@code reconcile.knowledge.enabled=true}.
+     * Used by the single-call mode only, as a deterministic pre-step before the one (possibly gateway-governed) model
+     * call; the agent modes never reach EKA.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setKnowledge(com.reconcileai.application.knowledge.KnowledgeSearchPort knowledge,
+                      com.reconcileai.infrastructure.knowledge.KnowledgeProperties knowledgeProperties) {
+        this.knowledge = knowledge;
+        this.knowledgeFailClosed = knowledgeProperties.failClosed();
+    }
 
     /** Optional: the supervised modes (specialist agents). Missing only in slices that do not load the agent package. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -168,7 +185,9 @@ public class InvestigationJobRunner {
 
             String query = promptBuilder.retrievalQuery(breakItem, job.getAnalystNote());
             List<RetrievedChunk> ranked = retriever.retrieve(tenantId, breakItem.getId(), query);
-            BuiltPrompt prompt = promptBuilder.build(breakItem, job.getAnalystNote(), ranked, props.maxContextTokens());
+            List<KnowledgeHit> procedures = ranked.isEmpty() ? List.of() : consultKnowledge(jobId, tenantId, job);
+            BuiltPrompt prompt = promptBuilder.build(breakItem, job.getAnalystNote(), ranked, props.maxContextTokens(),
+                procedures);
             job = stage(jobId, tenantId, JobStage.CALLING_MODEL,
                 j -> j.recordRetrieval(prompt.includedChunkIds(), prompt.evidenceTokenEstimate()));
 
@@ -213,6 +232,45 @@ public class InvestigationJobRunner {
                 failJob(jobId, tenantId, reasonOf(e));
             }
         }
+    }
+
+    /**
+     * Platform Q1 pre-step: one EKA search for the job's tenant, before the model call. The outcome is stored and
+     * audited (codes and counts only, never passage text) whatever it is. UNAVAILABLE continues with no knowledge
+     * unless {@code KNOWLEDGE_FAIL_CLOSED=true}, which fails the job retryably (break FAILED_RETRYABLE, no proposal).
+     * Skipped when there is no evidence, because then the model is not called at all.
+     */
+    private List<KnowledgeHit> consultKnowledge(UUID jobId, String tenantId, InvestigationJob job) {
+        if (knowledge == null) {
+            return List.of();
+        }
+        KnowledgeResult result = knowledge.search(tenantId, knowledgeQuery(job.getAnalystNote()));
+        tx.executeWithoutResult(s -> {
+            InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            j.recordKnowledge(result.outcome().name(), result.reason(), result.refs());
+            jobs.save(j);
+            Map<String, Object> details = new java.util.LinkedHashMap<>();
+            details.put("jobId", jobId.toString());
+            details.put("outcome", result.outcome().name());
+            if (result.reason() != null) {
+                details.put("reason", result.reason());
+            }
+            details.put("procedures", result.hits().size());
+            audit.record(new AuditEntry(tenantId, "KNOWLEDGE_CONSULTED", "BREAK", j.getBreakItemId(), ACTOR, details));
+        });
+        if (result.outcome() == KnowledgeOutcome.UNAVAILABLE && knowledgeFailClosed) {
+            throw new IllegalStateException("KNOWLEDGE_UNAVAILABLE");
+        }
+        return result.hits();
+    }
+
+    /**
+     * Procedures are found by the kind of problem, not by this break's identifiers: no break reference or amounts go
+     * to EKA. The analyst note is included and masked by the client before it leaves.
+     */
+    static String knowledgeQuery(String analystNote) {
+        String base = "reconciliation break investigation procedure variance fee timing settlement fx duplicate";
+        return analystNote == null || analystNote.isBlank() ? base : base + " " + analystNote;
     }
 
     /**
@@ -284,6 +342,13 @@ public class InvestigationJobRunner {
 
         InvestigationJob done = tx.execute(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            if (j.getStatus() != com.reconcileai.domain.JobStatus.RUNNING || !node.id().equals(j.getOwnerNode())) {
+                // This node stalled past the lease and recovery already failed the job (possibly flagging an unknown
+                // gateway outcome). Writing a proposal now would undo that and could race a newer job on the break.
+                log.warn("Job {} is {} (owner {}); discarding the late result from {}", jobId, j.getStatus(),
+                    j.getOwnerNode(), node.id());
+                return j;
+            }
             BreakItem b = breaks.findByIdAndTenantId(j.getBreakItemId(), tenantId).orElseThrow();
             ResolutionProposal p = proposalService.persistProposal(j, b, draft, citations.valid(),
                 citations.invalidIds(), decision);
