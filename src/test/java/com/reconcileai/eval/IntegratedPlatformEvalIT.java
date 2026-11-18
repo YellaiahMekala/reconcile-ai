@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>
  * Compare with {@link OpenAiInvestigationEvalIT} run the same day (direct OpenAI, no knowledge): same cases, same
  * model, same test hashing embeddings, so the differences are the gateway route and the procedures in the prompt.
+ * Set {@code EVAL_KNOWLEDGE=off} for the ablation (gateway route, no knowledge).
  * Reports, never fails on accuracy; the assertion is that every case produced a result.
  * <pre>
  * GATEWAY_LIVE_APPROVED=yes EKA_LIVE_BASE_URL=http://localhost:8080 KC_SVC_TENANT_A_SECRET=... \
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class IntegratedPlatformEvalIT extends AbstractPostgresIT {
 
     private static final String TENANT = "tenant-a";
+    private static final boolean KNOWLEDGE_ON = !"off".equalsIgnoreCase(System.getenv("EVAL_KNOWLEDGE"));
     private static final String TOKEN_URI = "http://localhost:8190/realms/platform/protocol/openid-connect/token";
 
     @LocalServerPort
@@ -45,7 +47,8 @@ class IntegratedPlatformEvalIT extends AbstractPostgresIT {
         r.add("reconcile.gateway.token-scope", () -> "aud-ai-gateway");
         r.add("reconcile.gateway.tenants.[" + TENANT + "].client-id", () -> "svc-reconcile-tenant-a");
         r.add("reconcile.gateway.tenants.[" + TENANT + "].client-secret-env", () -> "KC_SVC_TENANT_A_SECRET");
-        r.add("reconcile.knowledge.enabled", () -> "true");
+        // Ablation (Q4.3 follow-up): EVAL_KNOWLEDGE=off keeps the gateway route and drops only the knowledge pre-step.
+        r.add("reconcile.knowledge.enabled", () -> String.valueOf(KNOWLEDGE_ON));
         r.add("reconcile.knowledge.base-url", () -> System.getenv("EKA_LIVE_BASE_URL"));
         r.add("reconcile.knowledge.token-uri", () -> TOKEN_URI);
         r.add("reconcile.knowledge.tenants.[" + TENANT + "].client-id", () -> "svc-reconcile-tenant-a");
@@ -59,9 +62,13 @@ class IntegratedPlatformEvalIT extends AbstractPostgresIT {
 
     @Test
     void measureTheIntegratedPath() {
-        EvalHarness.Outcome outcome = EvalHarness.runAndReport(adminJdbc(), "platform-gateway-eka-gpt-4o-mini",
-            "Integrated path: EKA knowledge pre-step (real edge, tenant-a procedures) + one call through ai-gateway "
-                + "(real provider gpt-4o-mini, temperature as configured in the gateway). Embeddings: test hashing model.",
+        String label = KNOWLEDGE_ON ? "platform-gateway-eka-gpt-4o-mini" : "platform-gateway-only-gpt-4o-mini";
+        String description = KNOWLEDGE_ON
+            ? "Integrated path: EKA knowledge pre-step (real edge, tenant-a procedures) + one call through ai-gateway "
+                + "(real provider gpt-4o-mini, temperature as configured in the gateway). Embeddings: test hashing model."
+            : "Ablation: one call through ai-gateway (real provider gpt-4o-mini), knowledge pre-step OFF. "
+                + "Embeddings: test hashing model.";
+        EvalHarness.Outcome outcome = EvalHarness.runAndReport(adminJdbc(), label, description,
             "SINGLE_CALL", new EvalCaseLoader().loadAll(), TENANT);
         assertThat(outcome.results()).hasSize(outcome.summary().cases());
     }

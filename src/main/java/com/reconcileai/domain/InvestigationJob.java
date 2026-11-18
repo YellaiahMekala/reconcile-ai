@@ -101,6 +101,23 @@ public class InvestigationJob {
     @Column(name = "knowledge_refs", columnDefinition = "text")
     private String knowledgeRefs;
 
+    /** RERO mode only: the internal tool budget, fixed at creation. Null for every other mode (no tool access). */
+    @Column(name = "tool_calls_max", updatable = false)
+    private Integer toolCallsMax;
+
+    /**
+     * RERO mode only: tool calls counted so far. Read-only here: the counter is changed solely by the conditional
+     * UPDATE in the internal tool service, so saving this entity can never overwrite it.
+     */
+    @Column(name = "tool_calls_used", insertable = false, updatable = false)
+    private Integer toolCallsUsed;
+
+    @Column(name = "rero_run_id", columnDefinition = "uuid")
+    private UUID reroRunId;
+
+    @Column(name = "rero_gateway_invocation_ids", columnDefinition = "text")
+    private String reroGatewayInvocationIds;
+
     @Column(name = "proposal_id", columnDefinition = "uuid")
     private UUID proposalId;
 
@@ -143,6 +160,30 @@ public class InvestigationJob {
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();
+    }
+
+    /** RERO mode: the tool budget for this job's run token. Set once, before the job is first saved. */
+    public void limitToolCalls(int max) {
+        if (mode != InvestigationMode.RERO || id != null) {
+            throw new IllegalStateException("tool budget is set on a new RERO job only");
+        }
+        this.toolCallsMax = max;
+    }
+
+    /** RERO correlation: the run id and the gateway invocation ids RERO reported (ids only, never content). */
+    public void recordReroRun(UUID runId, List<String> gatewayInvocationIds) {
+        this.reroRunId = runId;
+        this.reroGatewayInvocationIds = gatewayInvocationIds == null || gatewayInvocationIds.isEmpty()
+            ? null : String.join(",", gatewayInvocationIds);
+    }
+
+    public Integer getToolCallsMax() { return toolCallsMax; }
+    public Integer getToolCallsUsed() { return toolCallsUsed; }
+    public UUID getReroRunId() { return reroRunId; }
+
+    public List<String> reroGatewayInvocationIdList() {
+        return reroGatewayInvocationIds == null || reroGatewayInvocationIds.isBlank()
+            ? List.of() : Arrays.asList(reroGatewayInvocationIds.split(","));
     }
 
     public void advance(JobStage next) {

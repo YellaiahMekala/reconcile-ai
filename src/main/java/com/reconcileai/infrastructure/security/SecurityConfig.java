@@ -114,8 +114,9 @@ public class SecurityConfig {
             @Value("${reconcile.security.audience:}") String audience)
             throws IOException {
 
-        OAuth2TokenValidator<Jwt> tenantRequired = new JwtClaimValidator<String>(
-            TenantContext.TENANT_CLAIM, tenant -> tenant != null && !tenant.isBlank());
+        OAuth2TokenValidator<Jwt> tenantRequired = new DelegatingOAuth2TokenValidator<>(
+            new JwtClaimValidator<String>(TenantContext.TENANT_CLAIM, tenant -> tenant != null && !tenant.isBlank()),
+            notARunToken());
 
         if (!issuerUri.isBlank()) {
             return identityProviderDecoder(issuerUri, audience, tenantRequired);
@@ -164,6 +165,17 @@ public class SecurityConfig {
             decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(validators));
             return decoder;
         });
+    }
+
+    /**
+     * Belt and braces for platform Q3: a RERO run token (ES256, {@code aud=reconcile-internal}) already fails the RS256
+     * pin and the realm keys, but it is also refused by audience, so it can never act on a user API.
+     */
+    private static OAuth2TokenValidator<Jwt> notARunToken() {
+        return jwt -> jwt.getAudience() != null && jwt.getAudience().contains("reconcile-internal")
+            ? org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.failure(
+                new org.springframework.security.oauth2.core.OAuth2Error("invalid_token", "run token on a user API", null))
+            : org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success();
     }
 
     /** Maps the JWT {@code roles} claim to Spring authorities using the closed {@link Role} set. */

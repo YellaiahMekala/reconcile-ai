@@ -21,6 +21,15 @@ public interface ResolutionProposalRepository extends Repository<ResolutionPropo
 
     List<ResolutionProposal> findByTenantIdAndBreakItemIdOrderByCreatedAtDesc(String tenantId, UUID breakItemId);
 
+    /** Earlier approved proposals of this tenant, any root cause, newest first (RERO similar-breaks tool, Q3.2). */
+    @Query("""
+        select p from ResolutionProposal p
+         where p.tenantId = :tenantId and p.status = :status and p.breakItemId <> :excludeBreakId
+         order by p.createdAt desc""")
+    List<ResolutionProposal> findRecentResolved(@Param("tenantId") String tenantId,
+                                                @Param("status") ProposalStatus status,
+                                                @Param("excludeBreakId") UUID excludeBreakId, Pageable page);
+
     /** Earlier proposals of this tenant that an approver accepted, for the agent's "similar resolved breaks" tool. */
     @Query("""
         select p from ResolutionProposal p
