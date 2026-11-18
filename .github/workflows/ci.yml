@@ -113,15 +113,30 @@ jobs:
       - name: Build container image
         run: docker build -t reconcile-ai:ci .
 
-      # Report only for now (exit-code 0): findings show in the log without blocking a merge. Make it a gate by
-      # setting exit-code to '1' once the baseline is clean.
+      # Gate: fails the job on any HIGH or CRITICAL finding. ignore-unfixed is on so only actionable findings gate
+      # (a vulnerability with no released fix cannot be remediated by a rebuild or a version bump).
+      # limit-severities-for-sarif makes the SARIF report, and therefore the gate, use the same severity filter.
+      # To accept a specific finding, see "Accepting a Trivy finding" in the README (justification and expiry).
       - name: Scan image for known vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: reconcile-ai:ci
+          format: sarif
+          output: trivy-results.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '0'
+          limit-severities-for-sarif: true
+          exit-code: '1'
+
+      # Upload the report even when the scan failed, so the findings can be read.
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-results.sarif
+          if-no-files-found: warn
+          retention-days: 30
 
   alerts:
     name: alert rules + alertmanager config

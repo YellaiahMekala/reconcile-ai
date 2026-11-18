@@ -69,6 +69,11 @@ export class ApiService {
     return this.http.get<InvestigationJob>(`/api/v1/investigations/${jobId}`);
   }
 
+  /** The break's most recent job (404 when it has none), so panels survive a page reload. */
+  latestJob(breakId: string): Observable<InvestigationJob> {
+    return this.http.get<InvestigationJob>(`/api/v1/breaks/${breakId}/investigations/latest`);
+  }
+
   /** Lifts the re-run block after a gateway call of unknown outcome. APPROVER_L2 and SRE_ADMIN only. */
   reconcileJob(jobId: string, reference: string): Observable<InvestigationJob> {
     return this.http.post<InvestigationJob>(`/api/v1/investigations/${jobId}/reconcile`, { reference });

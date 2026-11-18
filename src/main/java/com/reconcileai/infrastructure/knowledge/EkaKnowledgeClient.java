@@ -209,12 +209,18 @@ public class EkaKnowledgeClient implements KnowledgeSearchPort {
             }
             budget -= snippet.length();
             accepted.add(new KnowledgeHit(KnowledgeHit.REF_PREFIX + chunkId, r.path("document_id").asText(""),
-                    r.path("filename").asText(""), snippet));
+                    r.path("filename").asText(""), snippet, cosine(r)));
         }
         if (accepted.isEmpty()) {
             return dropped > 0 ? KnowledgeResult.rejected("ALL_HITS_SCREENED") : KnowledgeResult.empty();
         }
         return KnowledgeResult.ok(accepted);
+    }
+
+    /** EKA's {@code scores.cosine} (required by the contract); null if missing or not a number. */
+    private static Double cosine(JsonNode result) {
+        JsonNode c = result.path("scores").path("cosine");
+        return c.isNumber() ? c.asDouble() : null;
     }
 
     private static String stripSlash(String url) {

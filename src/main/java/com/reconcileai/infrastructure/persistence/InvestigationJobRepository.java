@@ -25,6 +25,9 @@ public interface InvestigationJobRepository extends Repository<InvestigationJob,
 
     Optional<InvestigationJob> findByIdAndTenantId(UUID id, String tenantId);
 
+    /** Newest job for a break (served by idx_job_tenant_break); the console's page-reload view. */
+    Optional<InvestigationJob> findFirstByTenantIdAndBreakItemIdOrderByCreatedAtDesc(String tenantId, UUID breakItemId);
+
     /** True while a failed job for this break has an unknown gateway outcome nobody has reconciled (platform Q2.3). */
     boolean existsByTenantIdAndBreakItemIdAndOutcomeUnknownTrueAndReconciledAtIsNull(String tenantId, UUID breakItemId);
 

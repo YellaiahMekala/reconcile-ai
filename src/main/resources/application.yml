@@ -185,11 +185,21 @@ reconcile:
     breaker-failure-rate: 50
     breaker-window: 10
     breaker-open-for: 30s
+    # D1.1.1 relevance filter: drop procedures unrelated to the break before they reach the prompt (Q4.3 ablation).
+    relevance-filter-enabled: ${KNOWLEDGE_RELEVANCE_FILTER:true}   # off-switch
+    min-score: ${KNOWLEDGE_MIN_SCORE:0.0}          # EKA scores.cosine floor; 0.0 = only missing/negative scores drop
+    category-match: ${KNOWLEDGE_CATEGORY_MATCH:true}  # hit must mention a category term found in note/evidence
     # One platform-realm client per tenant is required (EKA isolates by caller identity, spike S-2); no shared client.
     # The token's tenant_id claim must equal the tenant id exactly. client-secret-env names the variable, never the secret.
     # tenants:
     #   "[tenant-a]": { client-id: svc-reconcile-tenant-a, client-secret-env: KC_SVC_TENANT_A_SECRET }
     #   "[tenant-b]": { client-id: svc-reconcile-tenant-b, client-secret-env: KC_SVC_TENANT_B_SECRET }
+  idempotency:                      # D1.1.4: optional Idempotency-Key header on POSTs that create things
+    enabled: ${IDEMPOTENCY_ENABLED:true}
+    ttl: 24h                        # key remembered for 24h; purged afterwards
+    in-progress-wait: 10s           # a duplicate waits this long for the first request, then 409 IN_PROGRESS
+    stale-after: 5m                 # IN_PROGRESS older than this is treated as abandoned (crashed node)
+    purge-interval-ms: 3600000
   rero:                             # platform Q3: RERO investigation mode (Contract C); off by default, refused with 409
     enabled: ${RERO_ENABLED:false}
     base-url: ${RERO_BASE_URL:http://localhost:8095}

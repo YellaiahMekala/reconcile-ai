@@ -370,6 +370,13 @@ public class InvestigationService {
             .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
     }
 
+    /** Newest job for the break in this tenant. 404 when the break has no job or is not this tenant's. */
+    @Transactional(readOnly = true)
+    public InvestigationJob latestJobForBreak(UUID breakId) {
+        return jobs.findFirstByTenantIdAndBreakItemIdOrderByCreatedAtDesc(tenantContext.requireTenantId(), breakId)
+            .orElseThrow(() -> new NotFoundException("JOB_NOT_FOUND", "Investigation job not found"));
+    }
+
     @Transactional(readOnly = true)
     public ResolutionProposal getProposal(UUID proposalId) {
         return proposals.findByIdAndTenantId(proposalId, tenantContext.requireTenantId())

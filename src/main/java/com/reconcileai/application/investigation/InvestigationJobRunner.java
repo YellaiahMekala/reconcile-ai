@@ -94,6 +94,8 @@ public class InvestigationJobRunner {
     private SupervisedInvestigation supervised;
     private com.reconcileai.application.knowledge.KnowledgeSearchPort knowledge;
     private boolean knowledgeFailClosed;
+    private com.reconcileai.application.knowledge.KnowledgeRelevanceFilter knowledgeFilter =
+        new com.reconcileai.application.knowledge.KnowledgeRelevanceFilter(null);
 
     /**
      * Optional: EKA procedure knowledge (platform Q1), present only with {@code reconcile.knowledge.enabled=true}.
@@ -105,6 +107,10 @@ public class InvestigationJobRunner {
                       com.reconcileai.infrastructure.knowledge.KnowledgeProperties knowledgeProperties) {
         this.knowledge = knowledge;
         this.knowledgeFailClosed = knowledgeProperties.failClosed();
+        this.knowledgeFilter = new com.reconcileai.application.knowledge.KnowledgeRelevanceFilter(
+            new com.reconcileai.application.knowledge.KnowledgeRelevanceFilter.Settings(
+                knowledgeProperties.relevanceFilterEnabled(), knowledgeProperties.minScore(),
+                knowledgeProperties.categoryMatch()));
     }
 
     private com.reconcileai.application.rero.ReroInvestigation rero;
@@ -197,7 +203,7 @@ public class InvestigationJobRunner {
 
             String query = promptBuilder.retrievalQuery(breakItem, job.getAnalystNote());
             List<RetrievedChunk> ranked = retriever.retrieve(tenantId, breakItem.getId(), query);
-            List<KnowledgeHit> procedures = ranked.isEmpty() ? List.of() : consultKnowledge(jobId, tenantId, job);
+            List<KnowledgeHit> procedures = ranked.isEmpty() ? List.of() : consultKnowledge(jobId, tenantId, job, ranked);
             BuiltPrompt prompt = promptBuilder.build(breakItem, job.getAnalystNote(), ranked, props.maxContextTokens(),
                 procedures);
             job = stage(jobId, tenantId, JobStage.CALLING_MODEL,
@@ -254,11 +260,15 @@ public class InvestigationJobRunner {
      * unless {@code KNOWLEDGE_FAIL_CLOSED=true}, which fails the job retryably (break FAILED_RETRYABLE, no proposal).
      * Skipped when there is no evidence, because then the model is not called at all.
      */
-    private List<KnowledgeHit> consultKnowledge(UUID jobId, String tenantId, InvestigationJob job) {
+    private List<KnowledgeHit> consultKnowledge(UUID jobId, String tenantId, InvestigationJob job,
+                                                List<RetrievedChunk> evidence) {
         if (knowledge == null) {
             return List.of();
         }
-        KnowledgeResult result = knowledge.search(tenantId, knowledgeQuery(job.getAnalystNote()));
+        KnowledgeResult raw = knowledge.search(tenantId, knowledgeQuery(job.getAnalystNote()));
+        // D1.1.1: drop procedures unrelated to this break; only kept hits become refs and prompt text.
+        var filtered = knowledgeFilter.apply(raw, breakContext(job.getAnalystNote(), evidence));
+        KnowledgeResult result = filtered.result();
         tx.executeWithoutResult(s -> {
             InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
             j.recordKnowledge(result.outcome().name(), result.reason(), result.refs());
@@ -270,12 +280,25 @@ public class InvestigationJobRunner {
                 details.put("reason", result.reason());
             }
             details.put("procedures", result.hits().size());
+            if (knowledgeFilter.settings().enabled() && raw.outcome() == KnowledgeOutcome.OK) {
+                details.put("relevanceKept", filtered.kept());
+                details.put("relevanceDropped", filtered.dropped());
+            }
             audit.record(new AuditEntry(tenantId, "KNOWLEDGE_CONSULTED", "BREAK", j.getBreakItemId(), ACTOR, details));
         });
         if (result.outcome() == KnowledgeOutcome.UNAVAILABLE && knowledgeFailClosed) {
             throw new IllegalStateException("KNOWLEDGE_UNAVAILABLE");
         }
         return result.hits();
+    }
+
+    /** The break's own words (analyst note + retrieved evidence) used only to find candidate categories locally. */
+    static String breakContext(String analystNote, List<RetrievedChunk> evidence) {
+        StringBuilder sb = new StringBuilder(analystNote == null ? "" : analystNote);
+        for (RetrievedChunk c : evidence) {
+            sb.append(' ').append(c.text());
+        }
+        return sb.toString();
     }
 
     /**
