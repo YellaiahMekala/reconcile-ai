@@ -189,7 +189,7 @@ evidence (READY) ─► POST /investigations ─► job QUEUED
 
 ### Platform integration (measured 2026-11-18)
 
-Run locally on one laptop (code and docs in commit `c433499` on branch `feature/q2-gateway-governance`; CI pending merge to main): tenant isolation against the real EKA edge (3/3 passed, 10 concurrent lookups all OK), one approved live call through ai-gateway to OpenAI `gpt-4o-mini`, the two-demo golden path (a happy path and a deliberate EKA outage, both resolved by a second person with a valid audit chain), and a 28-case integrated evaluation (root cause 27/28 in both runs; route 19/28 against 24/28 for the direct baseline, all five differences in the cautious direction, not statistically significant; a follow-up ablation with knowledge off returned 24/28, so the drop is attributable to the knowledge pre-step on this corpus, not the gateway route). The golden path also found and fixed a card-masking gap. Details: [golden path](docs/proof/q4-platform-golden-path-2026-11-18.md), [integrated evaluation](docs/proof/q4-3-integrated-eval-2026-11-18.md), [knowledge ablation](docs/proof/q4-3-knowledge-ablation-2026-11-18.md), [EKA isolation](docs/proof/q1-6-eka-isolation-runbook.md). The live gateway call is in [q2-7-gateway-live-2026-11-18.md](docs/proof/q2-7-gateway-live-2026-11-18.md).
+Run locally on one laptop (code and docs merged to main as `8c303f9`, PR #14; CI green on `ci` #56 after a test-timing fix): tenant isolation against the real EKA edge (3/3 passed, 10 concurrent lookups all OK), one approved live call through ai-gateway to OpenAI `gpt-4o-mini`, the two-demo golden path (a happy path and a deliberate EKA outage, both resolved by a second person with a valid audit chain), and a 28-case integrated evaluation (root cause 27/28 in both runs; route 19/28 against 24/28 for the direct baseline, all five differences in the cautious direction, not statistically significant; a follow-up ablation with knowledge off returned 24/28, so the drop is attributable to the knowledge pre-step on this corpus, not the gateway route). The golden path also found and fixed a card-masking gap. Details: [golden path](docs/proof/q4-platform-golden-path-2026-11-18.md), [integrated evaluation](docs/proof/q4-3-integrated-eval-2026-11-18.md), [knowledge ablation](docs/proof/q4-3-knowledge-ablation-2026-11-18.md), [EKA isolation](docs/proof/q1-6-eka-isolation-runbook.md). The live gateway call is in [q2-7-gateway-live-2026-11-18.md](docs/proof/q2-7-gateway-live-2026-11-18.md).
 
 ```mermaid
 flowchart LR
@@ -463,9 +463,41 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ---
 
+## Test evidence (latest)
+
+What was tested in the platform work of 2026-11-16 to 2026-11-18, and how. Every row has a register id in the platform
+repo (`evidence/EVIDENCE_REGISTER.md`). "Paid, approved" means a real model call through the gateway; the rest is free.
+
+| Feature | How it was tested | Result | Evidence |
+|---|---|---|---|
+| Knowledge pre-step (Q1.1 to Q1.5) | Stub EKA contract tests plus ITs on real Postgres | 166 unit / 193 IT green; CI #52 | E-25, [F1](docs/testing/FEATURE_TESTING_GUIDE.md#f1-knowledge-pre-step-q11-to-q15) |
+| EKA tenant isolation (Q1.6) | `RealEkaIsolationIT` against real EKA edge and platform realm (free) | 3/3; tenant B got EMPTY, 404, not listed | E-26, [F2](docs/testing/FEATURE_TESTING_GUIDE.md#f2-real-eka-tenant-isolation-q16) |
+| EKA concurrency (Q1.7) | 10 parallel lookups, same IT | 10/10 OK, 199 to 380 ms, one laptop | E-26, [F3](docs/testing/FEATURE_TESTING_GUIDE.md#f3-concurrent-eka-lookups-q17) |
+| Unknown gateway outcome (Q2.3) | Whole app, real Postgres, schema-checked fake gateway | One request; re-run 409 until a second person reconciles | E-18, [F4](docs/testing/FEATURE_TESTING_GUIDE.md#f4-gateway-unknown-outcome-q23) |
+| Ledger link, sensitive data, budget (Q2.4 to Q2.6) | ITs on fake gateway; unit adapter tests | 116 unit / 163 IT then; IBAN and card masked | E-19, [F5](docs/testing/FEATURE_TESTING_GUIDE.md#f5-gateway-ledger-sensitive-data-and-budget-q24-to-q26) |
+| Ledger read, per-tenant credentials, shared rate limit | Real Redis in Testcontainers; kubeconform for KEDA | 40 concurrent: exactly 10 allowed; KEDA schema only | E-21, [F6](docs/testing/FEATURE_TESTING_GUIDE.md#f6-ledger-read-per-tenant-credentials-shared-rate-limit-keda) |
+| Review fixes, flaky recovery-sweep test | `GatewayReviewFixesIT`; test config fix | 125 unit / 184 IT; CI #54 failed, fixed, #58 green | E-22, E-26, [F7](docs/testing/FEATURE_TESTING_GUIDE.md#f7-review-fixes-and-the-flaky-recovery-sweep-test) |
+| Live gateway run (Q2.7) | `GatewayLiveProviderIT`, one call; paid, approved | SUCCEEDED, 719 in / 111 out tokens, $0.00017445 | E-27, [F8](docs/testing/FEATURE_TESTING_GUIDE.md#f8-live-gateway-run-q27) |
+| Card-masking fix | Found by first golden-path run; 2 new `PiiMaskerTest` cases | Refused at cost 0, fixed; 168 unit / 193 IT | E-28, [F9](docs/testing/FEATURE_TESTING_GUIDE.md#f9-card-masking-alignment-fix) |
+| Golden path and EKA-down demo (Q4.2, Q4.5) | Real stack, two demos; paid, approved | Both RESOLVED, audit chain valid; $0.00023460 and $0.00018810 | E-28, [F10](docs/testing/FEATURE_TESTING_GUIDE.md#f10-golden-path-and-eka-down-demo-q42-q45) |
+| Integrated evaluation (Q4.3) | 28 labelled cases, baseline vs EKA + gateway; paid, approved | Root cause 27/28 both; route 19/28 (67.9%) vs 24/28 (85.7%) | E-29, [F11](docs/testing/FEATURE_TESTING_GUIDE.md#f11-integrated-evaluation-q43) |
+| Knowledge ablation (Q4.3) | Same cases, `EVAL_KNOWLEDGE=off`; paid, approved | Route 24/28 = baseline; p = 0.375, not significant | E-30, [F12](docs/testing/FEATURE_TESTING_GUIDE.md#f12-knowledge-ablation-q43) |
+| RERO mode (Q3.2, Q3.5), fakes | ITs with fake RERO; concurrency IT | 197 unit / 224 IT; 30 parallel vs budget 5: 5 ok, 25 x 429 | E-31, [F13](docs/testing/FEATURE_TESTING_GUIDE.md#f13-rero-integration-on-fakes-q32-and-q35) |
+| Q3.7 RERO keep/cut evaluation | Paid, approved, real gateway, 28 cases, same day | **CUT**: C1-C3 fail (root cause 26/28 vs 28/28), C4-C6 pass; $0.0145 | [F14](docs/testing/FEATURE_TESTING_GUIDE.md#f14-q37-rero-keepcut-evaluation) |
+
+| Repo | CI run | Commit |
+|---|---|---|
+| reconcile-ai | `ci` #59 (PR), #60 (main); fakes only for RERO | `9479cdb` |
+
+Limits: one run on one laptop for the live rows, synthetic cases, n = 28, no capacity or quality benchmark claim.
+Full detail per feature (tests, commands, failure modes, interview questions):
+[docs/testing/FEATURE_TESTING_GUIDE.md](docs/testing/FEATURE_TESTING_GUIDE.md).
+
+---
+
 ## 6. Test suite
 
-Current counts in the default build: **168 unit tests** (surefire), **193 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **24 UI specs** (Karma). CI-verified on main so far: `ci` run #52 on `acdafe6` (register E-25); the 168 / 193 / 24 counts are a local run of the branch (E-28 for 168 / 193; the 24 UI count is recorded in `PLATFORM_FACTS.md` section 6 and the status tracker only).
+Current counts in the default build: **197 unit tests** (surefire), **224 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **24 UI specs** (Karma). CI-verified: `ci` run #59 (PR) and #60 (main) on `9479cdb` (register E-31); the 24 UI count is recorded in `PLATFORM_FACTS.md` section 6 and the status tracker only (no register row). Feature-by-feature evidence is in [Test evidence (latest)](#test-evidence-latest) and the [feature testing guide](docs/testing/FEATURE_TESTING_GUIDE.md).
 Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too. `eka` needs the real EKA edge and the platform realm (free, no model call; `docs/proof/q1-6-eka-isolation-runbook.md`) and is excluded as well. `platform-live` is the paid integrated evaluation (`IntegratedPlatformEvalIT`: real EKA edge plus the real-provider gateway; `docs/proof/q4-3-integrated-eval-2026-11-18.md`) and is excluded too.
 
 | Class | Type | Proves |
@@ -520,7 +552,7 @@ Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama 
 
 ## Quality: evaluation harness
 
-`src/test/resources/eval/cases/` holds 28 labelled synthetic breaks: three or more per root cause, plus hard ones
+`src/test/resources/eval/cases/` holds 28 labeled synthetic breaks: three or more per root cause, plus hard ones
 (conflicting evidence, a quietly worded instruction hidden in evidence, an obvious injection, vague notes, a variance
 large enough for L2, a non-USD currency). Each case says what a careful reviewer would decide: root cause, route and
 which evidence file must be cited. `InvestigationEvalIT` runs every case through the public API and the real pipeline
