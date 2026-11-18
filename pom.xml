@@ -123,6 +123,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!-- D1.2.2: read-only MCP server, WebMVC (servlet) transport, STATELESS protocol. Off unless MCP_SERVER_ENABLED.
+             See docs/adr/ADR-mcp-read-only-server.md. Version from the Spring AI BOM. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+        <!-- D1.2.1: in-heap L1 in front of the Redis cache (off unless reconcile.ai.cache.l1.enabled). Version from Boot. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
 
         <!-- ===== LLM resilience: retry + circuit breaker, used programmatically (no AOP proxies). ===== -->
         <dependency>
@@ -240,11 +251,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- ai-gateway consumer contract: request bodies are checked against chat-request.v1.json in tests -->
+            <!-- Contract tests (ai-gateway, EKA, RERO schemas) AND, since D1.2.2, the MCP server's tool-input schema
+                 validation (mcp-json-jackson2 0.18.3 needs the 2.x API). Must stay compile scope: a test-scoped pin
+                 would win the conflict and leave the packaged app without it. -->
             <groupId>com.networknt</groupId>
             <artifactId>json-schema-validator</artifactId>
-            <version>1.5.1</version>
-            <scope>test</scope>
+            <version>2.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>

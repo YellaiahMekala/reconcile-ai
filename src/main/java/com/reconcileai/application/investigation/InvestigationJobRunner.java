@@ -94,6 +94,7 @@ public class InvestigationJobRunner {
     private SupervisedInvestigation supervised;
     private com.reconcileai.application.knowledge.KnowledgeSearchPort knowledge;
     private boolean knowledgeFailClosed;
+    private boolean breakSpecificQuery;
     private com.reconcileai.application.knowledge.KnowledgeRelevanceFilter knowledgeFilter =
         new com.reconcileai.application.knowledge.KnowledgeRelevanceFilter(null);
 
@@ -107,6 +108,7 @@ public class InvestigationJobRunner {
                       com.reconcileai.infrastructure.knowledge.KnowledgeProperties knowledgeProperties) {
         this.knowledge = knowledge;
         this.knowledgeFailClosed = knowledgeProperties.failClosed();
+        this.breakSpecificQuery = knowledgeProperties.breakSpecificQuery();
         this.knowledgeFilter = new com.reconcileai.application.knowledge.KnowledgeRelevanceFilter(
             new com.reconcileai.application.knowledge.KnowledgeRelevanceFilter.Settings(
                 knowledgeProperties.relevanceFilterEnabled(), knowledgeProperties.minScore(),
@@ -203,7 +205,8 @@ public class InvestigationJobRunner {
 
             String query = promptBuilder.retrievalQuery(breakItem, job.getAnalystNote());
             List<RetrievedChunk> ranked = retriever.retrieve(tenantId, breakItem.getId(), query);
-            List<KnowledgeHit> procedures = ranked.isEmpty() ? List.of() : consultKnowledge(jobId, tenantId, job, ranked);
+            List<KnowledgeHit> procedures = ranked.isEmpty() ? List.of()
+                : consultKnowledge(jobId, tenantId, job, breakItem, ranked);
             BuiltPrompt prompt = promptBuilder.build(breakItem, job.getAnalystNote(), ranked, props.maxContextTokens(),
                 procedures);
             job = stage(jobId, tenantId, JobStage.CALLING_MODEL,
@@ -260,12 +263,16 @@ public class InvestigationJobRunner {
      * unless {@code KNOWLEDGE_FAIL_CLOSED=true}, which fails the job retryably (break FAILED_RETRYABLE, no proposal).
      * Skipped when there is no evidence, because then the model is not called at all.
      */
-    private List<KnowledgeHit> consultKnowledge(UUID jobId, String tenantId, InvestigationJob job,
+    private List<KnowledgeHit> consultKnowledge(UUID jobId, String tenantId, InvestigationJob job, BreakItem breakItem,
                                                 List<RetrievedChunk> evidence) {
         if (knowledge == null) {
             return List.of();
         }
-        KnowledgeResult raw = knowledge.search(tenantId, knowledgeQuery(job.getAnalystNote()));
+        // D1.2.12: a query built from this break's fields (masked, capped) unless switched back to the generic one.
+        String query = breakSpecificQuery
+            ? BreakKnowledgeQuery.build(breakItem, job.getAnalystNote(), evidence)
+            : knowledgeQuery(job.getAnalystNote());
+        KnowledgeResult raw = knowledge.search(tenantId, query);
         // D1.1.1: drop procedures unrelated to this break; only kept hits become refs and prompt text.
         var filtered = knowledgeFilter.apply(raw, breakContext(job.getAnalystNote(), evidence));
         KnowledgeResult result = filtered.result();
@@ -280,6 +287,7 @@ public class InvestigationJobRunner {
                 details.put("reason", result.reason());
             }
             details.put("procedures", result.hits().size());
+            details.put("queryKind", breakSpecificQuery ? "BREAK_SPECIFIC" : "GENERIC");
             if (knowledgeFilter.settings().enabled() && raw.outcome() == KnowledgeOutcome.OK) {
                 details.put("relevanceKept", filtered.kept());
                 details.put("relevanceDropped", filtered.dropped());

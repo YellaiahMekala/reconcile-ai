@@ -12,6 +12,8 @@ CVE-2026-47890 exp:2027-02-28
 CVE-2026-47892 exp:2027-02-28
 
 # mcp-core 0.18.3: fix only in 1.0.0 (major), pinned by the Spring AI 1.1.8 BOM via spring-ai-client-chat.
-# reconcile-ai runs no MCP server or client; the library is used only for JSON schema helpers.
-# Owner: platform maintainer. Re-check on the next Spring AI 1.1.x patch.
+# DNS rebinding (no Origin check). Default build: no MCP server runs (MCP_SERVER_ENABLED=false), not reachable.
+# With the D1.2.2 read-only MCP server ON the code path IS live; mitigated by mandatory bearer JWT, an Origin
+# allow-list filter on /mcp (empty = refuse any Origin), read-only tenant-scoped tools.
+# See docs/adr/ADR-mcp-read-only-server.md section 3. Owner: platform maintainer. Re-check on the next Spring AI patch.
 CVE-2026-35568 exp:2027-02-28

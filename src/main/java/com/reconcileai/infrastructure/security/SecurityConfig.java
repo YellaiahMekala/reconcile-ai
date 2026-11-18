@@ -95,6 +95,9 @@ public class SecurityConfig {
                 // authenticated and authorised on its REQUEST dispatch. The bearer filter does not re-run on async
                 // dispatch, so without this the stream ends with AccessDenied on an already-committed response.
                 .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
+                // D1.2.2 read-only MCP server (exists only with MCP_SERVER_ENABLED=true): business roles only.
+                // SRE_ADMIN is ops-only and gets 403, like evidence search. Tools re-check the role and the tenant.
+                .requestMatchers("/mcp", "/mcp/**").hasAnyRole("RECON_ANALYST", "APPROVER_L1", "APPROVER_L2")
                 // Default-deny: anything not explicitly opened requires a valid JWT.
                 .anyRequest().authenticated();
             })

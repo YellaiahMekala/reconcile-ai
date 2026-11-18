@@ -2,10 +2,10 @@ package com.reconcileai.gateway;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import com.reconcileai.application.gateway.GatewayCallException;
 import com.reconcileai.application.gateway.GatewayCallLog.Attempt;
 import com.reconcileai.application.gateway.GatewayCallLog.Outcome;
@@ -60,9 +60,9 @@ class HttpGatewayChatAdapterTest {
     private static final String CORRELATION = "c0ffee00-0000-4000-8000-000000000001";
 
     private final ObjectMapper json = new ObjectMapper();
-    private final JsonSchema requestSchema = schema("/contracts/ai-gateway/chat-request.v1.json");
-    private final JsonSchema responseSchema = schema("/contracts/ai-gateway/chat-response.v1.json");
-    private final JsonSchema errorSchema = schema("/contracts/ai-gateway/error.v1.json");
+    private final Schema requestSchema = schema("/contracts/ai-gateway/chat-request.v1.json");
+    private final Schema responseSchema = schema("/contracts/ai-gateway/chat-response.v1.json");
+    private final Schema errorSchema = schema("/contracts/ai-gateway/error.v1.json");
 
     private HttpServer server;
     private GatewayProperties properties;
@@ -77,8 +77,8 @@ class HttpGatewayChatAdapterTest {
 
     private record Seen(String authorization, String idempotencyKey, String body) { }
 
-    private JsonSchema schema(String path) {
-        return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012).getSchema(getClass().getResourceAsStream(path));
+    private Schema schema(String path) {
+        return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12).getSchema(getClass().getResourceAsStream(path));
     }
 
     @BeforeEach
@@ -145,7 +145,7 @@ class HttpGatewayChatAdapterTest {
         assertThat(seen).hasSize(1);
         Seen call = seen.get(0);
         JsonNode body = json.readTree(call.body());
-        Set<ValidationMessage> violations = requestSchema.validate(body);
+        java.util.List<Error> violations = requestSchema.validate(body);
         assertThat(violations).as("chat-request.v1.json violations").isEmpty();
         assertThat(body.path("taskClass").asText()).isEqualTo("REASONING");
         assertThat(body.path("messages").get(0).path("role").asText()).isEqualTo("SYSTEM");
@@ -294,8 +294,8 @@ class HttpGatewayChatAdapterTest {
     /** Sends the scripted reply, after checking it against the published response or error schema. */
     private void respond(HttpExchange ex, int status, String body, String retryAfter) throws IOException {
         if (ex.getRequestURI().getPath().endsWith("/chat")) {
-            JsonSchema expected = status == 200 ? responseSchema : errorSchema;
-            Set<ValidationMessage> violations = expected.validate(json.readTree(body));
+            Schema expected = status == 200 ? responseSchema : errorSchema;
+            java.util.List<Error> violations = expected.validate(json.readTree(body));
             assertThat(violations).as("fake reply must match the gateway contract: " + body).isEmpty();
         }
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
