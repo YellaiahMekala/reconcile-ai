@@ -71,6 +71,10 @@ public abstract class AbstractPostgresIT {
         registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
         registry.add("spring.flyway.user", POSTGRES::getUsername);
         registry.add("spring.flyway.password", POSTGRES::getPassword);
+        // All cached Spring contexts share this one database. A background recovery sweep from another test class's
+        // context (possibly without the gateway) could recover a test's orphaned job first and record it differently
+        // (seen once in CI: GatewayReviewFixesIT). Tests call recovery.sweep() themselves, so the timer is pushed out.
+        registry.add("reconcile.investigation.sweep-interval-ms", () -> "3600000");
         // Public key the resource server validates against (matches JwtTestSupport's private key).
         registry.add("spring.security.oauth2.resourceserver.jwt.public-key-location",
             () -> "classpath:jwt/dev-public.pem");
