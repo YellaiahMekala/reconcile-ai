@@ -127,6 +127,7 @@ jobs:
           ignore-unfixed: true
           limit-severities-for-sarif: true
           exit-code: '1'
+          trivyignores: .trivyignore
 
       # Upload the report even when the scan failed, so the findings can be read.
       - name: Upload Trivy report

@@ -1,0 +1,17 @@
+# Accepted Trivy findings for the reconcile-ai image. Format: one id per line, `CVE-ID exp:YYYY-MM-DD`.
+# Every entry: why it is not fixable inside the locked baseline (Spring Boot 3.5.16 + Spring AI 1.1.8),
+# why it is not exploitable here, owner, expiry. Review on expiry; remove when the baseline moves.
+# Fixable findings are NOT listed here; they are cleared by the SECURITY OVERRIDES in pom.xml.
+
+# spring-webmvc / spring-webflux 6.2.19: fix only in Spring Framework 7.0.9, which requires Spring Boot 4
+# (excluded by the version lock). spring-webflux is on the classpath only as a transitive of spring-ai-openai;
+# the app serves no WebFlux endpoints (servlet stack only). Owner: platform maintainer. Re-check when a
+# 6.2.x patch is published or the Boot 4 migration is approved.
+CVE-2026-47884 exp:2027-02-28
+CVE-2026-47890 exp:2027-02-28
+CVE-2026-47892 exp:2027-02-28
+
+# mcp-core 0.18.3: fix only in 1.0.0 (major), pinned by the Spring AI 1.1.8 BOM via spring-ai-client-chat.
+# reconcile-ai runs no MCP server or client; the library is used only for JSON schema helpers.
+# Owner: platform maintainer. Re-check on the next Spring AI 1.1.x patch.
+CVE-2026-35568 exp:2027-02-28
