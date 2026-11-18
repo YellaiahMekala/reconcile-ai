@@ -91,6 +91,16 @@ public class InvestigationJob {
     @Column(name = "ledger_status", length = 48)
     private String ledgerStatus;
 
+    /** Platform Q1.4: EKA knowledge outcome, reason and refs ("procedure consulted"); null when not used. */
+    @Column(name = "knowledge_outcome", length = 16)
+    private String knowledgeOutcome;
+
+    @Column(name = "knowledge_reason", length = 48)
+    private String knowledgeReason;
+
+    @Column(name = "knowledge_refs", columnDefinition = "text")
+    private String knowledgeRefs;
+
     @Column(name = "proposal_id", columnDefinition = "uuid")
     private UUID proposalId;
 
@@ -146,6 +156,20 @@ public class InvestigationJob {
     public void recordRetrieval(List<String> chunkIds, int tokenEstimate) {
         this.retrievedChunkIds = String.join(",", chunkIds);
         this.contextTokenEstimate = tokenEstimate;
+    }
+
+    public void recordKnowledge(String outcome, String reason, List<String> refs) {
+        this.knowledgeOutcome = outcome;
+        this.knowledgeReason = reason == null ? null : reason.substring(0, Math.min(48, reason.length()));
+        this.knowledgeRefs = refs == null || refs.isEmpty() ? null : String.join(",", refs);
+    }
+
+    public String getKnowledgeOutcome() { return knowledgeOutcome; }
+
+    public String getKnowledgeReason() { return knowledgeReason; }
+
+    public List<String> knowledgeRefList() {
+        return knowledgeRefs == null || knowledgeRefs.isBlank() ? List.of() : Arrays.asList(knowledgeRefs.split(","));
     }
 
     public void succeed(UUID proposalId) {

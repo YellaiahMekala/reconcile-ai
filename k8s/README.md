@@ -7,6 +7,7 @@ that adds in-cluster Postgres (pgvector) and Redis with throwaway credentials.
 k8s/
   base/            namespace, service account, ConfigMap, Deployment, Service, HPA, PodDisruptionBudget
   overlays/kind/   dev Postgres + Redis, dev Secret, wait-for-postgres init container, local image tag
+  overlays/keda/   KEDA ScaledObject on the investigation back-log; replaces the base HPA, shared Redis rate limit
 ```
 
 ## What the base sets up
@@ -51,6 +52,31 @@ through the Service with a dev token (RLS role in force), and under load from 4 
 ```powershell
 kubectl -n reconcile get hpa reconcile-ai -w
 ```
+
+## KEDA overlay (scale on the investigation back-log)
+
+`overlays/keda/` replaces the CPU-only HPA with a KEDA `ScaledObject`. Investigations are I/O-bound model calls, so CPU
+stays low while the queue fills and the base HPA reacts late.
+
+| Item | Value |
+|---|---|
+| What scales | the `reconcile-ai` Deployment |
+| Trigger 1 (Prometheus) | `sum(reconcile_investigations_executor_active) + sum(reconcile_investigations_executor_queued)` in namespace `reconcile`, `AverageValue` target 3 per pod (a pod runs at most 4 and queues the rest) |
+| Trigger 2 (CPU) | `Utilization` 70% |
+| Replicas | min 2, max 6; polling every 15 s, cooldown 300 s |
+| Behaviour | scale up 2 pods per 30 s; scale down 1 pod per 60 s after a 300 s window |
+| Prometheus down | `ignoreNullValues: "false"`, so KEDA reports an error and holds the current replica count |
+| Other changes | deletes the base HPA (KEDA creates its own) and sets `RATE_LIMIT_STORE=redis` so replicas share one rate-limit bucket per tenant |
+
+Needs KEDA installed (`keda.sh/v1alpha1`) and a Prometheus that scrapes the pods. Set `serverAddress` in
+`overlays/keda/scaledobject.yaml` to your Prometheus service (the default is `http://prometheus-server.monitoring.svc:80`).
+Apply it instead of the base or kind overlay. It builds on `base/` only, so supply Postgres, Redis and the Secrets yourself:
+
+```powershell
+kubectl apply -k k8s/overlays/keda
+```
+
+CI renders this overlay and checks it with kubeconform (schema only). Scaling behaviour has not been run on a cluster.
 
 ## Production notes (not in this repo)
 

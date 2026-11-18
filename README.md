@@ -45,7 +45,7 @@ until that test is green.
 | Evaluation harness (4A) | 28 labelled synthetic breaks run through the real pipeline; accuracy, citation and retrieval numbers per leg; mock-llm regression gate in the build; real-model run on request | `EvalCaseLoaderTest`, `InvestigationEvalIT`, `RetrievalEvalIT` |
 | Agents and cloud (rest of Phase 4) | LangChain4j investigation agent with read-only audited tools, Alertmanager e-mail alerts, Amazon Bedrock adapter, AWS deployment with Terraform | 4B, 4C, 4D and 4E built (4D and 4E not yet run against a real AWS account) — see section 9 |
 | Supervisor agents | Specialist agents with a reviewer, compared with the existing modes on the evaluation set | Built and measured on gpt-4o-mini (4G): the decision rule fixed in advance was **not met**; single call stays the default, supervised modes stay off |
-| Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Planned — see BRD platform requirements |
+| Platform integration | Shared token issuer, internal knowledge search, recommendation intake | Knowledge search built (off by default, see "EKA knowledge"); the rest planned — see BRD platform requirements |
 
 **Principles applied in the code** (each is commented at the point of use):
 
@@ -91,7 +91,7 @@ agent mode (off by default), Prometheus alert rules, rate limiting and stored ev
 | Item | Status |
 |---|---|
 | Expose the read-only tools over MCP for other services | Not started; needs a token-based tenant design |
-| Platform integration (shared token issuer, knowledge search, recommendation intake) | Planned |
+| Platform integration (shared token issuer, knowledge search, recommendation intake) | Knowledge search built (Q1.1 to Q1.5, off by default); the rest planned |
 | Trivy scan that fails the build | Listed under Known limitations |
 
 ---
@@ -257,6 +257,25 @@ mvn verify "-Dfailsafe.excludedGroups=openai,ollama" "-Dit.test=BedrockEvalIT"  
 Prices for the cost metric are per profile (`application-bedrock.yml`, Nova Lite list price); override with
 `LLM_PROMPT_USD_PER_MILLION` and `LLM_COMPLETION_USD_PER_MILLION`. Agent mode runs on OpenAI only for now.
 
+### EKA knowledge (platform Q1, off by default)
+
+With `KNOWLEDGE_ENABLED=true`, the single-call investigation makes one `POST /api/v1/search` to the EKA edge for the
+job's tenant before the model call, and shows the hits to the model as reference procedures, never as evidence. They
+cannot be cited. The outcome (`OK`, `EMPTY`, `UNAVAILABLE`, `REJECTED`) is stored on the job and returned as
+`knowledgeOutcome`, `knowledgeReason` and `knowledgeRefs` (V15). Agent modes do not use knowledge. Design and limits:
+[`docs/adr/ADR-Q1-knowledge-prestep.md`](docs/adr/ADR-Q1-knowledge-prestep.md).
+
+| Setting | Meaning |
+|---|---|
+| `KNOWLEDGE_ENABLED` | Default `false` |
+| `EKA_BASE_URL` | EKA edge base URL |
+| `KNOWLEDGE_TOKEN_URI`, `KNOWLEDGE_TOKEN_SCOPE` | Platform realm token endpoint and audience scope |
+| `KNOWLEDGE_FAIL_CLOSED` | Default `false`: an unavailable EKA is recorded and the investigation continues. `true`: the job fails retryably, no model call |
+| `reconcile.knowledge.tenants` | One platform-realm client per tenant; its secret is read from a named environment variable. No shared client |
+
+Proven against a schema-checked EKA stub (`EkaKnowledgeClientTest`, `KnowledgeOutcomeIT`, `KnowledgeFailClosedIT`).
+Isolation against the real EKA is the opt-in `RealEkaIsolationIT` (tag `eka`) and has not been run yet.
+
 ### Deploy to AWS (Terraform)
 
 `infra/` holds Terraform modules (network, database, storage, secrets, app, ci, budget) and a `demo` environment: ECS Fargate
@@ -419,8 +438,8 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-Current counts in the default build: **123 unit tests** (surefire), **179 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
-Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too.
+Current counts in the default build: **166 unit tests** (surefire), **193 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
+Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too. `eka` needs the real EKA edge and the platform realm (free, no model call; `docs/proof/q1-6-eka-isolation-runbook.md`) and is excluded as well.
 
 | Class | Type | Proves |
 |---|---|---|
