@@ -49,10 +49,9 @@ None of the five turned a wrong cause into an approval.
 - **Route accuracy fell by 5 cases** (24 to 19). With n = 28, a 5-case difference is not statistically significant, so
   read these as counts, not as a measured effect size. One run per column.
 - **The direction is cautious.** The integrated path sent more breaks to a person, not fewer.
-- **Cause is unproven.** Hypothesis: tenant-a's EKA corpus holds only the golden-path fee procedures, so the
-  missing-entry and timing cases got irrelevant procedures in the prompt plus rule 7, which may have lowered the model's
-  confidence. The gateway route itself (its temperature handling) could also contribute. The two are **not separated**.
-  An ablation (gateway on, knowledge off) would separate them; it needs a new paid-run approval.
+- **Cause: separated by a follow-up ablation.** Gateway on with knowledge off returns 24/28, equal to the baseline, so
+  the drop is attributable to the knowledge pre-step on this corpus, not the gateway route. See
+  `q4-3-knowledge-ablation-2026-11-18.md`.
 - The integrated run used about 8450 more prompt tokens than the baseline (24414 vs 15964). The cause was not
   measured.
 
@@ -63,7 +62,9 @@ None of the five turned a wrong cause into an approval.
 | Gateway ledger, all live work (28 OK calls: eval 25, golden path 2, Q2.7 1) | 0.006053 |
 | Baseline run (harness list-price estimate) | about 0.0042 |
 | Embeddings | negligible |
-| **Total OpenAI** | **about 0.0102** |
+| **Total OpenAI (this run's day, before the ablation)** | **about 0.0102** |
+
+The ablation run added 0.00417405 USD (about 0.0144 USD total for the day).
 
 ## 5. Reproduce
 

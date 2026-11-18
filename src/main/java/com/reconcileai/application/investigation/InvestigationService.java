@@ -95,6 +95,14 @@ public class InvestigationService {
         this.ledger = ledger;
     }
 
+    private com.reconcileai.infrastructure.rero.ReroProperties rero;
+
+    /** Platform Q3: the RERO mode switch and its governance declaration. Absent only in slices without properties. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setReroProperties(com.reconcileai.infrastructure.rero.ReroProperties rero) {
+        this.rero = rero;
+    }
+
     @org.springframework.beans.factory.annotation.Autowired
     void setGatewayCallRepository(GatewayCallRepository gatewayCalls) {
         this.gatewayCalls = gatewayCalls;
@@ -133,7 +141,14 @@ public class InvestigationService {
     public InvestigationJob start(UUID breakId, String analystNote, String modeName) {
         CurrentUser user = tenantContext.currentUser();
         InvestigationMode mode = parseMode(modeName);
-        if (mode != InvestigationMode.SINGLE_CALL && gatewayChat != null) {
+        if (mode == InvestigationMode.RERO && (rero == null || !rero.enabled())) {
+            throw new ConflictException("RERO_DISABLED", "RERO mode is not enabled on this server");
+        }
+        // RERO counts as governed only when the operator declares that RERO's own model calls go through ai-gateway
+        // (reconcile.rero.model-via-gateway, i.e. RERO runs GatewayModel). reconcile-ai cannot see RERO's model calls,
+        // so without that declaration it is treated like the agent modes and refused while the gateway route is on.
+        boolean governedRero = mode == InvestigationMode.RERO && rero != null && rero.modelViaGateway();
+        if (mode != InvestigationMode.SINGLE_CALL && !governedRero && gatewayChat != null) {
             // Agent and supervised modes call the model directly, not through ai-gateway. With the gateway route on,
             // allowing them would skip its budget, risk checks and ledger, so they are refused until they are routed.
             throw new ConflictException("MODE_NOT_GOVERNED",
@@ -183,7 +198,11 @@ public class InvestigationService {
                 }
                 b.markInvestigating(); // throws IllegalBreakStateException (409) if lifecycle forbids it
                 breaks.save(b);
-                InvestigationJob saved = jobs.save(new InvestigationJob(user.tenantId(), breakId, user.subject(), note, mode));
+                InvestigationJob fresh = new InvestigationJob(user.tenantId(), breakId, user.subject(), note, mode);
+                if (mode == InvestigationMode.RERO) {
+                    fresh.limitToolCalls(rero.maxToolCalls()); // the run token's budget, counted in the DB
+                }
+                InvestigationJob saved = jobs.save(fresh);
                 audit.record(new AuditEntry(user.tenantId(), "INVESTIGATION_REQUESTED", "BREAK", breakId, user.subject(),
                     Map.of("jobId", saved.getId().toString(), "mode", mode.name())));
                 return saved;
@@ -341,7 +360,7 @@ public class InvestigationService {
         try {
             return InvestigationMode.valueOf(name.strip().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new InputRejectedException("mode must be SINGLE_CALL, AGENT, SUPERVISED or SUPERVISED_PLANNED");
+            throw new InputRejectedException("mode must be SINGLE_CALL, AGENT, SUPERVISED, SUPERVISED_PLANNED or RERO");
         }
     }
 

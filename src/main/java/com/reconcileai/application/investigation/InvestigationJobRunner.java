@@ -107,6 +107,14 @@ public class InvestigationJobRunner {
         this.knowledgeFailClosed = knowledgeProperties.failClosed();
     }
 
+    private com.reconcileai.application.rero.ReroInvestigation rero;
+
+    /** Optional: the RERO mode (platform Q3.5), present only with {@code reconcile.rero.enabled=true}. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setReroInvestigation(com.reconcileai.application.rero.ReroInvestigation rero) {
+        this.rero = rero;
+    }
+
     /** Optional: the supervised modes (specialist agents). Missing only in slices that do not load the agent package. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSupervisedInvestigation(SupervisedInvestigation supervised) {
@@ -182,6 +190,10 @@ public class InvestigationJobRunner {
                 runSupervised(jobId, tenantId, job, breakItem);
                 return;
             }
+            if (job.getMode() == InvestigationMode.RERO) {
+                runRero(jobId, tenantId, job, breakItem);
+                return;
+            }
 
             String query = promptBuilder.retrievalQuery(breakItem, job.getAnalystNote());
             List<RetrievedChunk> ranked = retriever.retrieve(tenantId, breakItem.getId(), query);
@@ -226,7 +238,9 @@ public class InvestigationJobRunner {
             }
         } catch (Exception e) {
             log.warn("Investigation {} failed: {}", jobId, e.toString());
-            if (e instanceof GatewayCallException gateway) {
+            if (e instanceof com.reconcileai.application.rero.ReroCallException reroFailure) {
+                failRero(jobId, tenantId, reroFailure);
+            } else if (e instanceof GatewayCallException gateway) {
                 failJob(jobId, tenantId, GatewayFailure.reason(gateway), gateway);
             } else {
                 failJob(jobId, tenantId, reasonOf(e));
@@ -322,6 +336,73 @@ public class InvestigationJobRunner {
         stage(jobId, tenantId, JobStage.VERIFYING, j -> j.recordRetrieval(snapshot, 0));
         verifyRouteAndPersist(jobId, tenantId, breakItem, draft, snapshot, finalVerdict.challenged(),
             j -> j.recordReview(finalVerdict.verdict().name(), result.riskFlags()));
+    }
+
+    /**
+     * RERO mode (platform Q3.5): RERO drafts through our internal read-only tools; we re-check its citations against
+     * the chunk ids we served, then run the same citation check, policy gate and proposal path as every other mode.
+     * A self-check CHALLENGE is the reviewerChallenged gate input (manual review); PASS adds nothing, so it can never
+     * lower review. Any failure throws ReroCallException: job FAILED, break FAILED_RETRYABLE, no proposal.
+     */
+    private void runRero(UUID jobId, String tenantId, InvestigationJob job, BreakItem breakItem) {
+        if (rero == null) {
+            throw new com.reconcileai.application.rero.ReroCallException(
+                com.reconcileai.application.rero.ReroCallException.DISABLED);
+        }
+        com.reconcileai.application.rero.ReroInvestigation.Outcome outcome = rero.run(job,
+            new com.reconcileai.application.rero.ReroInvestigation.Listener() {
+                @Override
+                public void started(UUID runId) {
+                    tx.executeWithoutResult(s -> {
+                        InvestigationJob j = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+                        j.recordReroRun(runId, List.of());
+                        jobs.save(j);
+                    });
+                }
+
+                @Override
+                public void stage(JobStage next) {
+                    heartbeat(jobId, tenantId, next);
+                }
+            });
+        List<String> snapshot = outcome.servedChunkIds();
+        stage(jobId, tenantId, JobStage.VERIFYING, j -> j.recordRetrieval(snapshot, 0));
+        verifyRouteAndPersist(jobId, tenantId, breakItem, outcome.draft(), snapshot, outcome.challenged(),
+            j -> {
+                j.recordReview(outcome.selfCheck().name(), List.of());
+                j.recordReroRun(outcome.runId(), outcome.gatewayInvocationIds());
+            });
+    }
+
+    /** A RERO failure: always retryable, no proposal, gateway invocation ids (if any) kept in the audit entry. */
+    private void failRero(UUID jobId, String tenantId, com.reconcileai.application.rero.ReroCallException e) {
+        List<String> invocations = e.gatewayInvocationIds();
+        if (!invocations.isEmpty()) {
+            tx.executeWithoutResult(s -> jobs.findByIdAndTenantId(jobId, tenantId).ifPresent(j -> {
+                if (!j.isTerminal()) {
+                    j.recordReroRun(j.getReroRunId(), invocations);
+                    jobs.save(j);
+                }
+            }));
+        }
+        failJob(jobId, tenantId, e.code());
+    }
+
+    /**
+     * Keeps a long RERO run alive for recovery (heartbeat) and moves the visible stage. Publishes only on a change.
+     * No audit entry: INVESTIGATION_STARTED was written once by the first stage update.
+     */
+    private void heartbeat(UUID jobId, String tenantId, JobStage next) {
+        JobStage[] before = new JobStage[1];
+        InvestigationJob j = tx.execute(s -> {
+            InvestigationJob job = jobs.findByIdAndTenantId(jobId, tenantId).orElseThrow();
+            before[0] = job.getStage();
+            job.advance(next);
+            return jobs.save(job);
+        });
+        if (j != null && before[0] != j.getStage()) {
+            progress.publish(j);
+        }
     }
 
     private CitationResult verifyRouteAndPersist(UUID jobId, String tenantId, BreakItem breakItem, NormalizedDraft draft,

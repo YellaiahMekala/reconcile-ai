@@ -134,4 +134,19 @@ class TenantServiceTokensTest {
         t.token("tenant-a");
         assertThat(factoryCalls).hasValue(1);
     }
+    @Test
+    void reroTokensMustCarryEveryRequiredAudience() {
+        java.util.Set<String> both = java.util.Set.of("rero-api", "ai-gateway");
+        Function<Supplier<String>, TenantServiceTokens> rero = source -> new TenantServiceTokens(JSON,
+            "reconcile.rero.tenants", Map.of("tenant-a", new TenantClient("client-a", "EKA_SECRET_A")), both, secrets,
+            client -> source);
+        String ok = b64("{}") + "." + b64("{\"tenant_id\":\"tenant-a\",\"aud\":[\"rero-api\",\"ai-gateway\"]}") + ".s";
+        String one = b64("{}") + "." + b64("{\"tenant_id\":\"tenant-a\",\"aud\":\"rero-api\"}") + ".s";
+        String none = jwt("tenant-a");
+        assertThat(rero.apply(() -> ok).token("tenant-a")).isEqualTo(ok);
+        assertCode(() -> rero.apply(() -> one).token("tenant-a"), "TOKEN_AUDIENCE_MISMATCH");
+        assertCode(() -> rero.apply(() -> none).token("tenant-a"), "TOKEN_AUDIENCE_MISMATCH");
+        // The EKA instance requires no audience set, so its behaviour is unchanged.
+        assertThat(tokens(() -> none).token("tenant-a")).isEqualTo(none);
+    }
 }

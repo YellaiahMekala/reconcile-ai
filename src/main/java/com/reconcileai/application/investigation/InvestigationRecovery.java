@@ -70,6 +70,9 @@ public class InvestigationRecovery {
                 log.warn("Recovering orphaned RUNNING job {} (owner={}, heartbeat={})", j.getId(), j.getOwnerNode(), j.getHeartbeatAt());
                 // On the gateway route, a node that died during the model call may have sent it: outcome unknown.
                 // Only SINGLE_CALL jobs use the gateway; other modes never reach it (and are refused while it is on).
+                // RERO (platform Q3.5) is deliberately not flagged: RERO's gateway keys are {jobId}:draft/selfcheck, so a
+                // new job can never replay or double this job's calls; the orphan simply fails retryably (INTERRUPTED)
+                // and RERO's own run ends FAILED/RESTARTED or by its deadline. Its run token dies with the job state.
                 boolean midCall = j.getStage() == com.reconcileai.domain.JobStage.CALLING_MODEL
                     && j.getMode() == com.reconcileai.domain.InvestigationMode.SINGLE_CALL
                     && gateway.getIfAvailable() != null;

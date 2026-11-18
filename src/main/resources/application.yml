@@ -190,6 +190,27 @@ reconcile:
     # tenants:
     #   "[tenant-a]": { client-id: svc-reconcile-tenant-a, client-secret-env: KC_SVC_TENANT_A_SECRET }
     #   "[tenant-b]": { client-id: svc-reconcile-tenant-b, client-secret-env: KC_SVC_TENANT_B_SECRET }
+  rero:                             # platform Q3: RERO investigation mode (Contract C); off by default, refused with 409
+    enabled: ${RERO_ENABLED:false}
+    base-url: ${RERO_BASE_URL:http://localhost:8095}
+    token-uri: ${RERO_TOKEN_URI:http://localhost:8190/realms/platform/protocol/openid-connect/token}
+    token-scope: ${RERO_TOKEN_SCOPE:aud-rero-api aud-ai-gateway}   # must yield aud rero-api AND ai-gateway (TDD 2.2)
+    required-audiences: rero-api,ai-gateway
+    model-via-gateway: ${RERO_MODEL_VIA_GATEWAY:false}  # true only if RERO runs GatewayModel; needed while gateway route is on
+    connect-timeout: 2s
+    request-timeout: 5s
+    poll-interval: 500ms
+    deadline-seconds: 60            # contract 5..120; run token TTL = deadline + 30 s
+    deadline-grace: 5s
+    max-tool-calls: 8               # contract 1..20; counted atomically per job in investigation_job.tool_calls_used
+    max-evidence-chars: 1500
+    run-token:                      # ES256 P-256 key pair, PEM from the environment / secret manager; never committed
+      kid: ${RERO_RUN_TOKEN_KID:rero-run-1}
+      private-key-pem: ${RERO_RUN_TOKEN_PRIVATE_KEY_PEM:}
+      public-key-pem: ${RERO_RUN_TOKEN_PUBLIC_KEY_PEM:}
+    # One platform-realm client per tenant, exact tenant_id match, like knowledge. client-secret-env names the variable.
+    # tenants:
+    #   "[tenant-a]": { client-id: svc-reconcile-rero-tenant-a, client-secret-env: KC_SVC_RERO_TENANT_A_SECRET }
   ai:
     log-prompts: false              # true ONLY on localhost: enables SimpleLoggerAdvisor (logs full prompts)
     pricing:                        # list price per 1M tokens for the cost metric (ESTIMATED). Defaults: gpt-4o-mini
