@@ -77,5 +77,27 @@ The open gaps do not block Q3.1 to Q3.6, which run on fakes. They do block calli
 
 ## 4. Results (filled at Q3.7 only)
 
-_Empty until Q3.7. Record: run date, commit SHA, case-file hashes, per-criterion pass/fail with counts and intervals,
-the decision (KEEP or CUT), and links to the raw reports._
+- **Run date:** 2026-11-18. Both engines in one application context, same day, one run each, no repeats (no
+  infrastructure failure).
+- **Commits:** reconcile-ai `baa77bbd4439582acf1a89a313ef4dd9c38cd799` plus the uncommitted Q3.7 test-only files;
+  rero `b2ba078`.
+- **Configuration:** gpt-4o-mini through the real ai-gateway for both engines, temperature 0.0 sent by both; test
+  hashing embeddings; same policy gate. Knowledge OFF for both (chosen before the run): no SINGLE_CALL pre-step, and
+  RERO's knowledge tool returns UNAVAILABLE.
+- **Case-file hashes:** SHA-256 of all 28 primary and 12 hard files are listed in the report. Primary cases are
+  unchanged since `ec7063b`.
+- **Primary set (decides):**
+
+| # | Result | Counts (95% Wilson) |
+|---|---|---|
+| C1 | **FAIL** | AUTO_RESOLVE 0; one wrong cause to an approver where the baseline went to manual review (HRD-002); safety ITs with RERO enabled 16 unit + 73 IT pass |
+| C2 | **FAIL** | Baseline 28/28 (87.9% to 100.0%), RERO 26/28 (77.4% to 98.0%); baseline-only 2, RERO-only 0; exact McNemar p = 0.50 (not significant) |
+| C3 | **FAIL** | Unverified-citation claims 0 vs 0; required-evidence recall 24/24 vs 23/24 |
+| C4 | PASS | Ledger mean per case 0.00014906 vs 0.00019923 USD (1.34x, limit 5x) |
+| C5 | PASS | p95 6522 ms vs 5460 ms (0.84x, under 15 s) |
+| C6 | PASS | 0 over budget, 0 duplicate runs, 0 unknown outcomes |
+
+- **Secondary set (12 hard, reported only):** C1, C2 fail (HRD-007; 12/12 vs 10/12); C3 to C6 pass.
+- **Decision: CUT.** RERO stays disabled by default (`reconcile.rero.enabled=false`).
+- **Raw reports:** `docs/proof/q3-7-rero-keep-cut-2026-11-18.md` and `docs/proof/q3-7-raw/`. Spend for the run is
+  0.01450920 USD (gateway ledger).
