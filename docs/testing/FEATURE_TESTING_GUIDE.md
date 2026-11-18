@@ -30,7 +30,10 @@ Secrets are always environment variables, listed here by name only.
 | [F11](#f11-integrated-evaluation-q43) | Integrated evaluation (Q4.3) | E-29 | opt-in, paid, approved |
 | [F12](#f12-knowledge-ablation-q43) | Knowledge ablation (Q4.3) | E-30 | opt-in, paid, approved |
 | [F13](#f13-rero-integration-on-fakes-q32-and-q35) | RERO integration on fakes (Q3.2, Q3.5) | E-31 | default build |
-| [F14](#f14-q37-rero-keepcut-evaluation) | Q3.7 RERO keep/cut evaluation | pending | running |
+| [F14](#f14-q37-rero-keepcut-evaluation) | Q3.7 RERO keep/cut evaluation | E-32 | done, CUT (paid, run) |
+| [F15](#f15-real-gateway-and-per-tenant-realm-clients-pq111-pq112) | Real gateway and per-tenant realm clients (PQ1.1.1, PQ1.1.2) | E-20, E-34 | opt-in, free |
+| [F16](#f16-golden-path-and-eka-down-in-ci-pq116) | Golden path and EKA-down in CI (PQ1.1.6) | E-35 | default build |
+| [F17](#f17-relevance-filter-re-measure-pq124) | Relevance filter re-measure (PQ1.2.4) | E-36 | opt-in, paid, approved |
 
 ## F1 Knowledge pre-step, Q1.1 to Q1.5
 
@@ -378,5 +381,73 @@ declaration, not a proof.
 
 ## F14 Q3.7 RERO keep/cut evaluation
 
-Status: **done 2026-11-18, decision CUT (E-32).** Paid run (approved), both engines on gpt-4o-mini through the real ai-gateway, knowledge off for both, same day. C1 fail (HRD-002: RERO sent a wrong cause to L1 where the baseline chose manual review), C2 fail (root cause 26/28 vs baseline 28/28; McNemar p = 0.50, not significant), C3 fail (evidence recall 23/24 vs 24/24); C4 pass (cost 1.34x), C5 pass (p95 6522 vs 5460 ms), C6 pass (no budget overrun, no duplicate runs, no unknown outcomes). Spend 0.0145 USD from the gateway ledger. RERO stays disabled by default; the Q1/Q2 three-service platform is the final shape. Interview point: the rule was frozen before the code and the negative result is published as it stands. Full report: `reconcile-ai/docs/proof/q3-7-rero-keep-cut-2026-11-18.md`. Original note: The rule was frozen before Q3 code (`docs/adr/RERO_EVALUATION_RULE.md`, E-23);
-the default decision is CUT. This section will list the cases, the run date, the numbers and the decision.
+Status: **done 2026-11-18, decision CUT (E-32).** Paid run (approved), both engines on gpt-4o-mini through the real ai-gateway, knowledge off for both, same day. C1 fail (HRD-002: RERO sent a wrong cause to L1 where the baseline chose manual review), C2 fail (root cause 26/28 vs baseline 28/28; McNemar p = 0.50, not significant), C3 fail (evidence recall 23/24 vs 24/24); C4 pass (cost 1.34x), C5 pass (p95 6522 vs 5460 ms), C6 pass (no budget overrun, no duplicate runs, no unknown outcomes). Spend 0.0145 USD from the gateway ledger. RERO stays disabled by default; the Q1/Q2 three-service platform is the final shape. Interview point: the rule was frozen before the code and the negative result is published as it stands. Full report: `reconcile-ai/docs/proof/q3-7-rero-keep-cut-2026-11-18.md`. The rule was frozen before Q3 code (`docs/adr/RERO_EVALUATION_RULE.md`, E-23).
+
+## F15 Real gateway and per-tenant realm clients, PQ1.1.1 and PQ1.1.2
+
+**What and why.** The fakes cannot prove that the real realm issues the right token or that the real gateway scopes its
+ledger by tenant. Two free opt-in tests do, against the local spike stack (Keycloak 8190, ai-gateway 8280 on the stub
+provider).
+
+**Design decision.** No realm change: the platform realm already holds `svc-reconcile-tenant-a` and `-b`, each with a
+hard-coded `tenant_id` claim. Secrets come from the environment only (`GATEWAY_CLIENT_SECRET`, `KC_SVC_TENANT_A_SECRET`,
+`KC_SVC_TENANT_B_SECRET`).
+
+**Tests.** `RealGatewayIT` (one job, ledger link) and `RealGatewayPerTenantIT` (tag `gateway`; one job per tenant, each
+invocation read from the ledger with both tenants' tokens). Skipped when the variables are missing.
+
+**How to run.** `bash scripts/spikes/up.sh` in the platform repo, export the secrets, then
+`mvn verify "-Dfailsafe.excludedGroups=openai,ollama,bedrock,gateway-live" -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=RealGatewayIT`
+(or `RealGatewayPerTenantIT`).
+
+**Result (2026-11-18).** Both passed. `RealGatewayIT`: 296 in / 9 out tokens, ledger 200 `OK` `EXECUTED`, cost 0; the job
+ends `FAILED / MODEL_OUTPUT_NOT_VALID_JSON` by design (stub text). Per-tenant: A's invocation is 200 under A's token and
+not 200 under B's, and the reverse. Register: E-20 (real gateway, stub provider) and E-34 (per-tenant clients). Proofs: `docs/proof/pq1-1-1-real-gateway-stub-2026-11-18.md`,
+`docs/proof/pq1-1-2-per-tenant-realm-clients-2026-11-18.md`.
+
+**Honest limits.** One run, one machine, not in CI. The cross-tenant check asserts "not 200", not the exact code. Refusal
+paths stay on the fake gateway (`GatewayPerTenantCredentialsIT`).
+
+**Interview question.** *How do you know the right client was used?* The gateway's own ledger, which is tenant-scoped by
+the token, answers it: the row is visible only under the tenant's token.
+
+## F16 Golden path and EKA-down in CI, PQ1.1.6
+
+**What and why.** The two platform demos were local-only and paid. CI needs a key-free version that still exercises the
+whole product path.
+
+**Design decision.** `mock-llm` profile (no direct chat model), the schema-checked `FakeGatewayServer` as the only chat
+path, per-tenant clients for gateway and knowledge, and either `FakeEkaServer` or an EKA address where nothing listens.
+Real application and real Postgres; no key, no spend.
+
+**Tests.** `PlatformGoldenPathIT`: knowledge `OK` with one `kb:` ref, one gateway call under the tenant's client, route
+L1, approval by a different person, break `RESOLVED`, audit chain valid. `PlatformEkaDownIT`: connection refused, job
+`SUCCEEDED`, knowledge `UNAVAILABLE`, no refs, same approval and valid audit chain. Both run in `mvn verify` and CI.
+
+**How to run.** `mvn clean verify`, or `-Dit.test=Platform*IT`.
+
+**Result (2026-11-18).** Both passed on the first run (2 tests, 0 failures). Register: E-35 (local pass; the CI link is added after the push).
+
+**Honest limits.** Fakes, not the real EKA or gateway; they prove our wiring and failure handling, not the other
+services. The paid local demos (F10) remain the proof of the real stack.
+
+**Interview question.** *How do you test an outage without flakiness?* Point the client at an address nothing listens on;
+the failure is deterministic and needs no container to stop.
+
+## F17 Relevance filter re-measure, PQ1.2.4
+
+**What and why.** F12 showed unfiltered knowledge cost 5 route cases. D1.1.1 added a relevance filter; this measures it.
+
+**Tests.** `IntegratedPlatformEvalIT` (tag `platform-live`), three runs, `KNOWLEDGE_MIN_SCORE=0.60` (set from EKA cosine
+probes before the runs: unrelated 0.43 to 0.52, generic query 0.67). Paid, approved, cap 0.10 USD.
+
+**Result (2026-11-18).** Route 21/28 (75.0%) in all three runs; root cause 27/28; citations 100%. Baseline 24/28,
+unfiltered 19/28. TIM-001 and HRD-002 recovered; MIS-001 to MIS-003 did not. 95% Wilson interval 56.7% to 87.3%. Ledger
+spend 0.01450230 USD for 75 calls. Register: E-36. `docs/proof/pq1-2-4-relevance-filter-remeasure-2026-11-18.md`.
+
+**Honest limits.** n = 28; the interval includes the baseline. The EKA corpus was reconstructed (three fee procedures).
+The score floor cannot discriminate because the query is the same for every break; the category match does the work and
+finds no category when the evidence uses other words. Per-case filter counts were not collected.
+
+**Interview question.** *Did the fix work?* Partly: it recovered 2 of 5 cases and is not significant at n = 28. I report
+that, and name the next step (wider category detection, non-fee procedures in the corpus) rather than claim a fix.
