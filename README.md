@@ -91,11 +91,7 @@ agent mode (off by default), Prometheus alert rules, rate limiting and stored ev
 | Item | Status |
 |---|---|
 | Expose the read-only tools over MCP for other services | Not started; needs a token-based tenant design |
-<<<<<<< HEAD
 | Platform integration (shared token issuer, knowledge search, recommendation intake) | Knowledge search built (Q1.1 to Q1.5, off by default); the rest planned |
-=======
-| Platform integration (shared token issuer, knowledge search, recommendation intake) | Planned |
->>>>>>> origin/main
 | Trivy scan that fails the build | Listed under Known limitations |
 
 ---
@@ -448,13 +444,8 @@ investigation, policy route, approval, RESOLVED, audit chain check):
 
 ## 6. Test suite
 
-<<<<<<< HEAD
 Current counts in the default build: **166 unit tests** (surefire), **193 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
 Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too. `eka` needs the real EKA edge and the platform realm (free, no model call; `docs/proof/q1-6-eka-isolation-runbook.md`) and is excluded as well.
-=======
-Current counts in the default build: **123 unit tests** (surefire), **179 integration tests** (failsafe, real Postgres, Redis, Kafka, Keycloak, Presidio and MinIO via Testcontainers) and **15 UI specs** (Karma).
-Tests tagged `openai`, `ollama` and `bedrock` need a real key, a running Ollama or AWS credentials and are excluded from the default build. `gateway` needs the platform spike stack (Keycloak and ai-gateway with a stub provider, free) and `gateway-live` is the one paid run (`docs/proof/q2-7-gateway-live-runbook.md`); both are excluded too.
->>>>>>> origin/main
 
 | Class | Type | Proves |
 |---|---|---|
