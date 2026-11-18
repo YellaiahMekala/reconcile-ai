@@ -83,7 +83,7 @@ agent mode (off by default), Prometheus alert rules, rate limiting and stored ev
 | Amazon Bedrock live run (`BedrockEvalIT`, `BedrockChatSmokeIT`, `BEDROCK_LIVE=true`) | Adapter proven against a WireMock Converse API; `BedrockFakeEvalIT` scores match mock-llm | AWS credentials and Bedrock model access; fills the last row of the provider comparison |
 | AWS deployment (`envs/demo`: ECS Fargate, RDS, ALB, Secrets Manager, S3 Object Lock, Budgets) | `terraform validate` and `test` with mock providers, tflint, checkov; `envs/localstack` applied and destroyed in CI | A real account, AWS credit, and your explicit go-ahead for one apply, record, destroy session (about 0.20 USD per hour) |
 | Shared stream fan-out between two Fargate tasks | Redis fan-out tested locally | Redis in the AWS stack (not built there) |
-| KEDA autoscaling (`k8s/overlays/keda`) | Overlay rendered and schema-checked with kubeconform in CI | A cluster with KEDA installed and Prometheus scraping the app |
+| KEDA autoscaling (`k8s/overlays/keda`) | Overlay schema-checked in CI; run once on kind with stub app and stub Prometheus (PQ1.2.1) | Real image and real Prometheus on a cluster; a cluster with KEDA installed and Prometheus scraping the app |
 | Per-tenant gateway credentials | Fake gateway and fake realm in CI; real realm with two clients and the real gateway (stub provider) passed locally on 2026-11-18 (`RealGatewayPerTenantIT`, E-34) | Nothing for the stub; a real-provider two-tenant run is not done |
 
 **Pending implementation** (designed, not started)
@@ -392,7 +392,7 @@ readiness probes, HPA on CPU from 2 to 6 replicas, PodDisruptionBudget, non-root
 `overlays/kind/` that adds in-cluster Postgres and Redis. Several replicas are safe because SSE fan-out goes through
 Redis and the scheduled jobs take Postgres advisory locks. Validated on a local kind cluster: clean rollout,
 authenticated API call through the Service, and a scale-up from 2 to 4 pods under load. Steps: [`k8s/README.md`](k8s/README.md).
-`overlays/keda/` removes the CPU HPA and adds a KEDA ScaledObject (2 to 6 replicas) with a Prometheus trigger on active plus queued investigations (threshold 3 per pod) and a CPU 70% trigger, and sets `RATE_LIMIT_STORE=redis` so replicas share one rate-limit bucket. That overlay is validated only: rendered and schema-checked, not run on a cluster with KEDA.
+`overlays/keda/` removes the CPU HPA and adds a KEDA ScaledObject (2 to 6 replicas) with a Prometheus trigger on active plus queued investigations (threshold 3 per pod) and a CPU 70% trigger, and sets `RATE_LIMIT_STORE=redis` so replicas share one rate-limit bucket. The overlay is schema-checked in CI and was run once on a kind cluster with KEDA 2.21.1 against a stub workload and a stub Prometheus (not the real image or real metrics): Ready, scaled 2 to 4 to 6, held count with Prometheus down. See `docs/proof/pq1-2-1-keda-kind-2026-11-19.md`.
 CI renders the base and both overlays, validates them with kubeconform and builds the image.
 
 **LLM retry and circuit breaker.** With the default mock model, evidence containing the marker text
@@ -512,7 +512,7 @@ repo (`evidence/EVIDENCE_REGISTER.md`). "Paid, approved" means a real model call
 | EKA concurrency (Q1.7) | 10 parallel lookups, same IT | 10/10 OK, 199 to 380 ms, one laptop | E-26, [F3](docs/testing/FEATURE_TESTING_GUIDE.md#f3-concurrent-eka-lookups-q17) |
 | Unknown gateway outcome (Q2.3) | Whole app, real Postgres, schema-checked fake gateway | One request; re-run 409 until a second person reconciles | E-18, [F4](docs/testing/FEATURE_TESTING_GUIDE.md#f4-gateway-unknown-outcome-q23) |
 | Ledger link, sensitive data, budget (Q2.4 to Q2.6) | ITs on fake gateway; unit adapter tests | 116 unit / 163 IT then; IBAN and card masked | E-19, [F5](docs/testing/FEATURE_TESTING_GUIDE.md#f5-gateway-ledger-sensitive-data-and-budget-q24-to-q26) |
-| Ledger read, per-tenant credentials, shared rate limit | Real Redis in Testcontainers; kubeconform for KEDA | 40 concurrent: exactly 10 allowed; KEDA schema only | E-21, [F6](docs/testing/FEATURE_TESTING_GUIDE.md#f6-ledger-read-per-tenant-credentials-shared-rate-limit-keda) |
+| Ledger read, per-tenant credentials, shared rate limit | Real Redis in Testcontainers; kubeconform for KEDA | 40 concurrent: exactly 10 allowed; KEDA schema (CI) plus kind run with stubs | E-21, [F6](docs/testing/FEATURE_TESTING_GUIDE.md#f6-ledger-read-per-tenant-credentials-shared-rate-limit-keda) |
 | Review fixes, flaky recovery-sweep test | `GatewayReviewFixesIT`; test config fix | 125 unit / 184 IT; CI #54 failed, fixed, #58 green | E-22, E-26, [F7](docs/testing/FEATURE_TESTING_GUIDE.md#f7-review-fixes-and-the-flaky-recovery-sweep-test) |
 | Live gateway run (Q2.7) | `GatewayLiveProviderIT`, one call; paid, approved | SUCCEEDED, 719 in / 111 out tokens, $0.00017445 | E-27, [F8](docs/testing/FEATURE_TESTING_GUIDE.md#f8-live-gateway-run-q27) |
 | Card-masking fix | Found by first golden-path run; 2 new `PiiMaskerTest` cases | Refused at cost 0, fixed; 168 unit / 193 IT | E-28, [F9](docs/testing/FEATURE_TESTING_GUIDE.md#f9-card-masking-alignment-fix) |
@@ -533,6 +533,24 @@ repo (`evidence/EVIDENCE_REGISTER.md`). "Paid, approved" means a real model call
 |---|---|---|
 | reconcile-ai | `ci` #59 (PR), #60 (main); fakes only for RERO | `9479cdb` |
 | reconcile-ai | `ci` #66 (main): Trivy gate, UI 29/29 (E-33, E-40) | `886cc9e` |
+
+### Test evidence: Phase 1 to 5 features
+
+Earlier features, mapped to test classes and proof files that exist in this repo. Detail, commands and expected results:
+[F21 to F31 in the feature testing guide](docs/testing/FEATURE_TESTING_GUIDE.md#f21-foundation-security-tenant-isolation-breaks-and-evidence-tier-0-to-1).
+"Deferred" means it needs real AWS credentials, real SMTP or paid keys and is left to the final phase.
+
+| Feature | Tests | Proof | Status |
+|---|---|---|---|
+| Security and tenant isolation | `SecurityAndTenantIsolationIT`, `RowLevelSecurityIT`, `KeycloakIT` | E-01, E-02, E-13 | CI green |
+| Investigation pipeline | `InvestigationFlowIT`, `GoldenPathIT`, `AuditChainIT` | E-03, E-04; `docs/proof/phase2c-verify.log` | CI green |
+| Hardening (breaker, PII, outbox, digest) | `LlmResilienceIT`, `PresidioNerIT`, `KafkaOutboxIT`, `DailyDigestIT` | E-16 | CI green |
+| Evaluation harness (4A) | `InvestigationEvalIT`, `RetrievalEvalIT`; live `OpenAiInvestigationEvalIT` | E-10, `docs/proof/phase4-openai-eval.md` | gate in CI; live run local, paid |
+| Agent and supervisor modes (4B, 4G) | `AgentInvestigationIT`, `SupervisedInvestigationIT` | `docs/proof/phase4g-supervised-eval.md` | CI for free tests; decision rule not met |
+| Alerts (4C) | `alerts.test.yml`, `ObservabilityIT` | `docs/proof/4c-outage-drill-2026-11-10.md` | Mailpit only; real SMTP deferred |
+| Bedrock (4D) | `BedrockAdapterIT`, `BedrockFakeEvalIT` | `docs/proof/4d-bedrock-fake-eval-2026-11-10.md` | fake endpoint only; live run deferred |
+| AWS Terraform (4E) | `*.tftest.hcl`, LocalStack job | `docs/proof/4e-localstack-apply-2026-11-10.md` | LocalStack only; real apply deferred |
+| Dashboard and cache savings (5C, 5D) | `ObservabilityIT`, `SemanticCacheIT` | E-14, E-15, `docs/proof/5c-*`, `docs/proof/5d-*` | local one-off runs |
 
 Limits: one run on one laptop for the live rows, synthetic cases, n = 28, no capacity or quality benchmark claim.
 Full detail per feature (tests, commands, failure modes, interview questions):
@@ -662,7 +680,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 | Latest job for a break | `GET /api/v1/breaks/{breakId}/investigations/latest` (any app role) returns the same job body as `GET /investigations/{jobId}` for the break's newest job, ordered by `created_at` desc in the tenant. 404 `JOB_NOT_FOUND` when the break has no job or belongs to another tenant. The console calls it on load, so the knowledge and gateway-calls panels survive a page reload (a job started in the session still takes precedence). No migration: `idx_job_tenant_break` serves the query. Test: `LatestInvestigationIT` (5), `break-detail.page.spec.ts` |
 | Per-tenant gateway credentials | `reconcile.gateway.tenants` maps a tenant to its own client, for example `"[TENANT_A]": { client-id: ..., client-secret-env: GATEWAY_SECRET_TENANT_A }`. The secret is read from the named environment variable and never from YAML. An empty map keeps the old shared client. When the map is set, each job's call uses its tenant's client and the token's `tenant_id` claim must equal the job tenant exactly (`TOKEN_TENANT_MISMATCH`, or `TOKEN_TENANT_UNVERIFIED` when no claim can be read; the signature is not checked locally because the gateway verifies it). A tenant with no entry fails with `TENANT_CREDENTIALS_MISSING`; there is no fallback to a shared client. These fail before anything is sent: job failure reason `GATEWAY_<code>`, break `FAILED_RETRYABLE`, `gateway_call` outcome `NOT_SENT` with http 0. Startup fails fast when an entry is incomplete, a secret variable is unset, or two keys collide after case and separators are ignored; the message names tenants and variable names only. Tests: `TenantGatewayTokensTest`, `GatewayPerTenantCredentialsIT` (fake gateway and realm in CI); `RealGatewayPerTenantIT` (real realm and gateway, stub provider, opt-in, E-34) |
 | Rate limit shared through Redis | `reconcile.ratelimit.store` is `memory` (default, per JVM) or `redis` (`RATE_LIMIT_STORE`). In Redis mode there is one token bucket per tenant shared by all replicas, updated by one atomic Lua script on the Redis server clock. The key is `reconcile:ratelimit:investigations:{tenant}` and it expires when the bucket would be full. If Redis is unreachable the call falls back to the local per-JVM bucket and `reconcile.ratelimit.redis.fallback` counts it. Tests: `RedisTokenBucketRateLimiterIT`, `SharedRateLimitIT` |
-| Autoscale on queued work (KEDA overlay) | Investigations wait mostly on the model, so CPU is a weak load signal. Gauges `reconcile.investigations.executor.active`, `.queued` and `.capacity` expose the pool. `k8s/overlays/keda` removes the base CPU HPA and adds a KEDA ScaledObject (2 to 6 replicas) with a Prometheus trigger on active plus queued (threshold 3 per pod) and a CPU 70% trigger, and sets `RATE_LIMIT_STORE=redis` so replicas share one bucket. CI renders the overlay and checks it with kubeconform against the datreeio CRDs-catalog schema. Validated only, not run on a cluster with KEDA. Test: `InvestigationQueueMetricsTest` |
+| Autoscale on queued work (KEDA overlay) | Investigations wait mostly on the model, so CPU is a weak load signal. Gauges `reconcile.investigations.executor.active`, `.queued` and `.capacity` expose the pool. `k8s/overlays/keda` removes the base CPU HPA and adds a KEDA ScaledObject (2 to 6 replicas) with a Prometheus trigger on active plus queued (threshold 3 per pod) and a CPU 70% trigger, and sets `RATE_LIMIT_STORE=redis` so replicas share one bucket. CI renders the overlay and checks it with kubeconform against the datreeio CRDs-catalog schema. Rendered, schema-checked, and run on kind with stub workload and stub Prometheus (PQ1.2.1 proof). Test: `InvestigationQueueMetricsTest` |
 
 ## 8. Known limitations
 
@@ -671,7 +689,7 @@ Single call stays the default: on this data the agent costs 8x for no real gain.
 - The Keycloak realm in `docker/keycloak/` is a local demo (synthetic users, shared password, `start-dev`); a production IdP needs HTTPS, its own hostname and managed users.
 - PII masking is not DLP. Without the Presidio sidecar only structured identifiers are masked; with it, names and locations are masked with model accuracy (it can miss unusual names and occasionally mask a non-name). Free-form disclosures (for example a medical detail) are not detected.
 - Audit anchors protect history up to the latest anchor; events written since then are covered only by the in-database chain until the next cycle (15 minutes by default). Anchors prove the chain was not changed afterwards, not that each event was true when written.
-- The base HPA scales on CPU only. The `k8s/overlays/keda` overlay replaces it with a KEDA ScaledObject that also scales on active plus queued investigations, but it has been rendered and schema-checked (kubeconform, datreeio CRDs-catalog schema) only. It has not been run on a cluster with KEDA installed.
+- The base HPA scales on CPU only. The `k8s/overlays/keda` overlay replaces it with a KEDA ScaledObject that also scales on active plus queued investigations, and it has been schema-checked (kubeconform) and run on a kind cluster with KEDA, but only with a stub workload and a stub Prometheus, not the real image under real load.
 - The circuit breaker is per instance; the cost metric is an estimate from list prices, not an invoice.
 - The investigation rate limit is held in memory per instance by default (`RATE_LIMIT_STORE=memory`), so with N replicas a tenant can reach N times the configured rate. With `RATE_LIMIT_STORE=redis` the bucket is shared by all replicas. If Redis is unreachable, each replica falls back to its own local bucket and counts `reconcile.ratelimit.redis.fallback`, so the shared limit is not enforced during an outage.
 - Evidence bytes are stored in Postgres (`bytea`), which suits the 10 MB upload cap. Evidence uploaded before migration V9 has no stored original. Object storage is the upgrade for larger files.

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: monitoring }
+---
+# Static Prometheus instant-query answer. Edit the "value" string (second element) to drive the KEDA trigger.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: stub-prom-response, namespace: monitoring }
+data:
+  query: '{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1700000000,"0"]}]}}'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: prometheus-server, namespace: monitoring }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: prometheus-server } }
+  template:
+    metadata: { labels: { app: prometheus-server } }
+    spec:
+      containers:
+        - name: httpd
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /www/api/v1 && ln -sf /resp/query /www/api/v1/query && exec httpd -f -p 9090 -h /www"]
+          ports: [{ containerPort: 9090 }]
+          volumeMounts: [{ name: resp, mountPath: /resp }]
+      volumes:
+        - name: resp
+          configMap: { name: stub-prom-response }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: prometheus-server, namespace: monitoring }
+spec:
+  selector: { app: prometheus-server }
+  ports: [{ port: 80, targetPort: 9090 }]
