@@ -1,7 +1,7 @@
 # ADR-Q3: RERO integration (run token, internal read-only API, RERO mode)
 
-- **Status:** accepted for the Q3 experiment. RERO is **off by default** (`RERO_ENABLED=false`). The keep or cut decision is
-  made at Q3.7 under the frozen `RERO_EVALUATION_RULE.md`.
+- **Status:** accepted for the Q3 experiment. RERO is **off by default** (`RERO_ENABLED=false`). The keep or cut decision was
+  made at Q3.7 under the frozen `RERO_EVALUATION_RULE.md`: **CUT** (2026-11-18, E-32). RERO stays off by default.
 - **Scope:** reconcile-ai side of platform Q3.2 and Q3.5. Contract: `platform/contracts/rero/CONTRACT_C.md` (+ `*.v1.json`).
 
 ## Decision
