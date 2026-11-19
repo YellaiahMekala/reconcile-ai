@@ -88,7 +88,8 @@ about answer quality (that is F11 and F12).
 **Interview questions.**
 
 - *Why a pre-step and not an agent tool?* The gateway has no tool calling, so an agent tool cannot run on the governed
-  path. I made retrieval deterministic, which also removes the model's chance to choose a wrong or cross-tenant query.
+  path (as of 2026-11-19 this is being addressed by D1.3.1, the gateway tool-calling passthrough, contract
+  `tool-calling.v1`; until it lands, ops-agent bypasses the gateway). I made retrieval deterministic, which also removes the model's chance to choose a wrong or cross-tenant query.
 - *Why fail-open?* A degraded procedure lookup should not stop an investigation a person will still approve. The
   outcome is stored and shown, and I kept `KNOWLEDGE_FAIL_CLOSED` for regulated tenants.
 - *How do you stop a procedure being cited as proof?* Separate refs, a prompt rule, and `KnowledgeNeverCitedTest`.

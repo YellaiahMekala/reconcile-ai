@@ -62,6 +62,9 @@ unchanged. Off-switch: `KNOWLEDGE_RELEVANCE_FILTER=false`. Tests: `KnowledgeRele
 - Q1 works with the gateway route on or off, and adds no new path around the gateway.
 - The model sees procedures only in the single-call mode. A governed agent path, if ever needed, means tool calling in
   ai-gateway first: a separate decision.
+  *Update 2026-11-19:* this gap is being addressed by D1.3.1 (ai-gateway tool-calling passthrough, contract
+  `tool-calling.v1`), so ops-agent can stop bypassing the gateway. The decision above is unchanged: Q1 stays a pre-step
+  until that lands and is adopted.
 - EKA document admin endpoints in reconcile-ai (plan Q1.5, second half) are **not built**: procedures are managed in
   EKA directly. Revisit if a role needs it.
 - Proof: `EkaKnowledgeClientTest` (stub contract from EKA `openapi.json`), `KnowledgeOutcomeIT`,
