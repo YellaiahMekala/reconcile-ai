@@ -20,7 +20,7 @@
 > architecture, designs or confidential information, and it is not affiliated with or endorsed by any current
 > or former employer or client. All data (accounts, amounts, references, documents) is synthetic. Any
 > resemblance to real people,organizations or transactions is coincidental. The development keys in this
-> repository are throwaway, for local use only. The software is provided "as is" under the Apache License 2.0
+> repository are throwaway, for local use only. The software is provided "as is" under the view-only license in [LICENSE](LICENSE)
 > and is not intended for production use without independent security review and hardening.
 
 A copilot for banking reconciliation operations. When a ledger amount and an external
@@ -732,7 +732,7 @@ Prometheus ─► Alertmanager ─► e-mail                AWS: ALB ─► Farg
 
 ## License
 
-Copyright (c) 2026 Yellaiah Mekala. Licensed under the Apache License 2.0; see [LICENSE](LICENSE).
+Copyright (c) 2026 Yellaiah Mekala. All rights reserved. View-only license, no copying, modification or redistribution; see [LICENSE](LICENSE). AI and ML use is restricted by [AI_USE_POLICY.md](AI_USE_POLICY.md).
 
 ---
 
