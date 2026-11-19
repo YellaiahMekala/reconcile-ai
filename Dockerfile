@@ -9,6 +9,10 @@ RUN mvn -B -q -DskipTests -DskipITs package && mv target/reconcile-ai-*-SNAPSHOT
 
 FROM eclipse-temurin:21-jre
 RUN useradd --system --uid 10001 --no-create-home reconcile
+# The base image ships /usr/bin/pebble (a Go service manager). The app starts java directly and never runs it,
+# and its Go stdlib (v1.27.3) carries HIGH CVE-2026-97054 (fixed in 1.27.4). Remove the unused binary so the
+# image carries no code that is not needed; re-check when the base image is rebuilt with a patched Go.
+RUN rm -f /usr/bin/pebble
 WORKDIR /opt/reconcile
 COPY --from=build /app.jar app.jar
 USER 10001
