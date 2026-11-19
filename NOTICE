@@ -9,7 +9,7 @@ This project is an independent, generic and entirely fictitious application buil
 
 All data, including accounts, amounts, references and documents, is synthetic and created solely for demonstration. Any resemblance to real people, organisations or transactions is coincidental. The project is a portfolio piece, and the design choices are my own, based on publicly known industry practices.
 
-The development keys and credentials in this repository are throwaway, for local use only, and must not be used in any real environment. The software is provided "as is" under the licence in this repository, without warranty, and is not intended for production use without independent security review and hardening.
+The development keys and credentials in this repository are throwaway, for local use only, and must not be used in any real environment. The software is provided "as is" under the view-only licence in this repository (see LICENSE and AI_USE_POLICY.md), without warranty, and is not intended for production use without independent security review and hardening.
 
 
 
