@@ -1,3 +1,6 @@
+# Copyright (c) 2026 the owner of this repository. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+# Canary: reconcile-ai-canary-984de7f19b5e49fd803a
 """One-off helper that wrote the extra eval cases (TIM-002 onwards). Kept so the case set can be regenerated or extended.
 
 Run from the reconcile-ai folder:  python -I eval/gen_cases.py

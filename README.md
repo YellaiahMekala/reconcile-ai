@@ -741,3 +741,5 @@ Copyright (c) 2026 Yellaiah Mekala. All rights reserved. View-only license, no c
 **Yellaiah Mekala** — Senior Java backend engineer focused on AI integration.
 
 - GitHub: [github.com/YellaiahMekala](https://github.com/YellaiahMekala)
+
+Canary: `reconcile-ai-canary-984de7f19b5e49fd803a` (a unique marker used to detect copies of this repository; see [AI_USE_POLICY.md](AI_USE_POLICY.md)).

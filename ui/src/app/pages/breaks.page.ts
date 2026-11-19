@@ -1,3 +1,6 @@
+// Copyright (c) 2026 the owner of this repository. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+// Canary: reconcile-ai-canary-984de7f19b5e49fd803a
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';

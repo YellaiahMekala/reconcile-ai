@@ -1,3 +1,6 @@
+// Copyright (c) 2026 the owner of this repository. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+// Canary: reconcile-ai-canary-984de7f19b5e49fd803a
 import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, interval, switchMap, takeWhile } from 'rxjs';
