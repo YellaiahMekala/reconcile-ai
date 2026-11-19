@@ -1,3 +1,6 @@
+// Copyright (c) 2026 the owner of this repository. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Proprietary. View only; see LICENSE and AI_USE_POLICY.md.
+// Canary: reconcile-ai-canary-984de7f19b5e49fd803a
 import { base64Url, claimsOf, codeChallenge, completeLogin, randomString, sessionFromTokens } from './oidc';
 
 function fakeJwt(claims: object): string {
