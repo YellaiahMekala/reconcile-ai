@@ -1,0 +1,26 @@
+{
+ "eka_search": {
+  "b": {
+   "n": 5,
+   "codes": {
+    "200": 5
+   },
+   "p50_ms": 2242,
+   "max_ms": 2279,
+   "retry_after": [],
+   "429_kind": []
+  }
+ },
+ "gateway_chat": {
+  "b": {
+   "n": 5,
+   "codes": {
+    "200": 5
+   },
+   "p50_ms": 2069,
+   "max_ms": 2071,
+   "retry_after": [],
+   "429_kind": []
+  }
+ }
+}

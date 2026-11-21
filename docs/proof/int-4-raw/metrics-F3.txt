@@ -1,0 +1,2 @@
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="OK",reason="none"} 25.0
+reconcile_knowledge_rate_limit_retry_total{application="reconcile-ai",event="retry"} 3.0

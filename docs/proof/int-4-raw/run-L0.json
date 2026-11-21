@@ -1,0 +1,71 @@
+{
+ "summary": {
+  "tag": "L0",
+  "n": 1,
+  "wall_ms": 5920,
+  "start_http": {
+   "202": 1
+  },
+  "retry_status": {
+   "None": 1
+  },
+  "job_status": {
+   "SUCCEEDED": 1
+  },
+  "failure": {
+   "None": 1
+  },
+  "knowledge": {
+   "OK": 1
+  },
+  "knowledge_reason": {
+   "None": 1
+  },
+  "route": {
+   "L1_APPROVAL": 1
+  },
+  "break_status": {
+   "PENDING_L1": 1
+  },
+  "rerun_start": {
+   "None": 1
+  },
+  "rerun_status": {
+   "None": 1
+  },
+  "start_ms": {
+   "p50": 111,
+   "p95": 111,
+   "max": 111
+  },
+  "e2e_ms": {
+   "p50": 5919,
+   "p95": 5919,
+   "p99": 5919,
+   "max": 5919
+  },
+  "queue_ms_p95": 30,
+  "run_ms_p50": 5569,
+  "retry_after_seen": [],
+  "audit_verify": "HTTP 403"
+ },
+ "items": [
+  {
+   "i": 0,
+   "start_status": 202,
+   "start_ms": 111,
+   "retry_after": null,
+   "job_id": "e1a38fbc-773b-4007-813f-762c42386480",
+   "e2e_ms": 5919,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "f5b04a2d-e055-41c4-aef7-1a03ac4dd6d7",
+   "queue_ms": 30,
+   "run_ms": 5569,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  }
+ ]
+}

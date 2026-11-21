@@ -1,0 +1,59 @@
+{
+ "phase": "limiter",
+ "summary": {
+  "replica_a_start": {
+   "429:RATE_LIMITED": 10,
+   "202": 20
+  },
+  "replica_b_start": {
+   "429:RATE_LIMITED": 10,
+   "202": 20
+  },
+  "final": {
+   "a:SUCCEEDED:None": 20,
+   "b:SUCCEEDED:None": 20
+  }
+ },
+ "jobs": [
+  "0634650f-a10b-4937-b57e-501b3aab3ba5",
+  "0b7434e7-6caf-4e2b-a7bd-92a39cf4ae44",
+  "0ca08e01-f13d-4af4-a501-3aced2d6317a",
+  "0ced9f11-ab7e-48a5-97cd-412ebb982974",
+  "201c0530-4cd1-4cc1-a134-92f6cc1a51cf",
+  "227220c3-fc0f-4059-9cfa-f6023808965b",
+  "273f7500-8884-4e34-8b9a-4947955b1922",
+  "289b74c7-3e21-4dee-bdab-cc1f21b2ecb8",
+  "35c73e13-42a6-4be6-8286-b2dedbc4b362",
+  "39bf8c6b-a58e-4201-a042-2ce979d07c09",
+  "3b13b108-78ee-434b-873c-26b3aa9d7e17",
+  "3c6748a6-dcbb-4a58-bdea-48f55321c3c0",
+  "486788a3-6a38-4247-bf2b-aadefc8c1fee",
+  "4e0d62ed-fc8a-4b24-9609-8d9abe080e3c",
+  "51eb4eb2-3b57-4a89-8e62-c056ad730b7c",
+  "5e3f654b-50cb-442f-8476-f3238bdd9193",
+  "5ee7f523-530e-4eb2-9763-c143d487c1c6",
+  "6c5b5970-2aac-4616-8752-9cdd4433502b",
+  "6f9d2c9e-38fc-4853-a9e8-fa482647cef1",
+  "77fd57da-86bb-49af-9a0f-20776077847f",
+  "83bf9aa2-8510-434d-843e-433263880c82",
+  "8ffcbcf8-c879-4fa8-8f87-02e81e61deb3",
+  "92129be6-efe0-4305-8d2c-c94d045ca360",
+  "96b5ccf8-6e6b-408c-a08a-45502b98aac4",
+  "976e2ae6-8bb2-4af2-80bb-0b371e538687",
+  "9ac449db-911e-41f2-9c54-effff940f7d5",
+  "9e8a0990-fa95-4b9f-b4b4-7ec7616b1417",
+  "a3b58dce-69a5-48aa-a295-6de72e59b322",
+  "a74f5351-9dc2-4247-be98-3f385874a30c",
+  "b25fd385-74cd-4e4b-9648-0eb08882f7d8",
+  "b419d0cb-c884-4d23-b452-781a68c3e875",
+  "b6db60dc-244b-4e92-a9df-3a52ebab6e14",
+  "bf3206a6-b9f8-49bd-abc5-f7d94a7d1ec4",
+  "c792499c-1f59-4892-a597-e28e1b3f7941",
+  "c80b240e-345b-4c53-896d-3e7b8e205b27",
+  "d07dd185-75cb-4aa3-b971-d9dc18e838b1",
+  "d9be2c70-ab71-4613-b533-bfe49175efcc",
+  "e8b3f029-8d8c-445e-b234-7060873d7ab2",
+  "eac841fe-878a-4691-9eb2-46006b31d29a",
+  "fbac0fdc-f391-42ac-aba6-912c6008b8c1"
+ ]
+}

@@ -1,0 +1,38 @@
+{
+ "phase": "race",
+ "breaks": [
+  "fbfe3afb-0372-4c25-903d-30f905ccb765",
+  "997c99e6-02f4-4029-83eb-2e6757e3191a",
+  "81325d59-193b-48b7-8c0e-b0c647479c87",
+  "ce271a5e-367e-4345-aa56-3465fdcd683a",
+  "5a92e530-adda-41d2-8d57-52565cee89a8",
+  "615f242b-ca62-4810-a758-f98dd1200ba0",
+  "39f47074-c04e-4d42-b93b-228cf6557c01",
+  "755ff1b2-11ab-406a-a347-2a4000504bfd",
+  "802e4e78-8b2d-4aec-a9a6-be03a3309991",
+  "8a14d494-1123-4e13-a2f9-932aad12d232"
+ ],
+ "summary": {
+  "replica_a_start": {
+   "202": 10
+  },
+  "replica_b_start": {
+   "409:INVESTIGATION_IN_PROGRESS": 10
+  },
+  "final": {
+   "a:SUCCEEDED:None": 10
+  }
+ },
+ "jobs": [
+  "026fb4cb-1f89-4d5c-bbf6-d0623fdc32d8",
+  "077305ca-894f-4bf0-aa3d-4102ad9c8296",
+  "32e825ad-18d2-4f75-b2ba-a7ed847ba9a0",
+  "4acb4c3e-9258-4571-b599-e27ab48fa82a",
+  "4ef4fbb1-a1b6-4cdd-9ab1-30b928e26e9d",
+  "708b2d94-6e69-4474-ade3-808148f995fd",
+  "bb264c6b-3204-4abe-b7cc-a5d58a632102",
+  "bc9e3227-907d-42e8-9719-2b001c962da8",
+  "e78fcff7-e6c2-4c32-9b02-d1bd3356ecfd",
+  "e8e98265-8b79-40a0-8797-c51a20f00ce5"
+ ]
+}

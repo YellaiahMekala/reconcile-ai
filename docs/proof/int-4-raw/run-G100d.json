@@ -1,0 +1,961 @@
+{
+ "summary": {
+  "tag": "G100d",
+  "n": 100,
+  "wall_ms": 7794,
+  "start_http": {
+   "429": 80,
+   "202": 20
+  },
+  "retry_status": {
+   "None": 100
+  },
+  "job_status": {
+   "None": 80,
+   "SUCCEEDED": 20
+  },
+  "failure": {
+   "None": 100
+  },
+  "knowledge": {
+   "None": 80,
+   "OK": 20
+  },
+  "knowledge_reason": {
+   "None": 100
+  },
+  "route": {
+   "None": 80,
+   "MANUAL_REVIEW": 20
+  },
+  "break_status": {
+   "READY_TO_INVESTIGATE": 80,
+   "MANUAL_REVIEW_REQUIRED": 20
+  },
+  "rerun_start": {
+   "None": 100
+  },
+  "rerun_status": {
+   "None": 100
+  },
+  "start_ms": {
+   "p50": 224,
+   "p95": 890,
+   "max": 1362
+  },
+  "e2e_ms": {
+   "p50": 5684,
+   "p95": 7750,
+   "p99": 7751,
+   "max": 7751
+  },
+  "queue_ms_p95": 6443,
+  "run_ms_p50": 473,
+  "retry_after_seen": [
+   "3"
+  ],
+  "audit_verify": "HTTP 403"
+ },
+ "items": [
+  {
+   "i": 0,
+   "start_status": 429,
+   "start_ms": 103,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 1,
+   "start_status": 429,
+   "start_ms": 167,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 2,
+   "start_status": 429,
+   "start_ms": 224,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 3,
+   "start_status": 429,
+   "start_ms": 352,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 4,
+   "start_status": 429,
+   "start_ms": 134,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 5,
+   "start_status": 429,
+   "start_ms": 216,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 6,
+   "start_status": 429,
+   "start_ms": 221,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 7,
+   "start_status": 429,
+   "start_ms": 268,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 8,
+   "start_status": 429,
+   "start_ms": 116,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 9,
+   "start_status": 429,
+   "start_ms": 296,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 10,
+   "start_status": 429,
+   "start_ms": 179,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 11,
+   "start_status": 202,
+   "start_ms": 594,
+   "retry_after": null,
+   "job_id": "ad985f4b-fc1a-4257-82f1-de8e7fa7aa4b",
+   "e2e_ms": 4248,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "1bc4a450-a1d8-40cd-8a63-87e16f0a5a06",
+   "queue_ms": 3198,
+   "run_ms": 475,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 12,
+   "start_status": 202,
+   "start_ms": 623,
+   "retry_after": null,
+   "job_id": "47d68511-b71e-41f7-a7ee-f2848dfc2ad3",
+   "e2e_ms": 4601,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "3b67c2be-be66-40b0-ab51-af4a755c8f2f",
+   "queue_ms": 3657,
+   "run_ms": 490,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 13,
+   "start_status": 429,
+   "start_ms": 317,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 14,
+   "start_status": 429,
+   "start_ms": 337,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 15,
+   "start_status": 429,
+   "start_ms": 202,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 16,
+   "start_status": 429,
+   "start_ms": 196,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 17,
+   "start_status": 429,
+   "start_ms": 87,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 18,
+   "start_status": 429,
+   "start_ms": 106,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 19,
+   "start_status": 429,
+   "start_ms": 293,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 20,
+   "start_status": 429,
+   "start_ms": 237,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 21,
+   "start_status": 429,
+   "start_ms": 374,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 22,
+   "start_status": 429,
+   "start_ms": 174,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 23,
+   "start_status": 202,
+   "start_ms": 1045,
+   "retry_after": null,
+   "job_id": "8a6bf7d8-add7-4166-8f74-7ec6537cd14c",
+   "e2e_ms": 7750,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "9418eb90-3741-4169-bf23-b06928680915",
+   "queue_ms": 6436,
+   "run_ms": 361,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 24,
+   "start_status": 429,
+   "start_ms": 152,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 25,
+   "start_status": 202,
+   "start_ms": 954,
+   "retry_after": null,
+   "job_id": "c4e2b0d0-6691-401d-94c2-b18d4f96df14",
+   "e2e_ms": 6950,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "5f33d942-bfc1-48f4-83b1-e17cfec2ca08",
+   "queue_ms": 5856,
+   "run_ms": 443,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 26,
+   "start_status": 429,
+   "start_ms": 305,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 27,
+   "start_status": 429,
+   "start_ms": 124,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 28,
+   "start_status": 429,
+   "start_ms": 199,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 29,
+   "start_status": 429,
+   "start_ms": 124,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 30,
+   "start_status": 429,
+   "start_ms": 107,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 31,
+   "start_status": 429,
+   "start_ms": 173,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 32,
+   "start_status": 429,
+   "start_ms": 296,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 33,
+   "start_status": 202,
+   "start_ms": 887,
+   "retry_after": null,
+   "job_id": "ce317d8b-f422-4899-803c-209af1e6a2b1",
+   "e2e_ms": 6853,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "c9437d28-de21-47cc-94c2-fc4ec9c5e736",
+   "queue_ms": 5698,
+   "run_ms": 423,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 34,
+   "start_status": 429,
+   "start_ms": 231,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 35,
+   "start_status": 202,
+   "start_ms": 690,
+   "retry_after": null,
+   "job_id": "77d17dd3-8dbd-4365-bd18-602e9e9112ff",
+   "e2e_ms": 5640,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "024391c3-d119-43fc-9a83-c156d607cb2d",
+   "queue_ms": 4415,
+   "run_ms": 471,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 36,
+   "start_status": 429,
+   "start_ms": 284,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 37,
+   "start_status": 429,
+   "start_ms": 213,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 38,
+   "start_status": 429,
+   "start_ms": 195,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 39,
+   "start_status": 202,
+   "start_ms": 794,
+   "retry_after": null,
+   "job_id": "f4a15b38-bf7f-4fdd-b558-8b375e7ab212",
+   "e2e_ms": 6538,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "0a553e49-8ac9-4411-9489-ff07ac50ebf3",
+   "queue_ms": 5054,
+   "run_ms": 673,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 40,
+   "start_status": 429,
+   "start_ms": 150,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 41,
+   "start_status": 429,
+   "start_ms": 115,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 42,
+   "start_status": 429,
+   "start_ms": 115,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 43,
+   "start_status": 429,
+   "start_ms": 116,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 44,
+   "start_status": 429,
+   "start_ms": 106,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 45,
+   "start_status": 429,
+   "start_ms": 341,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 46,
+   "start_status": 429,
+   "start_ms": 166,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 47,
+   "start_status": 202,
+   "start_ms": 633,
+   "retry_after": null,
+   "job_id": "4918097e-9d88-4e8f-8c58-c8f2115327bb",
+   "e2e_ms": 5144,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "c399b703-830f-4a31-aa92-ab9d20ccf4b2",
+   "queue_ms": 3678,
+   "run_ms": 783,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 48,
+   "start_status": 429,
+   "start_ms": 153,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 49,
+   "start_status": 202,
+   "start_ms": 1018,
+   "retry_after": null,
+   "job_id": "10a3a72e-f09e-4f0c-9692-ff8195f21c1b",
+   "e2e_ms": 7492,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "eb9a691a-b9fe-420c-82ee-0c83b77012e6",
+   "queue_ms": 6256,
+   "run_ms": 362,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 50,
+   "start_status": 202,
+   "start_ms": 558,
+   "retry_after": null,
+   "job_id": "3cf77560-a2a4-4726-b2ed-33382b631105",
+   "e2e_ms": 4177,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "6dcb6b41-e042-40ca-9676-ba7bffbaf0b0",
+   "queue_ms": 3186,
+   "run_ms": 465,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 51,
+   "start_status": 429,
+   "start_ms": 116,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 52,
+   "start_status": 429,
+   "start_ms": 305,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 53,
+   "start_status": 429,
+   "start_ms": 176,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 54,
+   "start_status": 429,
+   "start_ms": 346,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 55,
+   "start_status": 429,
+   "start_ms": 157,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 56,
+   "start_status": 429,
+   "start_ms": 273,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 57,
+   "start_status": 429,
+   "start_ms": 93,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 58,
+   "start_status": 429,
+   "start_ms": 119,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 59,
+   "start_status": 429,
+   "start_ms": 157,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 60,
+   "start_status": 202,
+   "start_ms": 841,
+   "retry_after": null,
+   "job_id": "202fb121-5173-4105-af11-ea35c8f3edf0",
+   "e2e_ms": 6676,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "79aa2f36-aafe-435b-80d6-5128622d1402",
+   "queue_ms": 5516,
+   "run_ms": 375,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 61,
+   "start_status": 429,
+   "start_ms": 93,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 62,
+   "start_status": 202,
+   "start_ms": 461,
+   "retry_after": null,
+   "job_id": "64830b45-1b12-4d2e-ba31-36c011a5fed3",
+   "e2e_ms": 2744,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "0232903a-3fa0-472a-8b44-f42456f9014c",
+   "queue_ms": 351,
+   "run_ms": 1888,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 63,
+   "start_status": 429,
+   "start_ms": 147,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 64,
+   "start_status": 429,
+   "start_ms": 145,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 65,
+   "start_status": 429,
+   "start_ms": 289,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 66,
+   "start_status": 429,
+   "start_ms": 259,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 67,
+   "start_status": 202,
+   "start_ms": 985,
+   "retry_after": null,
+   "job_id": "aa210d04-c8c8-41b5-b6b5-94c34ddaf662",
+   "e2e_ms": 7187,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "7ddac26b-816f-4e7a-be6e-bb7050ee0b4e",
+   "queue_ms": 6087,
+   "run_ms": 395,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 68,
+   "start_status": 429,
+   "start_ms": 208,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 69,
+   "start_status": 429,
+   "start_ms": 296,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 70,
+   "start_status": 202,
+   "start_ms": 530,
+   "retry_after": null,
+   "job_id": "89966089-1815-412c-b9bf-62790ead983d",
+   "e2e_ms": 3692,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "6ed28d83-353b-49cd-846c-bce8e08899a2",
+   "queue_ms": 2284,
+   "run_ms": 900,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 71,
+   "start_status": 429,
+   "start_ms": 183,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 72,
+   "start_status": 429,
+   "start_ms": 88,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 73,
+   "start_status": 429,
+   "start_ms": 330,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 74,
+   "start_status": 429,
+   "start_ms": 233,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 75,
+   "start_status": 202,
+   "start_ms": 499,
+   "retry_after": null,
+   "job_id": "0f5950b4-9432-4a0f-af83-f7b4608c78b7",
+   "e2e_ms": 3827,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "3d684e6a-67c5-4460-8096-dd683c44a9ab",
+   "queue_ms": 2262,
+   "run_ms": 910,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 76,
+   "start_status": 429,
+   "start_ms": 88,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 77,
+   "start_status": 429,
+   "start_ms": 152,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 78,
+   "start_status": 429,
+   "start_ms": 287,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 79,
+   "start_status": 202,
+   "start_ms": 651,
+   "retry_after": null,
+   "job_id": "4387993f-ef58-4b58-98c1-f34ae5be9e01",
+   "e2e_ms": 5150,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "f7241021-0b68-40ee-9bda-4823a0f4d9a8",
+   "queue_ms": 4186,
+   "run_ms": 430,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 80,
+   "start_status": 429,
+   "start_ms": 224,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 81,
+   "start_status": 202,
+   "start_ms": 471,
+   "retry_after": null,
+   "job_id": "64a4aee5-2d5a-4cf7-a6bf-dbc1402446c6",
+   "e2e_ms": 2736,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "728490f5-741b-4c28-87fd-a38d34bbe843",
+   "queue_ms": 337,
+   "run_ms": 1943,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 82,
+   "start_status": 429,
+   "start_ms": 247,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 83,
+   "start_status": 429,
+   "start_ms": 107,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 84,
+   "start_status": 429,
+   "start_ms": 248,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 85,
+   "start_status": 429,
+   "start_ms": 319,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 86,
+   "start_status": 429,
+   "start_ms": 222,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 87,
+   "start_status": 429,
+   "start_ms": 86,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 88,
+   "start_status": 429,
+   "start_ms": 173,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 89,
+   "start_status": 429,
+   "start_ms": 122,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 90,
+   "start_status": 202,
+   "start_ms": 1362,
+   "retry_after": null,
+   "job_id": "7c4c56d0-0f45-4e97-bdf6-ed264805e804",
+   "e2e_ms": 7751,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "b9c6a481-328b-43d3-975d-498f2436d9f7",
+   "queue_ms": 6583,
+   "run_ms": 363,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 91,
+   "start_status": 202,
+   "start_ms": 710,
+   "retry_after": null,
+   "job_id": "df80eff3-93df-45e1-be34-fee0c5a3fe18",
+   "e2e_ms": 5729,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "2d84c4ea-d71e-4e3d-b049-b53bcfb6e89e",
+   "queue_ms": 4642,
+   "run_ms": 521,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 92,
+   "start_status": 429,
+   "start_ms": 214,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 93,
+   "start_status": 429,
+   "start_ms": 267,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 94,
+   "start_status": 429,
+   "start_ms": 114,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 95,
+   "start_status": 429,
+   "start_ms": 219,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 96,
+   "start_status": 429,
+   "start_ms": 241,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 97,
+   "start_status": 429,
+   "start_ms": 300,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 98,
+   "start_status": 429,
+   "start_ms": 307,
+   "retry_after": "3",
+   "break_status": "READY_TO_INVESTIGATE"
+  },
+  {
+   "i": 99,
+   "start_status": 202,
+   "start_ms": 756,
+   "retry_after": null,
+   "job_id": "bf954f05-9a5c-4e3a-bdd7-7cfa13c493cb",
+   "e2e_ms": 6201,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "425cd02b-3a7d-4b65-8107-ccb9ed9702a2",
+   "queue_ms": 4888,
+   "run_ms": 644,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  }
+ ]
+}

@@ -53,4 +53,21 @@ class KnowledgeFailClosedIT extends AbstractKnowledgeIT {
         assertThat(job.getString("status")).isEqualTo("SUCCEEDED");
         assertThat(job.getString("knowledgeOutcome")).isEqualTo("EMPTY");
     }
+
+    @Test
+    void rateLimitedAfterTheRetriesFailsTheJobRetryablyWithoutAModelCall() {
+        eka.enqueue(Scripted.rateLimited("0"));
+        eka.enqueue(Scripted.rateLimited("0"));
+        eka.enqueue(Scripted.rateLimited("0"));
+        String bearer = analyst(TENANT_A);
+        String breakId = com.reconcileai.support.ApiTestSupport.createBreak(bearer, "30500.00", "30000.00");
+        com.reconcileai.support.ApiTestSupport.upload(bearer, breakId, "/fixtures/evidence/timing-only.txt", "text/plain");
+        String jobId = com.reconcileai.support.InvestigationTestSupport.start(bearer, breakId, null);
+        JsonPath job = com.reconcileai.support.InvestigationTestSupport.awaitTerminal(bearer, jobId);
+
+        assertThat(job.getString("status")).isEqualTo("FAILED");
+        assertThat(job.getString("failureReason")).isEqualTo("KNOWLEDGE_UNAVAILABLE");
+        assertThat(job.getString("knowledgeReason")).isEqualTo("RATE_LIMITED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM llm_call WHERE job_id = ?::uuid", Integer.class, jobId)).isZero();
+    }
 }

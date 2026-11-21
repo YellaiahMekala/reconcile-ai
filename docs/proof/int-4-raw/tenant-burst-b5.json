@@ -1,0 +1,56 @@
+{
+ "eka_search": {
+  "a": {
+   "n": 60,
+   "codes": {
+    "200": 22,
+    "429": 38
+   },
+   "p50_ms": 2414,
+   "max_ms": 2843,
+   "retry_after": [
+    "1"
+   ],
+   "429_kind": [
+    "urn:eka:problem:rate-limited"
+   ]
+  },
+  "b": {
+   "n": 5,
+   "codes": {
+    "200": 5
+   },
+   "p50_ms": 2830,
+   "max_ms": 2841,
+   "retry_after": [],
+   "429_kind": []
+  }
+ },
+ "gateway_chat": {
+  "a": {
+   "n": 60,
+   "codes": {
+    "429": 19,
+    "200": 41
+   },
+   "p50_ms": 2202,
+   "max_ms": 2267,
+   "retry_after": [
+    "1"
+   ],
+   "429_kind": [
+    "RATE_LIMITED"
+   ]
+  },
+  "b": {
+   "n": 5,
+   "codes": {
+    "200": 5
+   },
+   "p50_ms": 2257,
+   "max_ms": 2279,
+   "retry_after": [],
+   "429_kind": []
+  }
+ }
+}

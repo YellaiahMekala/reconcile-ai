@@ -1,0 +1,6 @@
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="OK",reason="none"} 20.0
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="UNAVAILABLE",reason="HTTP_500"} 5.0
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="UNAVAILABLE",reason="RATE_LIMITED"} 1.0
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="UNAVAILABLE",reason="TIMEOUT"} 24.0
+reconcile_knowledge_rate_limit_retry_total{application="reconcile-ai",event="exhausted"} 1.0
+reconcile_knowledge_rate_limit_retry_total{application="reconcile-ai",event="retry"} 11.0

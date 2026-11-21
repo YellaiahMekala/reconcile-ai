@@ -1,0 +1,2 @@
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="OK",reason="none"} 21.0
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="UNAVAILABLE",reason="TIMEOUT"} 4.0

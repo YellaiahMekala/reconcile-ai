@@ -118,4 +118,31 @@ class KnowledgeOutcomeIT extends AbstractKnowledgeIT {
         assertThat(eka.calls()).singleElement().satisfies(c ->
             assertThat(c.body()).doesNotContain("30500").doesNotContain("30000").doesNotContain("break_ref"));
     }
+
+    @Test
+    void aRateLimitedLookupIsRetriedOnceAndTheJobSeesOk() {
+        Doc runbook = Doc.of("timing-runbook.md", "Timing breaks: confirm the value date on the external statement.");
+        eka.index(TENANT_A, runbook);
+        eka.enqueue(Scripted.rateLimited("0"));
+
+        JsonPath job = investigate(TENANT_A, "/fixtures/evidence/timing-only.txt");
+
+        assertThat(job.getString("status")).isEqualTo("SUCCEEDED");
+        assertThat(job.getString("knowledgeOutcome")).isEqualTo("OK");
+        assertThat(eka.calls().stream().filter(c -> c.path().equals("/api/v1/search"))).hasSize(2);
+    }
+
+    @Test
+    void rateLimitedAfterTheRetriesIsRecordedAndFailOpenContinues() {
+        eka.enqueue(Scripted.rateLimited("0"));
+        eka.enqueue(Scripted.rateLimited("0"));
+        eka.enqueue(Scripted.rateLimited("0"));
+
+        JsonPath job = investigate(TENANT_A, "/fixtures/evidence/timing-only.txt");
+
+        assertThat(job.getString("status")).isEqualTo("SUCCEEDED");
+        assertThat(job.getString("knowledgeOutcome")).isEqualTo("UNAVAILABLE");
+        assertThat(job.getString("knowledgeReason")).isEqualTo("RATE_LIMITED");
+        assertThat(eka.calls().stream().filter(c -> c.path().equals("/api/v1/search"))).hasSize(3);   // 1 + 2 retries
+    }
 }

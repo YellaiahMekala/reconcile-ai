@@ -43,6 +43,11 @@ public class KnowledgeConfig {
                     if (registry != null) {
                         registry.counter("reconcile.knowledge.outcome", "outcome", outcome, "reason", reason).increment();
                     }
+                },
+                event -> {
+                    if (registry != null) {
+                        registry.counter("reconcile.knowledge.rate_limit_retry", "event", event).increment();
+                    }
                 });
     }
 }

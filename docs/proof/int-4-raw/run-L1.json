@@ -1,0 +1,224 @@
+{
+ "summary": {
+  "tag": "L1",
+  "n": 10,
+  "wall_ms": 17926,
+  "start_http": {
+   "202": 10
+  },
+  "retry_status": {
+   "None": 10
+  },
+  "job_status": {
+   "SUCCEEDED": 10
+  },
+  "failure": {
+   "None": 10
+  },
+  "knowledge": {
+   "OK": 10
+  },
+  "knowledge_reason": {
+   "None": 10
+  },
+  "route": {
+   "L1_APPROVAL": 10
+  },
+  "break_status": {
+   "PENDING_L1": 10
+  },
+  "rerun_start": {
+   "None": 10
+  },
+  "rerun_status": {
+   "None": 10
+  },
+  "start_ms": {
+   "p50": 182,
+   "p95": 248,
+   "max": 254
+  },
+  "e2e_ms": {
+   "p50": 11587,
+   "p95": 17537,
+   "p99": 17844,
+   "max": 17921
+  },
+  "queue_ms_p95": 14352,
+  "run_ms_p50": 3327,
+  "retry_after_seen": [],
+  "audit_verify": "HTTP 403"
+ },
+ "items": [
+  {
+   "i": 0,
+   "start_status": 202,
+   "start_ms": 240,
+   "retry_after": null,
+   "job_id": "00d81383-4111-4147-aa74-65d7cf587025",
+   "e2e_ms": 17068,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "c05c7ee6-cf88-4a4a-a827-f39458661f55",
+   "queue_ms": 14120,
+   "run_ms": 2640,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 1,
+   "start_status": 202,
+   "start_ms": 207,
+   "retry_after": null,
+   "job_id": "981b459c-990b-4765-ab0d-d6b2377a343e",
+   "e2e_ms": 14293,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "5ea24f9f-f687-4eed-8226-750ea912fe7b",
+   "queue_ms": 10544,
+   "run_ms": 3574,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 2,
+   "start_status": 202,
+   "start_ms": 224,
+   "retry_after": null,
+   "job_id": "883c4513-4f4d-4402-ba01-d5d36ffcdb96",
+   "e2e_ms": 14841,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "c9eb9d06-9c68-4b58-a9cd-c887cf91040b",
+   "queue_ms": 12096,
+   "run_ms": 2439,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 3,
+   "start_status": 202,
+   "start_ms": 133,
+   "retry_after": null,
+   "job_id": "e5758d0b-beec-4f98-b821-ae8f377a06e5",
+   "e2e_ms": 5027,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "9b3cadf6-a173-48c9-aaec-42f6a4c1faed",
+   "queue_ms": 51,
+   "run_ms": 4667,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 4,
+   "start_status": 202,
+   "start_ms": 254,
+   "retry_after": null,
+   "job_id": "e8fa4a3a-5349-4330-8de3-914b59433205",
+   "e2e_ms": 17921,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "6b01c34c-d77b-4610-9dd2-dba8d2b7895a",
+   "queue_ms": 14541,
+   "run_ms": 3080,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 5,
+   "start_status": 202,
+   "start_ms": 136,
+   "retry_after": null,
+   "job_id": "5b4c375e-1c9b-4453-9c1f-086a1d0bde10",
+   "e2e_ms": 7774,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "c5432f94-4058-495d-8a52-e16d4ab3ab16",
+   "queue_ms": 3651,
+   "run_ms": 3835,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 6,
+   "start_status": 202,
+   "start_ms": 156,
+   "retry_after": null,
+   "job_id": "6d16399d-b785-44f2-b6c3-0cb16b8913f3",
+   "e2e_ms": 9671,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "a25e5c41-6365-4480-a358-c1bf94d3869c",
+   "queue_ms": 4727,
+   "run_ms": 4782,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 7,
+   "start_status": 202,
+   "start_ms": 174,
+   "retry_after": null,
+   "job_id": "341de384-b2bb-48b8-bf75-f39dc8b9fd75",
+   "e2e_ms": 10773,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "77dada14-915d-4e37-b5f9-d2ecb4728387",
+   "queue_ms": 7515,
+   "run_ms": 3022,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 8,
+   "start_status": 202,
+   "start_ms": 191,
+   "retry_after": null,
+   "job_id": "3d1e097b-2028-4ac4-9b10-5931a51a89d0",
+   "e2e_ms": 12401,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "302f9632-87bb-43c8-a2c9-0e42ed3bd399",
+   "queue_ms": 9514,
+   "run_ms": 2582,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  },
+  {
+   "i": 9,
+   "start_status": 202,
+   "start_ms": 133,
+   "retry_after": null,
+   "job_id": "122b0dcf-b513-4db2-bd43-4544b7676032",
+   "e2e_ms": 3858,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "OK",
+   "knowledge_reason": null,
+   "proposal_id": "5e8cbba8-e3fd-4105-b318-da5473cd31b2",
+   "queue_ms": 46,
+   "run_ms": 3604,
+   "route": "L1_APPROVAL",
+   "break_status": "PENDING_L1"
+  }
+ ]
+}
