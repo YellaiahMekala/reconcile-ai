@@ -1,0 +1,17 @@
+# kind only: Postgres starts in the same cluster at the same time, so wait for it instead of crash-looping once.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reconcile-ai
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }

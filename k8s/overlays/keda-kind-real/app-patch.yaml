@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reconcile-ai
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          env:
+            - { name: SPRING_PROFILES_ACTIVE, value: "mock-llm,demo-login" }
+            - { name: OPENAI_API_KEY, value: "not-a-real-key" }
+            - { name: SPRING_AI_OPENAI_BASE_URL, value: "http://embedding-stub:8080" }
+            - { name: RATE_LIMIT_ENABLED, value: "false" }
+            - { name: RECONCILE_DEMO_LOGIN_PRIVATE_KEY_LOCATION, value: "file:/keys/dev-private-pkcs8.pem" }
+          volumeMounts:
+            - { name: demo-key, mountPath: /keys, readOnly: true }
+      volumes:
+        - name: demo-key
+          secret: { secretName: demo-login-key }

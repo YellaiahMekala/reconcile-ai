@@ -1,0 +1,22 @@
+# TEST HARNESS (RA-5, docs/proof/ra-5-keda-kind-real-2026-11-19.md): the KEDA overlay with the REAL reconcile-ai image,
+# a REAL Prometheus scraping the pods, and in-cluster Postgres and Redis (from ../kind, applied separately).
+# Only two things are faked, both because they would otherwise need a paid API or an identity provider:
+#   - embeddings: a tiny stub of POST /v1/embeddings (embedding-stub.yaml), selected with SPRING_AI_OPENAI_BASE_URL.
+#     Chat is the app's own mock-llm profile (no stub needed).
+#   - login: the demo-login profile mints dev JWTs (needs the throwaway dev key as a Secret, see the proof doc).
+# The per-tenant rate limit is switched off so one load generator can exceed 20 req/min; everything else is the base
+# and ../keda unmodified (ScaledObject, resources, probes, executor pool of 4 + queue 50).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../keda
+  - dev-secret.yaml
+  - embedding-stub.yaml
+  - prometheus.yaml
+patches:
+  - path: wait-for-postgres.yaml
+  - path: app-patch.yaml
+images:
+  - name: reconcile-ai
+    newName: reconcile-ai
+    newTag: keda-proof

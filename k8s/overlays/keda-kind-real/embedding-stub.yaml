@@ -1,0 +1,78 @@
+# Stand-in for OpenAI POST /v1/embeddings: deterministic 1536-dim unit vectors from a hash of the text. No network.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: embedding-stub, namespace: reconcile }
+data:
+  stub.py: |
+    import hashlib, json, math
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    DIM = 1536
+    def vec(text):
+        out = []
+        i = 0
+        while len(out) < DIM:
+            out.extend([(b - 127.5) / 127.5 for b in hashlib.sha256((text + str(i)).encode()).digest()])
+            i += 1
+        out = out[:DIM]
+        n = math.sqrt(sum(x * x for x in out)) or 1.0
+        return [x / n for x in out]
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        def do_POST(self):
+            if "chunked" in self.headers.get("transfer-encoding", "").lower():
+                raw = b""
+                while True:
+                    n = int(self.rfile.readline().strip().split(b";")[0] or b"0", 16)
+                    if n == 0:
+                        self.rfile.readline()
+                        break
+                    raw += self.rfile.read(n)
+                    self.rfile.readline()
+            else:
+                raw = self.rfile.read(int(self.headers.get("content-length", 0)))
+            body = json.loads(raw or b"{}")
+            inp = body.get("input", [])
+            if isinstance(inp, str):
+                inp = [inp]
+            data = [{"object": "embedding", "index": i, "embedding": vec(str(t))} for i, t in enumerate(inp)]
+            resp = json.dumps({"object": "list", "data": data, "model": body.get("model", "text-embedding-3-small"),
+                               "usage": {"prompt_tokens": 1, "total_tokens": 1}}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+        def log_message(self, *a):
+            pass
+    ThreadingHTTPServer(("0.0.0.0", 8080), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: embedding-stub, namespace: reconcile }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: embedding-stub } }
+  template:
+    metadata: { labels: { app: embedding-stub } }
+    spec:
+      containers:
+        - name: stub
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/stub.py"]
+          ports: [{ containerPort: 8080 }]
+          resources: { requests: { cpu: 50m, memory: 32Mi } }
+          volumeMounts: [{ name: code, mountPath: /app }]
+      volumes:
+        - name: code
+          configMap: { name: embedding-stub }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: embedding-stub, namespace: reconcile }
+spec:
+  selector: { app: embedding-stub }
+  ports: [{ port: 8080 }]

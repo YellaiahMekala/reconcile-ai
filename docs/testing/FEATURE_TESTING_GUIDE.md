@@ -1,8 +1,10 @@
 # reconcile-ai: feature testing guide
 
 Scope: F1 to F20 cover features tested between 2026-11-16 and 2026-11-18 (platform stages Q1, Q2, Q3, Q4 and the D1
-items). F21 to F31 cover the Phase 1 to Phase 5 features built earlier, and the last section is an evidence map for
-them. Every number below comes from a register row in `platform/evidence/EVIDENCE_REGISTER.md` (E-ids), from a proof
+items). F21 to F31 cover the Phase 1 to Phase 5 features built earlier, with an evidence map for them. F32 to F43
+(added 2026-11-19) cover the changes of the last seven days that had no entry yet: RA-3, INT-4, the view-only license and
+headers, the Trivy fixes, virtual threads, the gateway adapter, API hygiene, KEDA on kind, the similar-breaks tool, the
+repository chores and the RERO status. The evidence map is the last section. Every number below comes from a register row in `platform/evidence/EVIDENCE_REGISTER.md` (E-ids), from a proof
 document in `docs/proof/`, or from a log in `docs/proof/`.
 
 Run types used below:
@@ -34,20 +36,32 @@ Secrets are always environment variables, listed here by name only.
 | [F15](#f15-real-gateway-and-per-tenant-realm-clients-pq111-pq112) | Real gateway and per-tenant realm clients (PQ1.1.1, PQ1.1.2) | E-20, E-34 | opt-in, free |
 | [F16](#f16-golden-path-and-eka-down-in-ci-pq116) | Golden path and EKA-down in CI (PQ1.1.6) | E-35 | default build |
 | [F17](#f17-relevance-filter-re-measure-pq124) | Relevance filter re-measure (PQ1.2.4) | E-36 | opt-in, paid, approved |
-| [F18](#f18-l1-cache-in-front-of-redis-d121) | L1 cache in front of Redis (D1.2.1) | none yet | default build |
+| [F18](#f18-l1-cache-in-front-of-redis-d121) | L1 cache in front of Redis (D1.2.1) | none yet (CI `ci` 44333738072 green) | default build |
 | [F19](#f19-read-only-mcp-server-d122) | Read-only MCP server (D1.2.2) | none yet | default build |
 | [F20](#f20-break-specific-knowledge-query-d1212) | Break-specific knowledge query (D1.2.12) | none yet | default build; paid re-measure approved and run |
 | [F21](#f21-foundation-security-tenant-isolation-breaks-and-evidence-tier-0-to-1) | Foundation: security, tenant isolation (Tier 0 to 1) | E-01, E-02, E-13 | default build |
 | [F22](#f22-investigation-pipeline-tier-2) | Investigation pipeline (Tier 2) | E-03, E-04 | default build |
 | [F23](#f23-production-hardening-resilience-pii-outbox-digest-rate-limit-api-hygiene) | Production hardening | E-16 | default build |
-| [F24](#f24-audit-anchoring-signed-chain-heads-in-s3-object-lock) | Audit anchoring | none yet | default build; real S3 deferred |
+| [F24](#f24-audit-anchoring-signed-chain-heads-in-s3-object-lock) | Audit anchoring | E-54 | default build; real S3 pending |
 | [F25](#f25-evaluation-harness-phase-4a) | Evaluation harness (4A) | E-10 | gate in build; live paid |
 | [F26](#f26-investigation-agent-4b-and-supervisor-agents-4g) | Agent (4B) and supervisor agents (4G) | E-10 | default build; live paid |
-| [F27](#f27-alert-delivery-phase-4c) | Alert delivery (4C) | none yet | promtool; real SMTP deferred |
-| [F28](#f28-amazon-bedrock-adapter-phase-4d) | Amazon Bedrock adapter (4D) | none yet | fake in build; live deferred |
-| [F29](#f29-aws-deployment-with-terraform-phase-4e) | AWS deployment with Terraform (4E) | none yet | LocalStack; real apply deferred |
+| [F27](#f27-alert-delivery-phase-4c) | Alert delivery (4C) | E-55 | promtool; real SMTP pending |
+| [F28](#f28-amazon-bedrock-adapter-phase-4d) | Amazon Bedrock adapter (4D) | E-56 | fake in build; live pending |
+| [F29](#f29-aws-deployment-with-terraform-phase-4e) | AWS deployment with Terraform (4E) | E-57 | LocalStack; real apply pending |
 | [F30](#f30-observability-dashboard-and-semantic-cache-savings-phase-5c-and-5d) | Dashboard and cache savings (5C, 5D) | E-14, E-15 | local run |
-| [F31](#f31-console-ui-and-kubernetes-manifests) | Console UI and Kubernetes manifests | E-33, E-21 | CI |
+| [F31](#f31-console-ui-and-kubernetes-manifests) | Console UI and Kubernetes manifests | E-33, E-21, E-44 | CI |
+| [F32](#f32-ra-3-missing-entry-phrasing-in-the-relevance-filter) | RA-3 missing-entry phrasing in the relevance filter | E-58 | unit test; paid re-measure not run |
+| [F33](#f33-int-4-concurrent-investigations-through-the-gateway-and-eka) | INT-4 concurrent investigations through the gateway and EKA | E-63 | opt-in, free, local stack |
+| [F34](#f34-view-only-license-ai-use-policy-and-source-headers) | View-only license, AI use policy, source headers and canary | E-58 (UI and unit re-check) | default build, UI specs |
+| [F35](#f35-trivy-image-fix-remove-the-unused-pebble-binary) | Trivy image fix: remove the unused pebble binary | none (CI run 44499744262) | CI image job |
+| [F36](#f36-java-21-virtual-threads-for-request-handling-5a) | Java 21 virtual threads (5A) | E-13 | default build |
+| [F37](#f37-gateway-adapter-idempotency-key-and-refusal-mapping-q21-q22) | Gateway adapter, idempotency key, refusal mapping (Q2.1, Q2.2) | E-16, E-17 | default build |
+| [F38](#f38-latest-job-endpoint-idempotency-key-and-problemjson-d112-d114) | Latest-job endpoint, Idempotency-Key, problem+json (D1.1.2, D1.1.4) | none yet (CI 44293523261) | default build |
+| [F39](#f39-trivy-gate-that-fails-the-build-d113) | Trivy gate that fails the build (D1.1.3) | E-40 | CI image job |
+| [F40](#f40-keda-overlay-run-on-a-kind-cluster-pq121) | KEDA overlay run on kind (PQ1.2.1) | E-44 | local with stubs |
+| [F41](#f41-similar-breaks-tool-contract-pq129) | Similar-breaks tool contract (PQ1.2.9) | E-46 | default build |
+| [F42](#f42-repository-and-documentation-chores-of-the-week) | CI minutes, guide, claim alignment, portfolio page | E-47 | docs, CI config |
+| [F43](#f43-rero-the-sibling-service-cut-off-by-default) | RERO sibling service (cut, off by default) | E-31, E-32 | RERO `pytest` |
 
 ## F1 Knowledge pre-step, Q1.1 to Q1.5
 
@@ -221,13 +235,15 @@ CI step `kubeconform` on `k8s/base`, `k8s/overlays/kind`, `k8s/overlays/keda`.
 
 **Result.** Local pass on `e15a7e1`, 2026-11-18. E-21.
 
-**Honest limits.** KEDA is a schema check only; autoscaling behaviour is not tested on a cluster. Per-tenant
-credentials ran against a fake gateway and fake realm.
+**Honest limits.** In CI KEDA is a schema check only. On 2026-11-19 the overlay was also run once on a kind cluster with
+KEDA 2.21.1, but with a stub app and a stub Prometheus (E-44, `docs/proof/pq1-2-1-keda-kind-2026-11-19.md`), so the real
+image, real Prometheus metrics and the CPU trigger are still unproven. Per-tenant credentials ran against a fake gateway
+and fake realm in CI, and once against the real realm and gateway with the stub provider (F15).
 
 **Interview questions.**
 
 - *How do you test a distributed rate limit?* Real Redis in Testcontainers, 40 concurrent requests, exactly 10 allowed.
-- *Did you prove autoscaling?* No. I validated the overlay schema; running KEDA on a cluster is not done.
+- *Did you prove autoscaling?* Partly. The overlay is schema-checked in CI and scaled 2 to 4 to 6 on kind against a stub Prometheus value; the real image under real load is not done.
 
 ## F7 Review fixes and the flaky recovery-sweep test
 
@@ -628,9 +644,10 @@ audit table is detectable.
 **Expected.** Anchor written once; the locked object cannot be deleted; a consistent chain rewrite is detected; only
 `SRE_ADMIN` and the right tenant can verify; signatures cannot be forged.
 
-**Evidence.** README features table (Audit row) and "Test suite" row for `AuditAnchorIT`. No separate proof file.
+**Evidence.** README features table (Audit row) and "Test suite" row for `AuditAnchorIT`; register E-54 (CI green for
+MinIO and LocalStack). No separate proof file.
 
-**Deferred to the final phase.** Anchoring to real S3 (PQ1.2.8). MinIO and the LocalStack Object Lock check in CI
+**Pending (real AWS).** Anchoring to real S3 (PQ1.2.8). MinIO and the LocalStack Object Lock check in CI
 (`terraform-localstack` job) are the local proof.
 
 ## F25 Evaluation harness, Phase 4A
@@ -690,7 +707,7 @@ names the rules query exist).
 **Expected.** Rule tests pass; in the drill a real 503 outage and a closed NER port produced alerts that reached a
 local Mailpit inbox (`docs/proof/4c-alert-email.txt`).
 
-**Evidence.** `docs/proof/4c-outage-drill-2026-11-10.md`, `docs/proof/4c-alert-email.txt`, CI `ci` (alerts job).
+**Evidence.** `docs/proof/4c-outage-drill-2026-11-10.md`, `docs/proof/4c-alert-email.txt`, CI `ci` (alerts job), E-55.
 
 **Deferred to the final phase.** Real SMTP delivery (PQ1.2.7, D1.2.11): needs real credentials in `alertmanager.yml`
 (kept out of git). Only the Mailpit sink is proven.
@@ -708,7 +725,7 @@ two `bedrock` tests with `-Dfailsafe.excludedGroups=` set to exclude the other t
 
 **Expected (fake).** Scores equal the mock-llm floor (adapter fidelity, not model quality).
 
-**Evidence.** `docs/proof/4d-bedrock-fake-eval-2026-11-10.md`, `docs/proof/eval/report-bedrock-fake-2026-11-10.md`.
+**Evidence.** `docs/proof/4d-bedrock-fake-eval-2026-11-10.md`, `docs/proof/eval/report-bedrock-fake-2026-11-10.md`, E-56.
 
 **Deferred to the final phase.** Live Bedrock runs and the OpenAI versus Bedrock comparison (PQ1.2.6). Cost and quality
 on Bedrock are not claimed.
@@ -728,7 +745,8 @@ Object Lock refuses a delete, destroy). `deploy-aws.yml` is the real-account wor
 **Expected.** All module tests pass; the LocalStack apply and destroy leave no resources and no drift.
 
 **Evidence.** `docs/proof/4e-localstack-apply-2026-11-10.md`, CI `ci` job `terraform-localstack` (`ci` #56 per the
-status tracker), `infra/README.md`.
+status tracker), `infra/README.md`, E-57. Account setup and cost steps for the real apply:
+`platform/docs/deployment/AWS_SETUP_BILLING_DEPLOYMENT_GUIDE.md` (platform repo, written 2026-11-19).
 
 **Deferred to the final phase.** Real apply, record and destroy in an AWS account (Q4.6, D1.2.8, PQ1.2.8); needs
 credentials and cost approval. LocalStack proves the plan shape, not real-AWS behaviour or cost.
@@ -763,8 +781,371 @@ and kubeconform as in `k8s/README.md`.
 
 **Expected.** UI 29 of 29 passed (E-33). Manifests pass strict schema validation.
 
-**Evidence.** E-33, E-21. README says the manifests and HPA were validated on kind, but no proof file for that run is in
-`docs/proof/`, so treat it as unrecorded. KEDA scaling and browser end-to-end runs are not tested.
+**Evidence.** E-33, E-21, E-44. KEDA was run once on a kind cluster with a stub app and a stub Prometheus
+(`docs/proof/pq1-2-1-keda-kind-2026-11-19.md`, F40); the manifests and HPA on kind before that have no proof file.
+Browser end-to-end runs are not tested. Real-image KEDA scaling and the CPU trigger were run on 2026-11-19 (RA-5, E-65,
+`k8s/overlays/keda-kind-real/`, `docs/proof/ra-5-keda-kind-real-2026-11-19.md`): embeddings stubbed, mock chat, one node.
+
+---
+
+# Changes of the last seven days (2026-11-12 to 2026-11-19), added 2026-11-19
+
+F32 to F35 cover the latest changes (RA-3, INT-4, license and headers, Trivy image fix). F36 to F43 fill the gaps for the
+rest of the week that F1 to F31 did not describe as separate features. Everything else from the week already has its own
+entry: knowledge pre-step and relevance filter (F1, F17), gateway governance (F4 to F9), RERO (F13, F14, F43),
+integrated evaluation (F11, F12), L1 cache, MCP and break query (F18 to F20), supervisor agents (F26), alerts, Bedrock fake,
+Terraform and audit anchoring (F24, F27 to F29), dashboard and cache savings (F30).
+
+Rules: numbers come from the cited proof documents, the CI log of the named run, or a report file on this machine.
+"Local; CI pending push" means the work is in the working tree and no CI run exists for it yet. Nothing here claims an
+accuracy gain, a capacity figure or real-AWS behaviour that was not measured. Counts of `@Test` methods taken from the
+source are marked "in source"; they are not CI results.
+
+## Summary table
+
+| Feature | What it does | How it was tested (test class / script / proof doc) | Result (actual numbers, CI run id or "local; CI pending push") | Explanation | Trade-offs and alternatives considered | Status / pending |
+|---|---|---|---|---|---|---|
+| RA-3 missing-entry phrasing (F32) | Adds four phrases to the `MISSING_ENTRY` term list of the relevance filter so unrelated fee procedures are dropped for such breaks | `KnowledgeRelevanceFilterTest`, `BreakKnowledgeQueryTest`; `docs/proof/ra-3-missing-entry-terms-2026-11-19.md` | 10/10 and 6/6; unit suite 218, 0 failures; local; CI pending push | MIS-001 to MIS-003 evidence never used a listed word | Wider list may over-match | Accuracy effect not measured (E-58) |
+| INT-4 concurrency (F33) | 10 to 25 parallel investigations through the real gateway (stub) and EKA | `scripts/int4/*`, `compose/int4/*` (platform repo); `docs/proof/int-4-concurrency-2026-11-19.md` | No crash, no stuck job, 95 proposals all `MANUAL_REVIEW`, 0 leak hits; local; CI pending push | Shows each limit degrades safely | Stub model, one laptop | Local pass (E-63); larger runs to be confirmed |
+| License, AI use policy, headers (F34) | View-only `LICENSE`, `AI_USE_POLICY.md`, header and canary on 384 sources | CI run 44499744262, UI specs, unit tests | 7 of 7 jobs; 217 unit / 268 IT; UI 29/29 | Rights explicit, copies findable | No legal review | PR green; `main` run to be confirmed |
+| Trivy pebble fix (F35) | Removes unused `/usr/bin/pebble` from the image | CI job `k8s manifests + container image` | CI run 44499744262 success | Dead binary with a HIGH CVE | `.trivyignore` rejected | PR green; `main` run to be confirmed |
+| Virtual threads (F36) | Request handling on Java 21 virtual threads, bounded investigation pool kept | `VirtualThreadsTenantIsolationIT`, `TenantScopeVirtualThreadTest`; ADR | 120 interleaved requests, no cross-tenant row, all on virtual threads (E-13); CI at the time to be confirmed | I/O-bound service | Throughput not measured | Built (E-13) |
+| Gateway adapter and refusal mapping (F37) | Model call through ai-gateway behind `GATEWAY_ENABLED` | `HttpGatewayChatAdapterTest`, `IdempotencyKeysTest`, `GatewayConfigTest`, `GatewayFailureTest` | CI baseline 115 unit / 144 IT at `887ec9f` (E-16, run 43714292363) | Governed path, no double billing | Off by default | Built (E-17) |
+| Latest-job endpoint, Idempotency-Key, problem+json (F38) | Latest job per break; optional idempotent POSTs; RFC 7807 errors | `LatestInvestigationIT`, `IdempotencyIT`, `ProblemJsonIT` | 5, 10 and 6 `@Test` in source; CI run 44293523261 green | Safe retries and uniform errors | Key scope and 24 h store | CI green (counts per class to be confirmed) |
+| Trivy gate (F39) | Image scan fails the build on HIGH or CRITICAL with a fix | CI job image, `.trivyignore`, `pom.xml` overrides | First gated run 32 findings: 26 cleared, 4 accepted; run 44293523261 green (E-40) | Supply-chain gate | 4 accepted with expiry | CI green |
+| KEDA overlay on kind (F40) | Overlay run on a real cluster with stubs | `docs/proof/pq1-2-1-keda-kind-2026-11-19.md` | ScaledObject Ready; 2 to 4 to 6 on stub values; namespace bug fixed; CI run 44423686771 green | Mechanics, not real load | Stubs | Local with stubs (E-44) |
+| Similar-breaks tool contract (F41) | Exactly three fields, approved and same tenant only | `SimilarBreaksToolIT` | 1/1; CI run 44423686771 green (E-46) | TDD item closed | Plain contract check | CI green |
+| Repo hygiene (F42) | CI minutes saving, guide and evidence map, portfolio page | `.github/workflows/ci.yml` diff; docs | See F42 | Limited Actions quota | Nightly scan paused | Done; portfolio page not tested |
+| RERO (F43) | Optional sibling service, cut under the frozen rule, off by default | RERO repo `pytest`; F13, F14 | 143 passed (local run 2026-11-19, 70 s); keep/cut: CUT | Rule fixed before the run | Kept as code, not default | Cut (E-32) |
+
+## F32 RA-3 missing-entry phrasing in the relevance filter
+
+| Check | Setup | Result |
+|---|---|---|
+| Cause found without a paid call | Read `KnowledgeRelevanceFilter` and the D1.2.12 per-case counts (`docs/proof/d1-2-12-break-query-remeasure-2026-11-18.md`) | MIS-001 to MIS-003 evidence says "No credit for INV-30402 appears anywhere", "no matching credit exists", "has no counterpart on the bank side"; none of the old `MISSING_ENTRY` words (`missing`, `not recorded`, `not posted`, ...) occurs, so no category was found, the query fell back to generic words and the filter kept all 3 fee procedures (kept 3 / dropped 0) |
+| Change | `KnowledgeRelevanceFilter.TERMS` for `MISSING_ENTRY` | Added `no matching`, `no counterpart`, `no credit`, `no debit`. Nothing else changed: min-score, category rule, defaults, auto-resolve off |
+| New unit test | `missingEntryPhrasingWithoutTheWordMissingIsRecognised`: the three evidence phrasings | Each yields `MISSING_ENTRY` as a candidate category; a fee procedure is dropped and the missing-entry procedure (`kb:2`) is kept |
+| Existing tests | `KnowledgeRelevanceFilterTest`, `BreakKnowledgeQueryTest` | 10/10 and 6/6 (per the proof document) |
+| Unit suite | Surefire reports on this machine, 2026-11-19 | 218 tests, 0 failures, 0 errors, 0 skipped |
+| Side-effect check (free) | The phrases searched in the 28 eval evidence files and the hard set | Only `mis-001..003` and `hrd-006` contain them; no other evaluated case changes category set |
+| CI | `ci` | Local; CI pending push. The last CI run on this branch (44499744262, before this change) shows 217 unit tests, consistent with 218 including the new test |
+
+**Why it was built this way.** After D1.2.12 the filter still lost the three missing-entry cases for a plain reason: it
+matches evidence text against short, specific term lists, and the evidence for those cases used another wording of the
+same idea. The smallest honest fix is to extend that list, keep it short and specific, and leave every threshold alone, so
+the change can be reviewed in one line and reverted in one line. The filter stays conservative: when no category is found
+it keeps everything, which is why a missed phrase costs accuracy, not safety. The test uses the exact phrasing from the
+evidence so a regression shows up immediately.
+
+**Trade-offs and alternatives.**
+
+- A broader list can match cases it should not (for example "no credit" inside an unrelated sentence). The free check
+  found only the four expected cases among 28 plus the hard set; real data may differ.
+- Alternative: let the model pick the category. Rejected: it adds a model call and makes the filter non-deterministic.
+- Alternative: lower the score floor or drop the category rule. Rejected: F20 showed the floor is inert, and dropping the
+  category rule removes the filter's only discriminating signal.
+- Alternative: stop filtering for missing-entry breaks. Rejected: the 28-case baseline routes these correctly only without
+  fee procedures, so the filter is still wanted.
+
+**Not covered / limits of this evidence.** No model was called. The expected effect (MIS-001 to MIS-003 get 0 kept / 3
+dropped fee procedures, i.e. the no-knowledge prompt that routed them correctly in the baseline) is a prediction from the
+filter logic, not a measurement. With n = 28 and 3 cases affected, a gain could be told apart from the baseline only as
+"back to baseline", not as an improvement over it.
+
+**Pending.** Paid 28-case re-measure (the D1.2.12 reproduce command, expected cost about 0.005 USD per run; needs the
+provider key and the owner's approval). Until it runs, no accuracy figure is claimed for RA-3 (E-58).
+
+## F33 INT-4 concurrent investigations through the gateway and EKA
+
+All figures: stub model, one laptop, one run per scenario, throwaway stack; behaviour and rough latency, not a capacity
+claim. Source: `docs/proof/int-4-concurrency-2026-11-19.md`, raw results in `docs/proof/int-4-raw/`.
+
+| Check | Setup | Result |
+|---|---|---|
+| A: N = 10, default pool | tenant-a, 10 starts released together, EKA documents seeded | 10 x 202, 10/10 `SUCCEEDED`, knowledge `OK` x 10; e2e p50 3398 ms, p95 5188 ms |
+| B: N = 25, default config | tenant-b | 20 x 202 and 5 x 429 `Retry-After: 3` from reconcile-ai's own start limiter; the 5 breaks stayed `READY_TO_INVESTIGATE`; 20/20 accepted jobs `SUCCEEDED`; p50 3724 ms, p95 5940 ms |
+| C: N = 25, wide pool (25 threads, start limiter 100), fail-open | tenant-a | 25/25 `SUCCEEDED`; p50 6512 ms, p95 7662 ms; 2 EKA lookups `UNAVAILABLE / RATE_LIMITED` and the jobs continued; 2 gateway 429s retried once under the same idempotency key and both succeeded |
+| D: N = 25, wide pool, fail-closed | tenant-b, `KNOWLEDGE_FAIL_CLOSED=true` | 22 `SUCCEEDED`, 3 `FAILED / KNOWLEDGE_UNAVAILABLE` (2 rate limited, 1 timeout) with no model call; re-run of the 3: 3/3 `SUCCEEDED` |
+| E: EKA core paused, fail-open | 10 starts | 10/10 lookups `UNAVAILABLE / TIMEOUT` at the 5 s limit, all 10 jobs still `SUCCEEDED` to manual review; breaker opened |
+| E2: same app, 5 more | right after E | 5/5 `UNAVAILABLE / CIRCUIT_OPEN`, no request sent, jobs about 0.6 s |
+| Direct bursts (not through reconcile-ai) | 40 and 60 parallel calls | EKA edge: 40 gives 21 x 200 / 19 x 429, 60 gives 21 / 39, `Retry-After: 1`; gateway: 40 gives 11 x 200 / 29 x 429 `TENANT_CONCURRENCY_LIMIT`, 60 gives 42 / 18 `RATE_LIMITED` |
+| Safety invariants | Runs A to E2 | All 95 proposals routed `MANUAL_REVIEW`; no break `RESOLVED` (auto-resolve off); audit chains valid (tenant-a 389 events, tenant-b 292) |
+| Leak scan | `scripts/int4/leak.py` over reconcile-ai logs and the gateway, EKA edge, core, worker and Keycloak container logs | 0 hits for JWT shape, Bearer value, analyst note, stub reply, evidence text and the four secret values |
+| CI | needs Docker and three sibling repos | Local; CI pending push |
+
+**Why it was built this way.** A single investigation working says little about behaviour when many arrive at once, and the
+platform now has four places that can say "no": reconcile-ai's start limiter, the EKA per-user limiter, the gateway's
+tenant limits and the model itself. The run was designed to reach each limit on purpose and then check one thing: does the
+system end in a defined, safe state. The stub model keeps it free and repeatable; the analyst note carries a directive so
+the stub returns a valid proposal and the whole pipeline (policy gate, route, break status) is exercised. The leak scan was
+added because overload paths are where payloads end up in error logs.
+
+**Trade-offs and alternatives.**
+
+- Fail-open (default) keeps investigations flowing but 8 percent (C) and 12 percent (D) ran without procedure context under
+  the burst; this is visible per job and in the `reconcile.knowledge.outcome` metric and never changes the route.
+  Fail-closed gives complete context or a retryable failure, at the cost of re-runs.
+- reconcile-ai did not retry a rate-limited EKA lookup in these runs (knowledge is advisory). Alternative: retry on
+  `Retry-After`. See Pending: that change is in progress.
+- The default pool (2 to 4 threads) keeps reconcile-ai below the EKA limit by itself (no EKA or gateway 429 in A and B);
+  widening the pool needs the EKA edge limit (or a shared Redis limiter, ADR-025 in EKA) raised too.
+- Alternative: load-test with a real provider. Rejected for this run: cost, and provider latency would hide the limiter
+  behaviour being tested.
+
+**Not covered / limits of this evidence.** One laptop, one run per scenario, stub model (about 0.4 to 0.9 s per call) and
+an in-process embedding model on the EKA core, with fake embeddings for reconcile-ai's own ingestion. Not covered: more
+than 25 parallel, more than one replica of any service, a second tenant loading the same EKA user, streaming, agent modes.
+The leak check read the EKA edge log as a 1000-line Docker tail and did not scan the gateway ledger rows or database
+contents (`PayloadLeakageIT` in ai-gateway covers the ledger). The first harness version had a fake-embeddings server bug
+(chunked bodies, keep-alive); it was fixed and no table row includes it. No product bug was found, so no product code was
+changed by this run.
+
+**Pending (in progress, not recorded as done at the time of writing).** The proof document does not yet show: a 429 retry
+that honours `Retry-After`, N = 50 and N = 100, two tenants loading the same EKA user, two replicas, or real gpt-4o-mini
+latency. The working tree on 2026-11-19 contains uncommitted code and an unrecorded test for a rate-limit retry in the EKA
+knowledge client (`EkaKnowledgeClient`, `EkaKnowledgeClientRetryTest`, `rate-limit-retries` settings); its results are
+to be confirmed and are not claimed here. Ledger and database leak scanning and an untruncated EKA edge log are also open.
+
+## F34 View-only license, AI use policy and source headers
+
+| Check | Setup | Result |
+|---|---|---|
+| License replaced | `LICENSE` (commit `eb2362b`, PR #25) | Apache-2.0 text replaced by a view-only proprietary license: viewing on GitHub for evaluation is allowed; copying, cloning, forking outside GitHub's own terms, modification, redistribution, product use and AI use are prohibited without written permission; third-party libraries keep their own licenses |
+| AI use policy | `AI_USE_POLICY.md` | New file: bans training, AI-based analysis or reproduction, inclusion in datasets or indexes, and scraping; states that it does not restrict the owner; names the canary marker |
+| NOTICE and README | `NOTICE`, README license section and notice box | NOTICE adjusted in the same commit; README says "view-only license" and links both files |
+| Headers and canary | Commit `058d279` | 3 comment lines (copyright, `SPDX-License-Identifier: LicenseRef-Proprietary`, canary) added to 384 source files (356 Java, 27 TypeScript, 1 Python); the commit also adds 4 lines to `AI_USE_POLICY.md` and 2 to the README; 386 files, 1158 insertions; `git grep` finds the canary in 386 files today |
+| Does the build still pass | `ci` run 44499744262 on `bca99f6` (PR `chore/ai-use-policy`, includes `058d279`) | 7 of 7 jobs success; `mvn clean verify` 217 unit / 268 IT, 0 failures; UI Karma 29 of 29 |
+| Local re-check after the headers | Unit tests and UI specs (E-58) | Unit suite passes; UI Karma ChromeHeadless 29/29 and `ng build` OK |
+| License PR first run | `ci` run 44445726014 on `7e2d3ed` | Failed: `mvn clean verify` stopped with a Maven Central HTTP 429 while resolving a plugin (infrastructure, not a test). The PR later passed (44499744262). Main push of PR #25: run 44446274178, success |
+
+**Why it was built this way.** A portfolio repository has to be readable by reviewers, but the owner does not want it reused
+or fed to models. Apache-2.0 allowed both, so it was replaced. A separate AI use policy states the AI terms in one place,
+and the license points to it. The canary string and a short header in every source file make a copy findable and make the
+terms visible in each file, including when a file is read alone. Headers are comments only, so no behaviour changes, and
+the full build and UI specs were re-run to prove that.
+
+**Trade-offs and alternatives.**
+
+- Alternative: keep Apache-2.0 and rely on the README notice. Rejected: it grants the rights the owner wants to withhold.
+- Alternative: a source-available license that allows non-commercial use. Rejected for now: any copy right makes the AI
+  restriction harder to hold; view-only is the strictest option.
+- A header on every file is noisy and is removed by anyone who copies the file; the canary is a detection aid, not
+  protection. A license cannot technically stop a crawler.
+- Previously published Apache-2.0 versions stay under that license as far as the law requires (LICENSE section 5).
+
+**Not covered / limits of this evidence.** The legal text has not been reviewed by a lawyer. The canary check is a text
+search, not proof about copies elsewhere. Header presence is a count (384) from the commit, not a CI check; no test fails
+when a new file lacks a header.
+
+**Pending.** Merge of the header and pebble commits (`058d279`, `bca99f6`) into `main` and the CI run on `main`: to be
+confirmed (the last `main` run found is 44446274178 on `eb2362b`).
+
+## F35 Trivy image fix: remove the unused pebble binary
+
+| Check | Setup | Result |
+|---|---|---|
+| Finding | Trivy image scan (fails on HIGH or CRITICAL with a fix) | HIGH CVE-2026-97054 in the Go standard library (v1.27.3) of `/usr/bin/pebble`, a Go service manager shipped in the `eclipse-temurin:21-jre` base image; fixed in Go 1.27.4 (as recorded in the Dockerfile comment). The CI log of the run that first reported it was not found, to be confirmed |
+| Fix | `Dockerfile`, commit `bca99f6` | `RUN rm -f /usr/bin/pebble` after the user is created; the app starts `java` directly and never runs pebble |
+| CI | `ci` run 44499744262 (PR, head `bca99f6`), job `k8s manifests + container image` | Success; the log shows the step `[stage-1 3/5] RUN rm -f /usr/bin/pebble`, and the Trivy gate passed with the four accepted findings in `.trivyignore` (expiry 2027-02-28) |
+| Other jobs in the run | same run | All 7 jobs success (`mvn clean verify`, UI, SBOM, alert rules, Terraform checks, LocalStack apply and destroy, image) |
+
+**Why it was built this way.** The gate fails on a HIGH finding with a fix, and the vulnerable code is a binary the product
+never runs. Removing it is the smallest change that makes the image smaller and cleaner, and the reason is written next to
+the line so the next reader knows when it can go (when the base image is rebuilt with a patched Go).
+
+**Trade-offs and alternatives.**
+
+- Alternative: add CVE-2026-97054 to `.trivyignore`. Rejected: it would accept a risk instead of removing it, and the file
+  is reserved for findings with no fix inside the locked baseline.
+- Alternative: wait for a base image rebuild. Rejected: the gate would stay red meanwhile.
+- Alternative: a distroless or Alpine base. Not done: a larger change with its own scan results; not evaluated.
+- Risk: if a future base image needs pebble (for example for another start script), start-up would fail, not the build.
+
+**Not covered / limits of this evidence.** CI shows the gate passed on the PR branch. It does not show a Trivy report that
+lists the CVE before the fix, and it does not show the scan result on `main`.
+
+**Pending.** CI run on `main` after merge (to be confirmed).
+
+## F36 Java 21 virtual threads for request handling (5A)
+
+| Check | Setup | Result |
+|---|---|---|
+| Isolation under virtual threads | `VirtualThreadsTenantIsolationIT` (2 tests in source), real Postgres | 120 interleaved requests never saw another tenant's rows and every request ran on a virtual thread (E-13, README) |
+| Thread-local hygiene | `TenantScopeVirtualThreadTest` | `TenantScope` is per thread and never inherited |
+| Back-pressure kept | `InvestigationExecutorConfig` (core 2, max 4, queue 50) | The investigation pool stays a bounded platform pool, so a full queue still returns 503 |
+| CI | commit `d663018` (PR #10) | CI run id for that commit: to be confirmed |
+
+**Why it was built this way.** Almost every request waits on I/O (Postgres, model provider, EKA, gateway). A virtual thread
+parks cheaply, and one Spring Boot flag moves Tomcat, `@Scheduled` and the default task executor, with no production code
+change. The one real risk is tenant identity on a reused thread, so it was proven by test, release-blocking.
+
+**Trade-offs and alternatives.**
+
+- WebFlux was rejected by project rule (Spring MVC with `SseEmitter`).
+- A virtual-thread investigation executor was rejected: no queue means no 503 back-pressure and unbounded calls into a
+  rate-limited provider.
+- Pinning risks (synchronized blocks around blocking calls) are not measured here.
+
+**Not covered / limits of this evidence.** No throughput or latency claim; the proof is isolation, not speed.
+
+**Pending.** Nothing planned; a load comparison would need its own run.
+
+## F37 Gateway adapter, idempotency key and refusal mapping (Q2.1, Q2.2)
+
+| Check | Setup | Result |
+|---|---|---|
+| Request and replies match the contracts | `HttpGatewayChatAdapterTest` against a fake gateway; replies checked on `chat-response.v1.json` and `error.v1.json` | Passes in the default build; per-class count to be confirmed |
+| Idempotency key | `IdempotencyKeysTest`: `recon:<jobId>:<step>:<attempt>` | Same key for a re-claimed job and a transport retry |
+| Retry rule | `GatewayFailureTest`, `GatewayConfigTest` | One retry only on not-sent codes; none on an unknown outcome or budget block; refusal codes map to `GATEWAY_<code>`; unknown-outcome and policy-blocked sets are disjoint |
+| Suite at the time | E-16 (commit `887ec9f`, CI run 43714292363) | 115 unit / 144 IT / 15 UI, all 7 jobs green |
+
+**Why it was built this way.** Behind `GATEWAY_ENABLED` (default off) the model call can use the platform's governed path:
+budget, risk, sensitivity and a ledger. A fixed key per job step lets the gateway replay instead of billing twice. Typed
+failure reasons let an operator tell a budget block from a policy refusal.
+
+**Trade-offs and alternatives.**
+
+- The local advisor chain and breaker are bypassed on this route; identifier masking still runs before the request leaves.
+- Alternative: always retry. Rejected: a retry after an unknown outcome can double-bill.
+
+**Not covered / limits of this evidence.** Fake gateway for the CI tests; real-gateway runs are F8, F15 and F11.
+
+**Pending.** None for the adapter. Follow-up governance is F4 to F7.
+
+## F38 Latest-job endpoint, Idempotency-Key and problem+json (D1.1.2, D1.1.4)
+
+| Check | Setup | Result |
+|---|---|---|
+| Latest job for a break | `LatestInvestigationIT` (5 tests in source) | `GET /api/v1/breaks/{breakId}/investigations/latest` returns the newest job; 404 `JOB_NOT_FOUND` for no job or another tenant |
+| Idempotent POSTs | `IdempotencyIT` (10 tests in source), Flyway V17, Row-Level Security | Same key and request replays status, body and `Location` with `Idempotency-Replayed: true`; same key, different request 422 `IDEMPOTENCY_KEY_REUSED`; running duplicate waits up to 10 s then 409; non-2xx not stored |
+| Error shape | `ProblemJsonIT` (6 tests in source) | RFC 7807 `application/problem+json` with the old `code`, `message`, `timestamp` kept; 401 and 403 keep `WWW-Authenticate` |
+| CI | commit `886cc9e`, `ci` run 44293523261 | All 7 jobs green; per-class counts in CI to be confirmed |
+
+**Why it was built this way.** Clients retry, and a retry must not create a second break, evidence row or job. The header is
+optional so existing callers are unchanged. A uniform error body lets consumers branch on a stable `type` and `code`.
+
+**Trade-offs and alternatives.**
+
+- Keys are per tenant, user and endpoint, kept 24 h, purged hourly: bounded storage, but a key reused after a day is new.
+- Alternative: dedupe on content only. Rejected for investigations, which are intentionally repeatable.
+
+**Not covered / limits of this evidence.** Single instance in tests; multi-replica races rely on the database constraint,
+not a measured run. The console's use of the latest-job endpoint is covered by a UI spec (`break-detail.page.spec.ts`).
+
+**Pending.** Nothing.
+
+## F39 Trivy gate that fails the build (D1.1.3)
+
+| Check | Setup | Result |
+|---|---|---|
+| First gated run | CI image job, `ignore-unfixed`, HIGH and CRITICAL | 32 findings; run 44282959795 (#63) failed |
+| Fixes | `pom.xml` SECURITY OVERRIDES | 26 findings cleared by patch-level overrides (Tomcat, Jackson, Netty, Postgres driver, httpcore5 and transitive libraries) |
+| Accepted | `.trivyignore` | 4 findings with no fix inside the Spring Boot 3.5 and Spring AI 1.1 lock (3 Spring Framework CVEs fixed only in 7.x, one `mcp-core` CVE fixed only in 1.0), each with justification and expiry 2027-02-28 |
+| Result | PR run 44284685956 (#64), main run 44293523261 (#66), E-40 | All jobs green |
+
+**Why it was built this way.** A scan that only reports is ignored. Failing on fixable HIGH and CRITICAL findings makes a
+new vulnerable dependency visible in the pull request. Unfixable findings are accepted in writing with an owner and expiry
+so they cannot be forgotten.
+
+**Trade-offs and alternatives.**
+
+- `ignore-unfixed` hides findings with no fix; alternative: fail on everything, rejected as permanently red.
+- Alternative: upgrade to Boot 4 for the 3 Spring CVEs, rejected as out of scope and version-locked.
+
+**Not covered / limits of this evidence.** The 4 accepted CVEs are a documented exception, not zero findings. The MCP CVE
+is live when the MCP server is switched on (F19).
+
+**Pending.** Review before 2027-02-28. The later pebble finding is F35.
+
+## F40 KEDA overlay run on a kind cluster (PQ1.2.1)
+
+| Check | Setup | Result |
+|---|---|---|
+| ScaledObject ready | kind v0.25.0 (Kubernetes v1.31.2), KEDA 2.21.1, metrics-server v0.7.2, stub app, stub Prometheus | `Ready=True`, 2 to 6 replicas, triggers `prometheus` and `cpu`; base HPA removed by the overlay |
+| Bug found | first `kubectl apply -k` | ScaledObject had no namespace and the admission webhook refused it; fixed by `namespace: reconcile` in `k8s/overlays/keda/kustomization.yaml` (kubeconform in CI could not catch this) |
+| Scale up | stub value 12, then 30 | 2 to 4 within 15 s; 6 of 6 at about +75 s (capped at 6) |
+| Metric outage | Prometheus stub stopped at 5 of 5 | Replicas held at 5, `Ready=False TriggerError`, scaling resumed when it returned (about 1 minute outage tested) |
+| Scale down | 300 s stabilisation window | First drop about 6 minutes after the change, then one pod per 60 s; not run down to 2 |
+| CI | commit `5b4432f`, `ci` run 44423686771 | Green (E-44) |
+
+**Why it was built this way.** Investigations wait on the model, so CPU is a weak load signal; queued and active
+investigations are the real one. The run was to catch what a schema check cannot: admission, wiring and scaling mechanics.
+
+**Trade-offs and alternatives.**
+
+- A stub app and Prometheus make the run fast and repeatable but prove nothing about the real gauges.
+- Alternative: CPU-only HPA (the base). Kept as the default; KEDA is an overlay.
+
+**Not covered / limits of this evidence.** Real image, real
+`reconcile_investigations_executor_*` metrics and the label in the query, the CPU trigger under load, scale-down to the
+minimum, long outages.
+
+**Follow-up done (RA-5, 2026-11-19, E-65).** `k8s/overlays/keda-kind-real/`: real image, real Prometheus v2.55.1 with the
+`namespace` label, KEDA 2.21.1, unmodified ScaledObject. Back-log load: desired 2 to 4 in about 11 s while CPU read 2%,
+6 desired within a minute, 6 ready after about 5 min, 248 requests refused 503 meanwhile, all 788 accepted jobs SUCCEEDED, 0 restarts.
+CPU-only load (Prometheus sum 0): 2 to 6. Scale-in to the minimum 2 at one pod per minute after the 300 s window, seen three times.
+Finding: JVM start-up CPU (about 1 core per pod for a minute) makes a fresh install scale out by itself. Stubs: embeddings,
+chat (mock), login; rate limit off; one node, one run per phase. Proof: `docs/proof/ra-5-keda-kind-real-2026-11-19.md`.
+
+## F41 Similar-breaks tool contract (PQ1.2.9)
+
+| Check | Setup | Result |
+|---|---|---|
+| Exact fields | `SimilarBreaksToolIT` (1 test), real Postgres, schema `internal-similar.v1` | Each item has exactly `breakRef`, `rootCauseCategory`, `resolvedAt`; no explanation, amount, proposal id or tenant |
+| Scope | rows seeded for tenant A (approved, rejected) and tenant B | Only approved proposals on resolved breaks of the token's tenant; never the job's own break; at most 5 items |
+| CI | commit `5b4432f`, `ci` run 44423686771 | Green (E-46) |
+
+**Why it was built this way.** The tool is read by another service's model, so its output is kept to the minimum that helps
+and cannot carry tenant data or free text.
+
+**Trade-offs and alternatives.** A fixed three-field shape limits what RERO can reason about; richer fields were rejected
+because they would leak explanation text.
+
+**Not covered / limits of this evidence.** Synthetic rows; one test; RERO itself is cut (F43).
+
+**Pending.** None.
+
+## F42 Repository and documentation chores of the week
+
+| Check | Setup | Result |
+|---|---|---|
+| CI minutes | `.github/workflows/ci.yml` (PR #24, commit `9991809`) | `paths-ignore: ['**.md', 'docs/**']` on push and pull request; the nightly `schedule` is commented out (run on demand with `workflow_dispatch`) because Actions minutes are capped. Effect on minutes used: to be confirmed |
+| Phase 1 to 5 guide | PQ1.2.11 (E-47) | F21 to F31 and the evidence map; every cited path checked on 2026-11-19; docs only |
+| Claim alignment | Q4.4 (commit `67c4f14`) | README and `PLATFORM_FACTS.md` claims aligned with the evidence register; docs only |
+| Portfolio page | `portfolio/index.html` (commit `1eee921`) | Static responsive page; not tested, no automated check |
+
+**Why it was built this way.** The repository is private with capped Actions minutes, so docs-only pushes should not run the
+full build, and a nightly drift scan is traded for an on-demand one. Documentation was tied to the register so a claim can
+be checked.
+
+**Trade-offs and alternatives.** A paused nightly scan can miss base-image or dependency drift for days (run it before a
+release). Alternative: run the nightly less often; not chosen.
+
+**Not covered / limits of this evidence.** No measurement of minutes saved; a docs-only change is not built at all.
+
+**Pending.** Re-enable the schedule when quota allows (decision for the owner).
+
+## F43 RERO, the sibling service (cut, off by default)
+
+| Check | Setup | Result |
+|---|---|---|
+| RERO test suite | `pytest -q` in the RERO repo, local run 2026-11-19 | 143 passed in 70.5 s; its README states "143 tests, ruff clean, CI green" |
+| Keep or cut | F14 (E-32): frozen rule, 28 cases, real gateway | CUT: criteria C1 to C3 fail (root cause 26/28 against 28/28), C4 to C6 pass; cost 0.0145 USD |
+| Default state in reconcile-ai | `reconcile.rero.enabled: ${RERO_ENABLED:false}` | Off by default; the mode is refused with 409 when off |
+| Reconcile-ai side tests | F13: fake RERO ITs, concurrency IT (30 parallel against budget 5: 5 ok, 25 x 429), `SimilarBreaksToolIT` (F41) | See F13 and F41 |
+| License and headers in RERO | RERO commits `7c1c4ae`, `d4f3ae8` | AI use policy and license notice, plus copyright and canary headers on 24 files; README already states "all rights reserved" and its own canary. A RERO `LICENSE` file is untracked in its working tree on 2026-11-19 (to be confirmed) |
+| Contract sync | RERO commit `ccc7032` | Gateway v1 schemas synced (D1.1.5) |
+
+**Why it was built this way.** The keep or cut rule was frozen before any code (E-23), so the result could not be argued
+after the fact. It failed three criteria, so the service stays as code and an honest negative result, not a default path.
+
+**Trade-offs and alternatives.** Keeping dead code has a maintenance cost; deleting it would remove the evidence of the
+design. Alternative: tune the prompt and re-run; rejected because the rule was fixed and the budget was one run.
+
+**Not covered / limits of this evidence.** One run, 28 cases, one model; RERO's CI status on the header commit was not
+checked here (to be confirmed).
+
+**Pending.** None; nothing further planned.
 
 ---
 
@@ -778,14 +1159,15 @@ result is a local run or a log.
 | Foundation, security, tenant isolation | F21 | `SecurityAndTenantIsolationIT`, `RowLevelSecurityIT`, `KeycloakIT`, `BreakAndEvidenceIT`, `EvidenceContentIT` | none beyond CI | E-01, E-02, E-13, E-16 | CI green |
 | Investigation pipeline | F22 | `InvestigationFlowIT`, `GoldenPathIT`, `HybridRetrievalIT`, `AuditChainIT`, `PolicyGateServiceTest` | `docs/proof/phase2a-*.log`, `phase2b-verify.log`, `phase2c-verify.log` | E-03, E-04 | CI green |
 | Hardening (breaker, PII, outbox, digest, rate limit) | F23 | `LlmResilienceIT`, `PiiMaskerTest`, `PresidioNerIT`, `KafkaOutboxIT`, `DailyDigestIT`, `RateLimitIT` | ADRs only | E-16 | CI green |
-| Audit anchoring | F24 | `AuditAnchorIT` | none | none | CI (suite); real S3 deferred |
+| Audit anchoring | F24 | `AuditAnchorIT` | none | E-54 | CI (suite); real S3 pending |
 | Evaluation harness | F25 | `InvestigationEvalIT`, `RetrievalEvalIT`, `EvalCaseLoaderTest`, `OpenAiInvestigationEvalIT` | `docs/proof/phase4-openai-eval.md` | E-10 | gate CI; live local, paid |
 | Agent and supervisor modes | F26 | `AgentInvestigationIT`, `SupervisedInvestigationIT`, `SupervisedEvalIT`, `OpenAiAgentEvalIT` | `docs/proof/phase4g-supervised-eval.md`, `4g-live-run3-2026-11-13/` | E-04, E-10 | free ITs CI; live local, paid; rule not met |
-| Alert delivery | F27 | `alerts.test.yml`, `ObservabilityIT` | `docs/proof/4c-outage-drill-2026-11-10.md`, `4c-alert-email.txt` | none | local drill; real SMTP deferred |
-| Bedrock adapter | F28 | `BedrockAdapterIT`, `BedrockFakeEvalIT`, `BedrockEvalIT` (live) | `docs/proof/4d-bedrock-fake-eval-2026-11-10.md`, `docs/proof/eval/report-bedrock-fake-2026-11-10.md` | none | fake CI; live deferred |
-| AWS Terraform | F29 | `*.tftest.hcl` (8 files) | `docs/proof/4e-localstack-apply-2026-11-10.md` | none | LocalStack CI; real apply deferred |
+| Alert delivery | F27 | `alerts.test.yml`, `ObservabilityIT` | `docs/proof/4c-outage-drill-2026-11-10.md`, `4c-alert-email.txt` | E-55 | local drill; real SMTP pending |
+| Bedrock adapter | F28 | `BedrockAdapterIT`, `BedrockFakeEvalIT`, `BedrockEvalIT` (live) | `docs/proof/4d-bedrock-fake-eval-2026-11-10.md`, `docs/proof/eval/report-bedrock-fake-2026-11-10.md` | E-56 | fake CI; live pending |
+| AWS Terraform | F29 | `*.tftest.hcl` (8 files) | `docs/proof/4e-localstack-apply-2026-11-10.md` | E-57 | LocalStack CI; real apply pending |
 | Dashboard and cache savings | F30 | `ObservabilityIT`, `SemanticCacheIT`, `TieredSemanticCacheIT` | `docs/proof/5c-observability-dashboard-2026-11-15.md`, `5d-semantic-cache-savings-2026-11-15.md` | E-14, E-15 | mechanism CI; figures local |
-| UI and Kubernetes | F31 | `ui/src/app/**/*.spec.ts`, kubeconform step | none | E-33, E-21 | CI (schema and specs only) |
+| UI and Kubernetes | F31, F40 | `ui/src/app/**/*.spec.ts`, kubeconform step | `docs/proof/pq1-2-1-keda-kind-2026-11-19.md` (KEDA on kind, stubs) | E-33, E-21, E-44 | CI (schema and specs); KEDA kind run local with stubs |
 
-Items with no register row (F24, F27, F28, F29, F31 manifests on kind) are candidates for new rows in the platform
-register; this change does not edit the register.
+F24, F27, F28 and F29 now have register rows (E-54 to E-57, written 2026-11-19: proven locally or on fakes, real AWS and
+real SMTP still pending). Still without a recorded run: the manifests-and-HPA run on kind before 2026-11-19 and a browser
+end-to-end run of the console. This change does not edit the register.

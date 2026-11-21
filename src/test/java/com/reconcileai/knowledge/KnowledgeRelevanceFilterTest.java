@@ -61,6 +61,20 @@ class KnowledgeRelevanceFilterTest {
         assertThat(out.dropped()).isEqualTo(1);
     }
 
+    /** RA-3: the phrasing used by the MIS-001..003 evidence must be recognised as a missing-entry signal. */
+    @Test
+    void missingEntryPhrasingWithoutTheWordMissingIsRecognised() {
+        var f = new KnowledgeRelevanceFilter(new Settings(true, 0.0, true));
+        for (String text : List.of(
+            "No credit for INV-30402 appears anywhere on the bank statement.",
+            "The ledger lists INV-31121, but no matching credit exists in the extract.",
+            "INV-31151 has no counterpart on the bank side.")) {
+            assertThat(KnowledgeRelevanceFilter.candidateCategories(text)).contains(RootCauseCategory.MISSING_ENTRY);
+            Filtered out = f.apply(KnowledgeResult.ok(List.of(FEE_PROC, MISSING_PROC)), text);
+            assertThat(out.result().refs()).containsExactly("kb:2");
+        }
+    }
+
     @Test
     void categoryMatchKeepsAFeeProcedureForAFeeBreak() {
         var f = new KnowledgeRelevanceFilter(new Settings(true, 0.0, true));
