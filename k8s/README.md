@@ -8,6 +8,8 @@ k8s/
   base/            namespace, service account, ConfigMap, Deployment, Service, HPA, PodDisruptionBudget
   overlays/kind/   dev Postgres + Redis, dev Secret, wait-for-postgres init container, local image tag
   overlays/keda/   KEDA ScaledObject on the investigation back-log; replaces the base HPA, shared Redis rate limit
+  overlays/keda-kind-proof/  test harness only (PQ1.2.1): stub app and stub Prometheus
+  overlays/keda-kind-real/   test harness only (RA-5): real image, real Prometheus, embedding stub, load generator
 ```
 
 ## What the base sets up
@@ -77,6 +79,8 @@ kubectl apply -k k8s/overlays/keda
 ```
 
 CI renders this overlay and checks it with kubeconform (schema only). Scaling was also run on a kind cluster with KEDA 2.21.1 (PQ1.2.1, 2026-11-19): the ScaledObject became Ready and scaled the Deployment 2 to 4 to 6 as a stubbed Prometheus value rose, held its count while Prometheus was down, and scaled down one pod at a time after the 300 s window. That run used a busybox stand-in for the app and a static stub Prometheus (`overlays/keda-kind-proof/`, test harness only), not the real image or real metrics; it surfaced and fixed a missing `namespace` on the ScaledObject. Proof: `docs/proof/pq1-2-1-keda-kind-2026-11-19.md`.
+
+The follow-up run (RA-5, 2026-11-19, `docs/proof/ra-5-keda-kind-real-2026-11-19.md`) used the real image, a real Prometheus with pod discovery (it adds the `namespace` label the query filters on) and real executor metrics, via `overlays/keda-kind-real/`. Under load of real investigations the back-log trigger took the Deployment from 2 to 6 replicas (desired 4 within about 11 s, while CPU still read 2%); CPU-only load did the same with the back-log at 0; scale-in went 6 to 2 one pod per minute after the 300 s window. Limits: embeddings stubbed (paid API), chat is the mock model, one node; pods need 45 s or more to become Ready, so with 2 pods the full queues refused 248 requests with 503 before the new pods were ready. JVM start-up uses about 1 CPU per pod for about a minute against a 250m request, so with the CPU trigger a fresh install or rollout can scale out by itself; consider a higher CPU request if that matters.
 
 ## Production notes (not in this repo)
 

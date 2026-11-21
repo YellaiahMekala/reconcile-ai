@@ -1,0 +1,125 @@
+# Load generator for the RA-5 proof. NOT part of the kustomization: apply it by hand, delete it to stop the load.
+#   MODE=investigate : each worker loops create break -> upload evidence ("simulate slow provider", the mock model sleeps
+#                      3 s per call) -> wait READY -> POST /investigations. Fills the executor (4 active + queue 50 per pod).
+#   MODE=cpu         : each worker loops GET /api/v1/breaks (authenticated list, JSON + JPA + RLS), no model work.
+# It talks to the Service (new TCP connection per request), so kube-proxy spreads requests over all ready pods.
+apiVersion: v1
+kind: Namespace
+metadata: { name: loadgen }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: loadgen-script, namespace: loadgen }
+data:
+  load.py: |
+    import json, os, threading, time, urllib.request, urllib.error, uuid
+    BASE = os.environ.get("BASE", "http://reconcile-ai.reconcile.svc")
+    THREADS = int(os.environ.get("THREADS", "8"))
+    DURATION = int(os.environ.get("DURATION", "300"))
+    MODE = os.environ.get("MODE", "investigate")
+    PACE = float(os.environ.get("PACE", "0"))
+    stats = {}
+    lock = threading.Lock()
+
+    def bump(k):
+        with lock:
+            stats[k] = stats.get(k, 0) + 1
+
+    def call(method, path, token=None, body=None, headers=None, raw=None):
+        h = dict(headers or {})
+        if token:
+            h["Authorization"] = "Bearer " + token
+        data = raw
+        if body is not None:
+            data = json.dumps(body).encode()
+            h["Content-Type"] = "application/json"
+        req = urllib.request.Request(BASE + path, data=data, method=method, headers=h)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+        except Exception:
+            return 0, b""
+
+    def login():
+        for _ in range(60):
+            s, b = call("POST", "/dev/token", body={"persona": "analyst"})
+            if s == 200:
+                return json.loads(b)["token"]
+            time.sleep(2)
+        raise SystemExit("login failed")
+
+    def multipart(name, content):
+        boundary = uuid.uuid4().hex
+        body = ("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: text/plain\r\n\r\n%s\r\n--%s--\r\n"
+                % (boundary, name, content, boundary)).encode()
+        return body, {"Content-Type": "multipart/form-data; boundary=" + boundary}
+
+    def investigate_worker(token, deadline):
+        while time.time() < deadline:
+            ref = "LG-" + uuid.uuid4().hex[:12]
+            s, b = call("POST", "/api/v1/breaks", token, body={"breakReference": ref, "ledgerAmount": "100.00", "externalAmount": "95.00", "currency": "USD"})
+            if s != 201:
+                bump("break_%d" % s); time.sleep(1); continue
+            bid = json.loads(b)["id"]
+            text = "Settlement value date mismatch on %s. Bank fee of 5.00 deducted. simulate slow provider. %s" % (ref, uuid.uuid4().hex)
+            raw, h = multipart(ref + ".txt", text)
+            s, b = call("POST", "/api/v1/breaks/%s/evidence" % bid, token, headers=h, raw=raw)
+            if s not in (200, 201):
+                bump("evidence_%d" % s); continue
+            ready = False
+            for _ in range(40):
+                s, b = call("GET", "/api/v1/breaks/%s/evidence" % bid, token)
+                if s == 200 and b'"status":"READY"' in b.replace(b" ", b""):
+                    ready = True; break
+                time.sleep(0.25)
+            if not ready:
+                bump("evidence_not_ready"); continue
+            s, b = call("POST", "/api/v1/breaks/%s/investigations" % bid, token, body={})
+            bump("investigation_%d" % s)
+            if PACE:
+                time.sleep(PACE)
+
+    def cpu_worker(token, deadline):
+        while time.time() < deadline:
+            s, b = call("GET", "/api/v1/breaks?size=50", token)
+            bump("list_%d" % s)
+            if PACE:
+                time.sleep(PACE)
+
+    token = login()
+    deadline = time.time() + DURATION
+    fn = investigate_worker if MODE == "investigate" else cpu_worker
+    ts = [threading.Thread(target=fn, args=(token, deadline), daemon=True) for _ in range(THREADS)]
+    for t in ts:
+        t.start()
+    t0 = time.time()
+    while time.time() < deadline:
+        time.sleep(10)
+        with lock:
+            print("t+%ds %s" % (int(time.time() - t0), json.dumps(stats, sort_keys=True)), flush=True)
+    for t in ts:
+        t.join(timeout=40)
+    print("DONE", json.dumps(stats, sort_keys=True), flush=True)
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: loadgen, namespace: loadgen }
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/load.py"]
+          env:
+            - { name: MODE, value: "investigate" }
+            - { name: THREADS, value: "8" }
+            - { name: DURATION, value: "300" }
+          volumeMounts: [{ name: code, mountPath: /app }]
+      volumes:
+        - name: code
+          configMap: { name: loadgen-script }

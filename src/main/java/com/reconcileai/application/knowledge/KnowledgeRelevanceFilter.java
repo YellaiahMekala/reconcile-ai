@@ -144,7 +144,8 @@ public final class KnowledgeRelevanceFilter {
         m.put(RootCauseCategory.DUPLICATE_ENTRY, List.of("duplicate", "duplicated", "posted twice",
             "double posting", "double posted"));
         m.put(RootCauseCategory.MISSING_ENTRY, List.of("missing", "missing entry", "not recorded", "unrecorded",
-            "not posted", "no corresponding", "omitted"));
+            "not posted", "no corresponding", "omitted", "no matching", "no counterpart", "no credit",
+            "no debit"));
         m.put(RootCauseCategory.DATA_ENTRY_ERROR, List.of("typo", "keying error", "data entry", "transposed",
             "transposition", "mis-keyed"));
         m.put(RootCauseCategory.PARTIAL_SETTLEMENT, List.of("partial", "partially", "part payment", "instalment",
