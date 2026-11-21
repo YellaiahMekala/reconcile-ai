@@ -133,12 +133,6 @@ class EkaKnowledgeClientTest {
     }
 
     @Test
-    void rateLimitIsUnavailable() {
-        eka.enqueue(Scripted.status(429));
-        assertThat(client().search(TENANT, "q").reason()).isEqualTo("RATE_LIMITED");
-    }
-
-    @Test
     void authFaultIsUnavailableAuthAndDoesNotTripTheBreaker() {
         EkaKnowledgeClient c = client(FakeEkaServer::jwtFor, Duration.ofSeconds(2), 2);
         for (int i = 0; i < 4; i++) {

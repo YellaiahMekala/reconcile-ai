@@ -34,6 +34,11 @@ import java.util.Map;
  *                       default true. No category signal in the break means the hit is kept
  * @param breakSpecificQuery D1.2.12: build the EKA query from the break's own fields (category hints, variance band,
  *                       sources, masked note; capped) instead of one generic query; default true, false = old query
+ * @param rateLimitRetries  retries of one lookup after an HTTP 429 from EKA (429 only; never other 4xx, 5xx or timeouts);
+ *                       default 2, 0 turns retrying off
+ * @param rateLimitMaxWait  cap for one wait before a retry, whatever {@code Retry-After} says; default 2s
+ * @param rateLimitJitter   random extra wait (0 to this value) added to {@code Retry-After}, so parallel jobs do not
+ *                       retry in step; default 250ms. A 429 without a usable {@code Retry-After} waits 500ms plus jitter
  */
 @ConfigurationProperties("reconcile.knowledge")
 public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenUri, String tokenScope,
@@ -41,7 +46,8 @@ public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenU
                                   int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
                                   Duration breakerOpenFor, Map<String, TenantClient> tenants,
                                   Boolean relevanceFilterEnabled, Double minScore, Boolean categoryMatch,
-                                  Boolean breakSpecificQuery) {
+                                  Boolean breakSpecificQuery, Integer rateLimitRetries, Duration rateLimitMaxWait,
+                                  Duration rateLimitJitter) {
 
     /** {@code clientSecretEnv} names the variable that holds the secret; the secret never sits in configuration. */
     public record TenantClient(String clientId, String clientSecretEnv) { }
@@ -61,6 +67,21 @@ public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenU
         minScore = minScore == null ? 0.0 : minScore;
         categoryMatch = categoryMatch == null ? Boolean.TRUE : categoryMatch;
         breakSpecificQuery = breakSpecificQuery == null ? Boolean.TRUE : breakSpecificQuery;
+        rateLimitRetries = rateLimitRetries == null ? Integer.valueOf(2) : Integer.valueOf(Math.max(0, rateLimitRetries));
+        rateLimitMaxWait = rateLimitMaxWait == null || rateLimitMaxWait.isNegative() ? Duration.ofSeconds(2) : rateLimitMaxWait;
+        rateLimitJitter = rateLimitJitter == null || rateLimitJitter.isNegative() ? Duration.ofMillis(250) : rateLimitJitter;
+    }
+
+    /** Constructor with the relevance settings but without the 429 retry settings: the retry defaults apply. */
+    public KnowledgeProperties(boolean enabled, String baseUrl, String tokenUri, String tokenScope,
+                               Duration connectTimeout, Duration requestTimeout, int topK, int maxSnippetChars,
+                               int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
+                               Duration breakerOpenFor, Map<String, TenantClient> tenants,
+                               Boolean relevanceFilterEnabled, Double minScore, Boolean categoryMatch,
+                               Boolean breakSpecificQuery) {
+        this(enabled, baseUrl, tokenUri, tokenScope, connectTimeout, requestTimeout, topK, maxSnippetChars,
+                maxTotalChars, failClosed, breakerFailureRate, breakerWindow, breakerOpenFor, tenants,
+                relevanceFilterEnabled, minScore, categoryMatch, breakSpecificQuery, null, null, null);
     }
 
     /** Constructor without the D1.1.1 relevance settings: the safe defaults apply. */
@@ -69,6 +90,6 @@ public record KnowledgeProperties(boolean enabled, String baseUrl, String tokenU
                                int maxTotalChars, boolean failClosed, int breakerFailureRate, int breakerWindow,
                                Duration breakerOpenFor, Map<String, TenantClient> tenants) {
         this(enabled, baseUrl, tokenUri, tokenScope, connectTimeout, requestTimeout, topK, maxSnippetChars,
-                maxTotalChars, failClosed, breakerFailureRate, breakerWindow, breakerOpenFor, tenants, null, null, null, null);
+                maxTotalChars, failClosed, breakerFailureRate, breakerWindow, breakerOpenFor, tenants, null, null, null, null, null, null, null);
     }
 }

@@ -1,0 +1,64 @@
+{
+ "eka_search": {
+  "a": {
+   "n": 60,
+   "codes": {
+    "503": 17,
+    "429": 39,
+    "200": 4
+   },
+   "p50_ms": 2195,
+   "max_ms": 2386,
+   "retry_after": [
+    "1"
+   ],
+   "429_kind": [
+    "urn:eka:problem:rate-limited"
+   ]
+  },
+  "b": {
+   "n": 15,
+   "codes": {
+    "503": 7,
+    "200": 8
+   },
+   "p50_ms": 2354,
+   "max_ms": 2453,
+   "retry_after": [],
+   "429_kind": []
+  }
+ },
+ "gateway_chat": {
+  "a": {
+   "n": 60,
+   "codes": {
+    "429": 52,
+    "200": 8
+   },
+   "p50_ms": 2341,
+   "max_ms": 2583,
+   "retry_after": [
+    "1"
+   ],
+   "429_kind": [
+    "RATE_LIMITED",
+    "TENANT_CONCURRENCY_LIMIT"
+   ]
+  },
+  "b": {
+   "n": 15,
+   "codes": {
+    "429": 6,
+    "200": 9
+   },
+   "p50_ms": 2505,
+   "max_ms": 2596,
+   "retry_after": [
+    "1"
+   ],
+   "429_kind": [
+    "TENANT_CONCURRENCY_LIMIT"
+   ]
+  }
+ }
+}

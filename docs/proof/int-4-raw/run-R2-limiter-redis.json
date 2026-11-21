@@ -1,0 +1,39 @@
+{
+ "phase": "limiter",
+ "summary": {
+  "replica_a_start": {
+   "429:RATE_LIMITED": 28,
+   "202": 2
+  },
+  "replica_b_start": {
+   "429:RATE_LIMITED": 12,
+   "202": 18
+  },
+  "final": {
+   "b:SUCCEEDED:None": 18,
+   "a:SUCCEEDED:None": 2
+  }
+ },
+ "jobs": [
+  "040eb4e2-408c-4a00-86d6-26fbc1b64f25",
+  "06c03d9b-e18d-4f44-9dad-c14fc6679d66",
+  "18196621-9c9f-45b6-ba73-5b1769d293af",
+  "1bc205eb-8085-4535-b804-e51a551e726f",
+  "2f52d5d9-a6e0-499d-ac0e-2781beef380b",
+  "3d1165b5-1d01-482c-8c03-f39b302b305a",
+  "4a4bc89a-14ba-4e78-a4dc-f8f1a6c07b5b",
+  "4e644200-3881-4454-8036-1e52bebf3e01",
+  "53f7b919-f250-4b79-b260-85768799f6e4",
+  "6645d0d3-5da6-4cbb-a96e-1911e2de67f5",
+  "6a1dc21c-a573-4080-a2bb-0fbbd6b76c87",
+  "6d48f86e-fc69-4e28-ac4e-995193d9bf47",
+  "8cf17637-8b4d-482b-b3b2-cded00aac6e7",
+  "a07fa9f3-927c-4880-814e-c16d748d7558",
+  "a9c9b261-4dc0-4d06-87e1-3a9926395ac0",
+  "a9cb419f-233b-4aa4-803f-59d28edf69fd",
+  "b4cc47b1-e984-449c-8372-fa7fabcff471",
+  "b79d63bf-6fd5-40e9-aa2d-56827c971a81",
+  "bb095135-3579-4d82-8f47-6432dc7b776e",
+  "fb001a67-f675-4a47-b59e-2526e17e9461"
+ ]
+}

@@ -1,0 +1,12 @@
+./clog-gw-gateway-1.txt 40 lines
+./clog-eka-edge-1.txt 1653 lines
+./clog-eka-core-behind-edge-1.txt 489 lines
+./clog-eka-worker-1.txt 7 lines
+./clog-eka-api-1.txt 27 lines
+./clog-eka-migrate-1.txt 6 lines
+./clog-eka-db-1.txt 58 lines
+./clog-gw-redis-budget-1.txt 32 lines
+./clog-gw-redis-cache-1.txt 27 lines
+./clog-gw-postgres-1.txt 72 lines
+./clog-reconcile-db-1.txt 89 lines
+./clog-keycloak-1.txt 19 lines

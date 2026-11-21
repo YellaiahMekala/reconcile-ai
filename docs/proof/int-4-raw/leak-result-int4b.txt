@@ -1,0 +1,35 @@
+app-F1.log 128 lines; no pattern hits | secret value hits: 0
+app-F1b.log 96 lines; no pattern hits | secret value hits: 0
+app-F2.log 96 lines; no pattern hits | secret value hits: 0
+app-F3.log 95 lines; no pattern hits | secret value hits: 0
+app-G100d.log 87 lines; no pattern hits | secret value hits: 0
+app-G100w.log 285 lines; no pattern hits | secret value hits: 0
+app-G50d.log 87 lines; no pattern hits | secret value hits: 0
+app-G50w.log 146 lines; no pattern hits | secret value hits: 0
+app-L0.log 68 lines; no pattern hits | secret value hits: 0
+app-L1.log 77 lines; no pattern hits | secret value hits: 0
+app-R-A.log 109 lines; no pattern hits | secret value hits: 0
+app-R-A2.log 74 lines; no pattern hits | secret value hits: 0
+app-R-B.log 129 lines; no pattern hits | secret value hits: 0
+app-R2-A.log 69 lines; no pattern hits | secret value hits: 0
+app-R2-B.log 85 lines; no pattern hits | secret value hits: 0
+app-T4a.log 107 lines; no pattern hits | secret value hits: 0
+app-T5.log 115 lines; no pattern hits | secret value hits: 0
+app-X.log 67 lines; no pattern hits | secret value hits: 0
+clog-eka-api-1.txt 31 lines; no pattern hits | secret value hits: 0
+clog-eka-core-behind-edge-1.txt 493 lines; no pattern hits | secret value hits: 0
+clog-eka-db-1.txt 58 lines; no pattern hits | secret value hits: 0
+clog-eka-edge-1.txt 1653 lines; no pattern hits | secret value hits: 0
+clog-eka-migrate-1.txt 6 lines; no pattern hits | secret value hits: 0
+clog-eka-worker-1.txt 7 lines; no pattern hits | secret value hits: 0
+clog-gw-gateway-1.txt 40 lines; no pattern hits | secret value hits: 0
+clog-gw-gateway-live.txt 40 lines; no pattern hits | secret value hits: 0
+clog-gw-postgres-1.txt 72 lines; no pattern hits | secret value hits: 0
+clog-gw-redis-budget-1.txt 32 lines; no pattern hits | secret value hits: 0
+clog-gw-redis-cache-1.txt 27 lines; no pattern hits | secret value hits: 0
+clog-keycloak-1.txt 19 lines; no pattern hits | secret value hits: 0
+clog-reconcile-db-1.txt 89 lines; no pattern hits | secret value hits: 0
+DB rec: 18 tables scanned for 53 markers/secrets; allowed (evidence store) hits: [('public.evidence_content', 'canary', 651), ('public.evidence_content', 'fake secret', 640), ('public.vector_store', 'canary', 651), ('public.vector_store', 'fake secret', 640)] ; UNEXPECTED hits: none
+DB gw: 22 tables scanned for 53 markers/secrets; allowed (evidence store) hits: none ; UNEXPECTED hits: none
+DB eka: 6 tables scanned for 53 markers/secrets; allowed (evidence store) hits: none ; UNEXPECTED hits: none
+RESULT: PASS (no hits)

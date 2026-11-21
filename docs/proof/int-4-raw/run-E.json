@@ -1,0 +1,224 @@
+{
+ "summary": {
+  "tag": "E: N=10, EKA core paused (timeout), fail-open (tenant-a)",
+  "n": 10,
+  "wall_ms": 7441,
+  "start_http": {
+   "202": 10
+  },
+  "retry_status": {
+   "None": 10
+  },
+  "job_status": {
+   "SUCCEEDED": 10
+  },
+  "failure": {
+   "None": 10
+  },
+  "knowledge": {
+   "UNAVAILABLE": 10
+  },
+  "knowledge_reason": {
+   "TIMEOUT": 10
+  },
+  "route": {
+   "MANUAL_REVIEW": 10
+  },
+  "break_status": {
+   "MANUAL_REVIEW_REQUIRED": 10
+  },
+  "rerun_start": {
+   "None": 10
+  },
+  "rerun_status": {
+   "None": 10
+  },
+  "start_ms": {
+   "p50": 256,
+   "p95": 374,
+   "max": 386
+  },
+  "e2e_ms": {
+   "p50": 6414,
+   "p95": 7405,
+   "p99": 7430,
+   "max": 7436
+  },
+  "queue_ms_p95": 271,
+  "run_ms_p50": 5966,
+  "retry_after_seen": [],
+  "audit_verify": "HTTP 403"
+ },
+ "items": [
+  {
+   "i": 0,
+   "start_status": 202,
+   "start_ms": 211,
+   "retry_after": null,
+   "job_id": "dc2e2184-e886-4f3b-9818-76d94d4d84d8",
+   "e2e_ms": 7367,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "5a9a0814-b21e-46e0-8461-37e880d21f92",
+   "queue_ms": 113,
+   "run_ms": 6967,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 1,
+   "start_status": 202,
+   "start_ms": 140,
+   "retry_after": null,
+   "job_id": "ecd6d739-a6ea-40c7-8675-b0c744c9f572",
+   "e2e_ms": 7436,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "d10ab5cb-0873-4ed3-83f9-05baae39d951",
+   "queue_ms": 40,
+   "run_ms": 7040,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 2,
+   "start_status": 202,
+   "start_ms": 241,
+   "retry_after": null,
+   "job_id": "f9155c3d-7d2d-49d0-8576-6ac2f9a1f9db",
+   "e2e_ms": 6600,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "b61e225b-0c8e-4c93-8a8a-2ed24c085fc0",
+   "queue_ms": 149,
+   "run_ms": 6060,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 3,
+   "start_status": 202,
+   "start_ms": 147,
+   "retry_after": null,
+   "job_id": "e6020db9-d7c3-4be4-805d-b624849d9115",
+   "e2e_ms": 6528,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "b0c7a30f-e8fd-4f74-a9f4-129489001b37",
+   "queue_ms": 49,
+   "run_ms": 6188,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 4,
+   "start_status": 202,
+   "start_ms": 386,
+   "retry_after": null,
+   "job_id": "424762e6-04b0-4024-986d-1501846d366f",
+   "e2e_ms": 6398,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "5afde342-b0b8-4568-af9e-078be5b28a68",
+   "queue_ms": 286,
+   "run_ms": 5875,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 5,
+   "start_status": 202,
+   "start_ms": 172,
+   "retry_after": null,
+   "job_id": "c42023f4-9b49-4eba-9e36-af3bb5ec0885",
+   "e2e_ms": 6241,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "59cf5820-3190-4837-aa0e-6e74ab59d390",
+   "queue_ms": 86,
+   "run_ms": 6002,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 6,
+   "start_status": 202,
+   "start_ms": 359,
+   "retry_after": null,
+   "job_id": "7e44f19c-9dfc-48ae-8af6-25c9f554ff36",
+   "e2e_ms": 6413,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "2bf04029-2bc5-4ae0-b5ad-29229c7b85ab",
+   "queue_ms": 252,
+   "run_ms": 5921,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 7,
+   "start_status": 202,
+   "start_ms": 300,
+   "retry_after": null,
+   "job_id": "60c6264a-d8f3-41e9-a80a-83a651701859",
+   "e2e_ms": 6416,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "e8651acd-388b-48fc-8d33-2edcb036eb87",
+   "queue_ms": 205,
+   "run_ms": 5847,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 8,
+   "start_status": 202,
+   "start_ms": 270,
+   "retry_after": null,
+   "job_id": "2cfcfb64-3499-4e68-8023-6e6e84cf8e44",
+   "e2e_ms": 6311,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "13fa3721-b966-4201-bff7-f554839518ca",
+   "queue_ms": 189,
+   "run_ms": 5929,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  },
+  {
+   "i": 9,
+   "start_status": 202,
+   "start_ms": 323,
+   "retry_after": null,
+   "job_id": "27409e89-6046-482c-8af5-ac86d0b7ff0d",
+   "e2e_ms": 6368,
+   "status": "SUCCEEDED",
+   "failure": null,
+   "knowledge": "UNAVAILABLE",
+   "knowledge_reason": "TIMEOUT",
+   "proposal_id": "ec44ef04-7c95-4ebd-89c6-c7daef467ba4",
+   "queue_ms": 233,
+   "run_ms": 5902,
+   "route": "MANUAL_REVIEW",
+   "break_status": "MANUAL_REVIEW_REQUIRED"
+  }
+ ]
+}

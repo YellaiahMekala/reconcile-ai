@@ -197,6 +197,10 @@ reconcile:
     breaker-failure-rate: 50
     breaker-window: 10
     breaker-open-for: 30s
+    # EKA edge 429: retried only (not other 4xx, 5xx, timeouts). Waits Retry-After + jitter, each wait capped, all inside request-timeout.
+    rate-limit-retries: ${KNOWLEDGE_RATE_LIMIT_RETRIES:2}       # 0 = no retry
+    rate-limit-max-wait: ${KNOWLEDGE_RATE_LIMIT_MAX_WAIT:2s}    # cap for one wait
+    rate-limit-jitter: ${KNOWLEDGE_RATE_LIMIT_JITTER:250ms}     # random 0..this added to Retry-After
     # D1.1.1 relevance filter: drop procedures unrelated to the break before they reach the prompt (Q4.3 ablation).
     relevance-filter-enabled: ${KNOWLEDGE_RELEVANCE_FILTER:true}   # off-switch
     min-score: ${KNOWLEDGE_MIN_SCORE:0.0}          # EKA scores.cosine floor; 0.0 = only missing/negative scores drop

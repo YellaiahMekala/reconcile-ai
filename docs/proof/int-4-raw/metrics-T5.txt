@@ -1,0 +1,2 @@
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="OK",reason="none"} 38.0
+reconcile_knowledge_outcome_total{application="reconcile-ai",outcome="UNAVAILABLE",reason="HTTP_500"} 2.0

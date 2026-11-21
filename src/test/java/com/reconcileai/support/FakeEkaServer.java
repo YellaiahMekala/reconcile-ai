@@ -49,9 +49,18 @@ public final class FakeEkaServer {
     public record Call(String path, String tenant, String body) { }
 
     /** Next answer for a search: an HTTP status (200 uses {@code results}), optionally after a delay. */
-    public record Scripted(int status, List<Doc> results, long delayMs) {
+    public record Scripted(int status, List<Doc> results, long delayMs, String retryAfter) {
+        public Scripted(int status, List<Doc> results, long delayMs) {
+            this(status, results, delayMs, null);
+        }
+
         public static Scripted status(int status) {
             return new Scripted(status, List.of(), 0);
+        }
+
+        /** A 429 carrying {@code Retry-After: <seconds>} like EKA's edge limiter. */
+        public static Scripted rateLimited(String retryAfterSeconds) {
+            return new Scripted(429, List.of(), 0, retryAfterSeconds);
         }
 
         public static Scripted slow(long delayMs) {
@@ -195,6 +204,9 @@ public final class FakeEkaServer {
             }
         }
         if (s != null && s.status() != 200) {
+            if (s.retryAfter() != null) {
+                ex.getResponseHeaders().add("Retry-After", s.retryAfter());
+            }
             send(ex, s.status(), problem(s.status()));
             return;
         }

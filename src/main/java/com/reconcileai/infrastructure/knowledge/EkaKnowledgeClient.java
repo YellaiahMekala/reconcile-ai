@@ -23,11 +23,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
 
 /**
  * {@link KnowledgeSearchPort} over EKA's edge (platform Q1.2 to Q1.4, TDD 4.2):
@@ -42,14 +46,20 @@ import java.util.function.BiConsumer;
  *   <tr><td>200 without results</td><td>EMPTY</td></tr>
  *   <tr><td>401 / 403</td><td>UNAVAILABLE {@code AUTH}: a configuration fault, never retried</td></tr>
  *   <tr><td>422 / 400</td><td>REJECTED {@code QUERY_INVALID}: our request was refused, retrying will not help</td></tr>
- *   <tr><td>429</td><td>UNAVAILABLE {@code RATE_LIMITED}</td></tr>
+ *   <tr><td>429</td><td>retried (see below); UNAVAILABLE {@code RATE_LIMITED} once the retries are used up</td></tr>
  *   <tr><td>5xx, other 4xx, bad body</td><td>UNAVAILABLE {@code HTTP_nnn} / {@code BAD_RESPONSE}</td></tr>
  *   <tr><td>timeout, network</td><td>UNAVAILABLE {@code TIMEOUT} / {@code NETWORK}</td></tr>
  *   <tr><td>breaker open</td><td>UNAVAILABLE {@code CIRCUIT_OPEN}, no request sent</td></tr>
  *   <tr><td>token failure</td><td>UNAVAILABLE with the token code ({@code TENANT_CREDENTIALS_MISSING}, ...)</td></tr>
  * </table>
- * There is no retry: knowledge is advisory, and the investigation should not wait on it. Logs carry outcome codes,
- * counts and screening rule names, never the query, a passage or a token.
+ * <h2>Retry (HTTP 429 only)</h2>
+ * A 429 is a short-lived EKA edge limit, so it is retried up to {@code rate-limit-retries} times (default 2): wait
+ * {@code Retry-After} (500 ms if absent or not a number of seconds) plus random jitter, each wait capped at
+ * {@code rate-limit-max-wait} (default 2 s), and never past the per-lookup {@code request-timeout} (a wait that would not
+ * fit is skipped and the lookup ends {@code RATE_LIMITED}). Nothing else is retried: other 4xx are our fault, and 5xx
+ * and timeouts are left to the circuit breaker. The breaker sees one result per lookup, and {@code RATE_LIMITED} is
+ * recorded only after the retries are exhausted. Knowledge is advisory, so the investigation never waits longer than
+ * the lookup timeout. Logs carry outcome codes, counts and screening rule names, never the query, a passage or a token.
  */
 public class EkaKnowledgeClient implements KnowledgeSearchPort {
 
@@ -64,6 +74,15 @@ public class EkaKnowledgeClient implements KnowledgeSearchPort {
     private final InjectionScanner scanner;
     private final CircuitBreaker breaker;
     private final BiConsumer<String, String> outcomeCounter;
+    private final Consumer<String> retryCounter;
+    private final Sleeper sleeper;
+    private final DoubleSupplier random;
+
+    /** Pauses the calling thread; replaceable so tests need not wait. */
+    @FunctionalInterface
+    interface Sleeper {
+        void sleep(long millis) throws InterruptedException;
+    }
 
     /**
      * @param outcomeCounter called once per lookup with (outcome, reason) for the
@@ -71,6 +90,26 @@ public class EkaKnowledgeClient implements KnowledgeSearchPort {
      */
     public EkaKnowledgeClient(HttpClient http, ObjectMapper json, KnowledgeProperties props, ServiceTokenProvider tokens,
                               InjectionScanner scanner, BiConsumer<String, String> outcomeCounter) {
+        this(http, json, props, tokens, scanner, outcomeCounter, e -> { });
+    }
+
+    /**
+     * @param retryCounter called with {@code "retry"} before each 429 retry and {@code "exhausted"} when a lookup
+     *                     ends {@code RATE_LIMITED} after its retries (the {@code reconcile.knowledge.rate_limit_retry} metric)
+     */
+    public EkaKnowledgeClient(HttpClient http, ObjectMapper json, KnowledgeProperties props, ServiceTokenProvider tokens,
+                              InjectionScanner scanner, BiConsumer<String, String> outcomeCounter,
+                              Consumer<String> retryCounter) {
+        this(http, json, props, tokens, scanner, outcomeCounter, retryCounter, Thread::sleep,
+                () -> ThreadLocalRandom.current().nextDouble());
+    }
+
+    EkaKnowledgeClient(HttpClient http, ObjectMapper json, KnowledgeProperties props, ServiceTokenProvider tokens,
+                       InjectionScanner scanner, BiConsumer<String, String> outcomeCounter,
+                       Consumer<String> retryCounter, Sleeper sleeper, DoubleSupplier random) {
+        this.retryCounter = retryCounter;
+        this.sleeper = sleeper;
+        this.random = random;
         this.http = http;
         this.json = json;
         this.props = props;
@@ -131,22 +170,68 @@ public class EkaKnowledgeClient implements KnowledgeSearchPort {
     }
 
     private JsonNode call(String token, String query) {
-        ObjectNode request = json.createObjectNode().put("query", query).put("top_k", props.topK());
-        HttpRequest httpRequest;
+        String requestBody;
         try {
-            httpRequest = HttpRequest.newBuilder(URI.create(stripSlash(props.baseUrl()) + SEARCH_PATH))
-                    .timeout(props.requestTimeout())
-                    .header("Authorization", "Bearer " + token)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(request)))
-                    .build();
+            requestBody = json.writeValueAsString(json.createObjectNode().put("query", query).put("top_k", props.topK()));
         } catch (IOException e) {
             throw new Unavailable("CLIENT_ERROR");
         }
-        HttpResponse<String> response;
+        long deadline = System.nanoTime() + props.requestTimeout().toNanos();
+        int retries = 0;
+        while (true) {
+            Duration remaining = Duration.ofNanos(Math.max(1, deadline - System.nanoTime()));
+            HttpResponse<String> response = send(token, requestBody, remaining);
+            if (response.statusCode() != 429) {
+                return handle(response);
+            }
+            long waitMs = retries < props.rateLimitRetries() ? retryWaitMillis(response) : -1;
+            long remainingMs = (deadline - System.nanoTime()) / 1_000_000;
+            if (waitMs < 0 || waitMs >= remainingMs) {
+                if (props.rateLimitRetries() > 0) {
+                    retryCounter.accept("exhausted");
+                }
+                throw new Unavailable("RATE_LIMITED");
+            }
+            retries++;
+            retryCounter.accept("retry");
+            log.info("knowledge lookup rate limited, retry {} of {} in {} ms", retries, props.rateLimitRetries(), waitMs);
+            try {
+                sleeper.sleep(waitMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new Unavailable("INTERRUPTED");
+            }
+        }
+    }
+
+    /** {@code Retry-After} seconds (500 ms if absent or not a number) plus jitter, capped at {@code rate-limit-max-wait}. */
+    long retryWaitMillis(HttpResponse<String> response) {
+        long base = 500;
+        String header = response.headers().firstValue("Retry-After").orElse(null);
+        if (header != null) {
+            try {
+                double seconds = Double.parseDouble(header.strip());
+                if (seconds >= 0 && seconds <= 3600) {
+                    base = (long) (seconds * 1000);
+                }
+            } catch (NumberFormatException ignored) {
+                // an HTTP-date or junk: use the default
+            }
+        }
+        long jitter = (long) (random.getAsDouble() * props.rateLimitJitter().toMillis());
+        return Math.min(base + jitter, props.rateLimitMaxWait().toMillis());
+    }
+
+    private HttpResponse<String> send(String token, String requestBody, Duration timeout) {
+        HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(stripSlash(props.baseUrl()) + SEARCH_PATH))
+                .timeout(timeout)
+                .header("Authorization", "Bearer " + token)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
         try {
-            response = http.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            return http.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         } catch (HttpTimeoutException e) {
             throw new Unavailable("TIMEOUT");
         } catch (IOException e) {
@@ -155,6 +240,9 @@ public class EkaKnowledgeClient implements KnowledgeSearchPort {
             Thread.currentThread().interrupt();
             throw new Unavailable("INTERRUPTED");
         }
+    }
+
+    private JsonNode handle(HttpResponse<String> response) {
         int status = response.statusCode();
         if (status == 200) {
             try {
@@ -173,9 +261,6 @@ public class EkaKnowledgeClient implements KnowledgeSearchPort {
         }
         if (status == 400 || status == 422) {
             throw new Rejected("QUERY_INVALID");
-        }
-        if (status == 429) {
-            throw new Unavailable("RATE_LIMITED");
         }
         throw new Unavailable("HTTP_" + status);
     }
